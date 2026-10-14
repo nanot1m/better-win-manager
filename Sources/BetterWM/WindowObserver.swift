@@ -1,0 +1,44 @@
+import Cocoa
+import ApplicationServices
+
+final class WindowObserver {
+    private var observers: [pid_t: AXObserver] = [:]
+    private let onNewWindow: (AXWindow) -> Void
+
+    init(onNewWindow: @escaping (AXWindow) -> Void) {
+        self.onNewWindow = onNewWindow
+        for app in NSWorkspace.shared.runningApplications { observe(app) }
+        let nc = NSWorkspace.shared.notificationCenter
+        nc.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] n in
+            if let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication { self?.observe(app) }
+        }
+        nc.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] n in
+            if let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication {
+                self?.observers.removeValue(forKey: app.processIdentifier)
+            }
+        }
+    }
+
+    private func observe(_ app: NSRunningApplication) {
+        guard app.activationPolicy == .regular, app.processIdentifier != getpid(),
+              observers[app.processIdentifier] == nil else { return }
+        let pid = app.processIdentifier
+        var obs: AXObserver?
+        let cb: AXObserverCallback = { _, element, _, refcon in
+            let me = Unmanaged<WindowObserver>.fromOpaque(refcon!).takeUnretainedValue()
+            var pid: pid_t = 0
+            AXUIElementGetPid(element, &pid)
+            let w = AXWindow(element: element, pid: pid)
+            // Subrole is often not set yet at creation time; re-check shortly after.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                if w.isValid, w.isStandard { me.onNewWindow(w) }
+            }
+        }
+        guard AXObserverCreate(pid, cb, &obs) == .success, let obs else { return }
+        let appEl = AXUIElementCreateApplication(pid)
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        AXObserverAddNotification(obs, appEl, kAXWindowCreatedNotification as CFString, refcon)
+        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .commonModes)
+        observers[pid] = obs
+    }
+}
