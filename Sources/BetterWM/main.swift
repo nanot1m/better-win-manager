@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var drag: DragController!
     var statusItem: NSStatusItem!
     var pauseItem: NSMenuItem?
+    var popup: ActionPopup!
 
     func applicationDidFinishLaunching(_ n: Notification) {
         let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
@@ -25,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func boot() {
         let config = Config.load()
         manager = WindowManager(config: config)
+        popup = ActionPopup(manager: manager)
         drag = DragController(manager: manager)
         if !drag.start() {
             print("Failed to create event tap (needs Accessibility permission).")
@@ -45,8 +47,15 @@ extension AppDelegate {
             let item = menu.addItem(withTitle: title, action: sel, keyEquivalent: key)
             item.target = self
         }
+        add("Window Actions…", #selector(showPopup), "w")
+        menu.addItem(.separator())
+        add("Focus Next Window", #selector(focusNext), "]")
+        add("Focus Previous Window", #selector(focusPrevious), "[")
+        menu.addItem(.separator())
         add("Tile / Untile Focused Window", #selector(toggleFocused), "t")
-        let moveMenu = NSMenu()
+        let moveMenu = NSMenu(title: "Move")
+        moveMenu.delegate = self
+        moveMenu.autoenablesItems = false
         for (title, dir) in [("Move Left", Layout.Move.left), ("Move Right", .right),
                              ("Move Up", .up), ("Move Down", .down),
                              ("Merge Into Left Column", .mergeLeft), ("Merge Into Right Column", .mergeRight)] {
@@ -78,6 +87,9 @@ extension AppDelegate {
 
     @objc func switchDesktop(_ sender: NSMenuItem) { Spaces.switchToDesktop(sender.tag) }
     @objc func toggleFocused() { manager.toggleFocused() }
+    @objc func showPopup() { popup.toggle() }
+    @objc func focusNext() { manager.focusNext() }
+    @objc func focusPrevious() { manager.focusNext(reverse: true) }
     @objc func moveFocused(_ sender: NSMenuItem) {
         if let dir = sender.representedObject as? Layout.Move { manager.moveFocused(dir) }
     }
@@ -94,6 +106,12 @@ extension AppDelegate {
 
 extension AppDelegate: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu.title == "Move" {
+            for item in menu.items {
+                if let dir = item.representedObject as? Layout.Move { item.isEnabled = manager.canMoveFocused(dir) }
+            }
+            return
+        }
         guard menu.title == "Desktops" else { return }
         menu.removeAllItems()
         let current = Spaces.currentDesktopIndex()

@@ -234,6 +234,20 @@ final class Layout {
 
     enum Move { case left, right, up, down, mergeLeft, mergeRight }
 
+    func canMove(_ w: AXWindow, _ dir: Move) -> Bool {
+        guard let ci = columns.firstIndex(where: { $0.windows.contains(w) }),
+              let wi = columns[ci].windows.firstIndex(of: w) else { return false }
+        let alone = columns[ci].windows.count == 1
+        switch dir {
+        case .left: return !alone || ci > 0
+        case .right: return !alone || ci + 1 < columns.count
+        case .mergeLeft: return ci > 0
+        case .mergeRight: return ci + 1 < columns.count
+        case .up: return wi > 0
+        case .down: return wi + 1 < columns[ci].windows.count
+        }
+    }
+
     func move(_ w: AXWindow, _ dir: Move) {
         guard let ci = columns.firstIndex(where: { $0.windows.contains(w) }),
               let wi = columns[ci].windows.firstIndex(of: w) else { return }

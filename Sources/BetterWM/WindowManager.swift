@@ -85,6 +85,23 @@ final class WindowManager {
         relayout()
     }
 
+    /// Cycles through tiled windows left to right, top to bottom, on the screen holding the focused window.
+    func focusNext(reverse: Bool = false) {
+        let focused = AXWindow.focused
+        let l = focused.flatMap { f in layouts.first { $0.contains(f) } }
+            ?? layout(for: focused?.frame.center ?? NSEvent.mouseLocation.toAX())
+        guard let l else { return }
+        let order = l.windowFrames().map(\.0)
+        guard !order.isEmpty else { return }
+        let i = focused.flatMap(order.firstIndex) ?? (reverse ? 0 : order.count - 1)
+        order[(i + (reverse ? -1 : 1) + order.count) % order.count].raise()
+    }
+
+    func canMoveFocused(_ dir: Layout.Move) -> Bool {
+        guard let w = AXWindow.focused, let l = layouts.first(where: { $0.contains(w) }) else { return false }
+        return l.canMove(w, dir)
+    }
+
     func moveFocused(_ dir: Layout.Move) {
         guard let w = AXWindow.focused, let l = layouts.first(where: { $0.contains(w) }) else { return }
         l.move(w, dir)
