@@ -56,7 +56,7 @@ final class WindowManager {
             let firstVisit = seen[space] == nil
             let known = seen[space] ?? []
             if enabled, firstVisit || config.autoTile {
-                for w in here.sorted(by: { $0.frame.midX < $1.frame.midX }) where !known.contains(w) && !l.contains(w) {
+                for w in here.sorted(by: { $0.frame.midX < $1.frame.midX }) where !known.contains(w) && !l.contains(w) && !isIgnored(w) {
                     l.apply(firstVisit ? .newColumn(index: l.columnIndex(forX: w.frame.midX)) : autoTileZone(for: w, in: l), to: w)
                     changed = true
                 }
@@ -115,6 +115,15 @@ final class WindowManager {
         } else {
             tile(w)
         }
+    }
+
+    func isIgnored(_ w: AXWindow) -> Bool {
+        if let id = w.bundleID, config.ignoreApps.contains(id) { return true }
+        if config.floatSmallWindows {
+            let f = w.frame.size
+            if f.width < config.smallWindowWidth && f.height < config.smallWindowHeight { return true }
+        }
+        return false
     }
 
     private func autoTileZone(for w: AXWindow, in l: Layout) -> DropZone {

@@ -26,7 +26,7 @@ final class HotKey {
         if let handler { RemoveEventHandler(handler) }
     }
 
-    private static let keyCodes: [String: UInt32] = [
+    static let keyCodes: [String: UInt32] = [
         "space": UInt32(kVK_Space), "return": UInt32(kVK_Return), "tab": UInt32(kVK_Tab), "escape": UInt32(kVK_Escape),
         "left": UInt32(kVK_LeftArrow), "right": UInt32(kVK_RightArrow), "up": UInt32(kVK_UpArrow), "down": UInt32(kVK_DownArrow),
         "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9, "b": 11, "q": 12, "w": 13,
@@ -48,6 +48,18 @@ final class HotKey {
             }
         }
         return flags.isEmpty ? .maskAlternate : flags
+    }
+
+    /// Builds a spec string from a key event, e.g. "alt+cmd+space"; nil for modifier-only presses.
+    static func spec(from e: NSEvent) -> String? {
+        guard let name = keyCodes.first(where: { $0.value == UInt32(e.keyCode) })?.key else { return nil }
+        var parts: [String] = []
+        if e.modifierFlags.contains(.control) { parts.append("ctrl") }
+        if e.modifierFlags.contains(.option) { parts.append("alt") }
+        if e.modifierFlags.contains(.shift) { parts.append("shift") }
+        if e.modifierFlags.contains(.command) { parts.append("cmd") }
+        parts.append(name)
+        return parts.joined(separator: "+")
     }
 
     private static func parse(_ spec: String) -> (UInt32, UInt32)? {

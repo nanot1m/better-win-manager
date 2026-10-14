@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var autoTileItem: NSMenuItem?
     var popup: ActionPopup!
     var hotKeys: [HotKey] = []
+    let configWindow = ConfigWindow()
 
     func applicationDidFinishLaunching(_ n: Notification) {
         let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
@@ -36,9 +37,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
         }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "⊞"
+        statusItem.button?.image = StatusIcon.make(paused: false)
         statusItem.menu = buildMenu()
         print("BetterWM running. Hold ⌥ and drag a window.")
+        if CommandLine.arguments.contains("--settings") {
+            showSettings()
+            print("settings window:", configWindow.windowNumber ?? -1)
+        }
     }
 }
 
@@ -93,7 +98,8 @@ extension AppDelegate {
         menu.addItem(withTitle: "Auto-tile Strategy", action: nil, keyEquivalent: "").submenu = strategyMenu
         syncAutoTileItems()
         menu.addItem(.separator())
-        add("Open Config", #selector(openConfig))
+        add("Settings…", #selector(showSettings), ",")
+        add("Open Config File", #selector(openConfig))
         add("Reload Config", #selector(reloadConfig))
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -159,10 +165,19 @@ extension AppDelegate {
         autoTileItem?.state = manager.config.autoTile ? .on : .off
     }
     @objc func openConfig() { NSWorkspace.shared.open(Config.path) }
+    @objc func showSettings() {
+        configWindow.show(config: manager.config) { [weak self] cfg in
+            guard let self else { return }
+            self.manager.config = cfg
+            self.manager.relayout()
+            self.registerHotKeys(cfg)
+            self.syncAutoTileItems()
+        }
+    }
     @objc func togglePause() {
         manager.enabled.toggle()
         pauseItem?.title = manager.enabled ? "Pause Tiling" : "Resume Tiling"
-        statusItem.button?.title = manager.enabled ? "⊞" : "⊡"
+        statusItem.button?.image = StatusIcon.make(paused: !manager.enabled)
     }
 }
 

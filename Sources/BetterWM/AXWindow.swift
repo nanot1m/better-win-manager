@@ -13,6 +13,8 @@ final class AXWindow: Hashable {
     static func == (a: AXWindow, b: AXWindow) -> Bool { CFEqual(a.element, b.element) }
     func hash(into h: inout Hasher) { h.combine(CFHash(element)) }
 
+    var bundleID: String? { NSRunningApplication(processIdentifier: pid)?.bundleIdentifier }
+
     var isValid: Bool {
         var v: CFTypeRef?
         return AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &v) == .success
