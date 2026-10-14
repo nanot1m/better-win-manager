@@ -123,3 +123,7 @@ swift run CoreTests                                    # reconciler tests (plain
 The layout logic lives in the `BetterWMCore` library: a pure `Reconciler` turns a `Snapshot` of the system plus the `DesiredState` into frame commands, with no Accessibility calls. The app is a thin shell that builds snapshots, executes commands and turns gestures into state changes.
 
 Pushing a tag like `v0.1.0` runs the Release workflow, which builds the zip and publishes a GitHub release.
+
+## License
+
+MIT. The SkyLight bridge in `Sources/SkyLightBridge` is vendored from [WhichSpace](https://github.com/gechr/WhichSpace), also MIT; see its license file there.
