@@ -3,7 +3,10 @@ import Cocoa
 final class WindowManager {
     /// One grid per Space; only the grids of the currently visible Spaces are touched.
     private var layoutsBySpace: [Spaces.SpaceID: Layout] = [:]
-    private(set) var layouts: [Layout] = []
+    private var active: [(space: Spaces.SpaceID, layout: Layout)] = []
+    /// Windows seen on each Space; a visible window not in here just arrived (opened or moved in).
+    private var seen: [Spaces.SpaceID: Set<AXWindow>] = [:]
+    var layouts: [Layout] { active.map(\.layout) }
     let overlay: ZoneOverlay
     private var config: Config
     private var timer: Timer?
@@ -18,39 +21,51 @@ final class WindowManager {
                                                object: nil, queue: .main) { [weak self] _ in self?.activateCurrentSpaces() }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
                                                           object: nil, queue: .main) { [weak self] _ in self?.activateCurrentSpaces() }
-        observer = WindowObserver { [weak self] w in
-            guard let self, self.enabled else { return }
-            self.tile(w)
-        }
+        observer = WindowObserver { [weak self] _ in self?.reconcile() }
         activateCurrentSpaces()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            let before = self.layouts.map { $0.columns.flatMap(\.windows).count }
-            self.layouts.forEach { $0.prune() }
-            if before != self.layouts.map({ $0.columns.flatMap(\.windows).count }) { self.relayout() }
-        }
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in self?.reconcile() }
     }
 
     private func activateCurrentSpaces() {
-        var fresh: [Layout] = []
-        layouts = NSScreen.screens.map { s in
+        active = NSScreen.screens.map { s in
             let area = s.visibleFrame.toCocoa()
             let id = Spaces.current(for: s)
-            if let l = layoutsBySpace[id] { l.area = area; return l }
+            if let l = layoutsBySpace[id] { l.area = area; return (id, l) }
             let l = Layout(config: config, area: area)
             layoutsBySpace[id] = l
-            fresh.append(l)
-            return l
+            return (id, l)
         }
-        if !fresh.isEmpty { tileVisible(into: fresh) }
-        relayout()
+        reconcile()
+    }
+
+    /// Syncs the active grids with what is really on screen: departed windows leave, arrivals get tiled.
+    private func reconcile() {
+        let visible = Spaces.visibleWindows()
+        var changed = false
+        for (space, l) in active {
+            let here = visible.filter { l.area.contains($0.frame.center) }
+            let hereSet = Set(here)
+            for w in l.columns.flatMap(\.windows) where !hereSet.contains(w) {
+                l.remove(w)
+                changed = true
+            }
+            let known = seen[space] ?? []
+            if enabled {
+                for w in here.sorted(by: { $0.frame.midX < $1.frame.midX }) where !known.contains(w) && !l.contains(w) {
+                    l.apply(.newColumn(index: l.columnIndex(forX: w.frame.midX)), to: w)
+                    changed = true
+                }
+            }
+            seen[space] = hereSet
+        }
+        if changed { relayout() }
     }
 
     func retileCurrentScreen() {
-        guard let l = layout(for: NSEvent.mouseLocation.toAX()) else { return }
-        l.clear()
-        tileVisible(into: [l])
-        relayout()
+        guard let i = active.firstIndex(where: { $0.layout.area.contains(NSEvent.mouseLocation.toAX()) }) ?? active.indices.first else { return }
+        active[i].layout.clear()
+        seen[active[i].space] = []
+        reconcile()
     }
 
     func equalize() {
@@ -71,16 +86,6 @@ final class WindowManager {
             relayout()
         } else {
             tile(w)
-        }
-    }
-
-    private func tileVisible(into targets: [Layout]) {
-        let windows = Spaces.visibleWindows()
-            .map { ($0, $0.frame) }
-            .sorted { $0.1.midX < $1.1.midX }
-        for (w, f) in windows where !isTiled(w) {
-            guard let l = layout(for: f.center), targets.contains(where: { $0 === l }) else { continue }
-            l.apply(.newColumn(index: l.columns.count), to: w)
         }
     }
 
