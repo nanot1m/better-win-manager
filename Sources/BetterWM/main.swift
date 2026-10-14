@@ -5,7 +5,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var drag: DragController!
     var statusItem: NSStatusItem!
     var pauseItem: NSMenuItem?
+    var autoTileItem: NSMenuItem?
     var popup: ActionPopup!
+    var hotKeys: [HotKey] = []
 
     func applicationDidFinishLaunching(_ n: Notification) {
         let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
@@ -27,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let config = Config.load()
         manager = WindowManager(config: config)
         popup = ActionPopup(manager: manager)
+        registerHotKeys(config)
         drag = DragController(manager: manager)
         if !drag.start() {
             print("Failed to create event tap (needs Accessibility permission).")
@@ -77,6 +80,18 @@ extension AppDelegate {
         let pause = menu.addItem(withTitle: "Pause Tiling", action: #selector(togglePause), keyEquivalent: "p")
         pause.target = self
         pauseItem = pause
+        let auto = menu.addItem(withTitle: "Auto-tile New Windows", action: #selector(toggleAutoTile), keyEquivalent: "")
+        auto.target = self
+        autoTileItem = auto
+        let strategyMenu = NSMenu(title: "Strategy")
+        strategyMenu.delegate = self
+        for st in Config.AutoTileStrategy.allCases {
+            let item = strategyMenu.addItem(withTitle: st.title, action: #selector(setStrategy(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = st.rawValue
+        }
+        menu.addItem(withTitle: "Auto-tile Strategy", action: nil, keyEquivalent: "").submenu = strategyMenu
+        syncAutoTileItems()
         menu.addItem(.separator())
         add("Open Config", #selector(openConfig))
         add("Reload Config", #selector(reloadConfig))
@@ -88,6 +103,37 @@ extension AppDelegate {
     @objc func switchDesktop(_ sender: NSMenuItem) { Spaces.switchToDesktop(sender.tag) }
     @objc func toggleFocused() { manager.toggleFocused() }
     @objc func showPopup() { popup.toggle() }
+
+    func registerHotKeys(_ config: Config) {
+        hotKeys.removeAll()
+        var actions: [String: () -> Void] = [
+            "popup": { [weak self] in self?.popup.toggle() },
+            "focusNext": { [weak self] in self?.manager.focusNext() },
+            "focusPrevious": { [weak self] in self?.manager.focusNext(reverse: true) },
+            "moveLeft": { [weak self] in self?.manager.moveFocused(.left) },
+            "moveRight": { [weak self] in self?.manager.moveFocused(.right) },
+            "moveUp": { [weak self] in self?.manager.moveFocused(.up) },
+            "moveDown": { [weak self] in self?.manager.moveFocused(.down) },
+            "mergeLeft": { [weak self] in self?.manager.moveFocused(.mergeLeft) },
+            "mergeRight": { [weak self] in self?.manager.moveFocused(.mergeRight) },
+            "toggleTile": { [weak self] in self?.manager.toggleFocused() },
+            "retile": { [weak self] in self?.manager.retileCurrentScreen() },
+            "equalize": { [weak self] in self?.manager.equalize() },
+            "pause": { [weak self] in self?.togglePause() },
+            "desktopNext": { Spaces.swipe(toNext: true) },
+            "desktopPrevious": { Spaces.swipe(toNext: false) },
+        ]
+        for i in 1...9 { actions["desktop\(i)"] = { Spaces.switchToDesktop(i - 1) } }
+        for (index, (name, spec)) in config.hotkeys.sorted(by: { $0.key < $1.key }).enumerated() {
+            guard let action = actions[name] else { print("Unknown hotkey action '\(name)'"); continue }
+            if let hk = HotKey(spec, id: UInt32(index + 1), action: action) {
+                hotKeys.append(hk)
+            } else {
+                print("Could not register hotkey '\(spec)' for \(name)")
+            }
+        }
+    }
+
     @objc func focusNext() { manager.focusNext() }
     @objc func focusPrevious() { manager.focusNext(reverse: true) }
     @objc func moveFocused(_ sender: NSMenuItem) {
@@ -95,7 +141,23 @@ extension AppDelegate {
     }
     @objc func retile() { manager.retileCurrentScreen() }
     @objc func equalize() { manager.equalize() }
-    @objc func reloadConfig() { manager.reloadConfig() }
+    @objc func reloadConfig() {
+        manager.reloadConfig()
+        registerHotKeys(manager.config)
+        syncAutoTileItems()
+    }
+    @objc func toggleAutoTile() {
+        manager.config.autoTile.toggle()
+        syncAutoTileItems()
+    }
+    @objc func setStrategy(_ sender: NSMenuItem) {
+        if let raw = sender.representedObject as? String, let st = Config.AutoTileStrategy(rawValue: raw) {
+            manager.config.autoTileStrategy = st
+        }
+    }
+    func syncAutoTileItems() {
+        autoTileItem?.state = manager.config.autoTile ? .on : .off
+    }
     @objc func openConfig() { NSWorkspace.shared.open(Config.path) }
     @objc func togglePause() {
         manager.enabled.toggle()
@@ -106,6 +168,12 @@ extension AppDelegate {
 
 extension AppDelegate: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu.title == "Strategy" {
+            for item in menu.items {
+                item.state = (item.representedObject as? String) == manager.config.autoTileStrategy.rawValue ? .on : .off
+            }
+            return
+        }
         if menu.title == "Move" {
             for item in menu.items {
                 if let dir = item.representedObject as? Layout.Move { item.isEnabled = manager.canMoveFocused(dir) }

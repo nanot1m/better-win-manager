@@ -40,7 +40,7 @@ final class DragController {
             return Unmanaged.passUnretained(event)
         }
         let p = event.location
-        let alt = event.flags.contains(.maskAlternate)
+        let alt = event.flags.contains(HotKey.eventFlags(manager.config.dragModifiers))
         switch type {
         case .scrollWheel:
             guard alt, dragged == nil else { return Unmanaged.passUnretained(event) }

@@ -8,7 +8,7 @@ final class WindowManager {
     private var seen: [Spaces.SpaceID: Set<AXWindow>] = [:]
     var layouts: [Layout] { active.map(\.layout) }
     let overlay: ZoneOverlay
-    private var config: Config
+    var config: Config
     private var timer: Timer?
     private var observer: WindowObserver?
     var enabled = true
@@ -55,10 +55,9 @@ final class WindowManager {
             // First look at a desktop keeps the existing order; later arrivals open on the right.
             let firstVisit = seen[space] == nil
             let known = seen[space] ?? []
-            if enabled {
+            if enabled, firstVisit || config.autoTile {
                 for w in here.sorted(by: { $0.frame.midX < $1.frame.midX }) where !known.contains(w) && !l.contains(w) {
-                    let index = firstVisit ? l.columnIndex(forX: w.frame.midX) : l.columns.count
-                    l.apply(.newColumn(index: index), to: w)
+                    l.apply(firstVisit ? .newColumn(index: l.columnIndex(forX: w.frame.midX)) : autoTileZone(for: w, in: l), to: w)
                     changed = true
                 }
             }
@@ -115,6 +114,18 @@ final class WindowManager {
             relayout()
         } else {
             tile(w)
+        }
+    }
+
+    private func autoTileZone(for w: AXWindow, in l: Layout) -> DropZone {
+        switch config.autoTileStrategy {
+        case .rightmost: return .newColumn(index: l.columns.count)
+        case .leftmost: return .newColumn(index: 0)
+        case .position: return .newColumn(index: l.columnIndex(forX: w.frame.midX))
+        case .stackFocused:
+            guard let f = AXWindow.focused, let ci = l.columns.firstIndex(where: { $0.windows.contains(f) }),
+                  let wi = l.columns[ci].windows.firstIndex(of: f) else { return .newColumn(index: l.columns.count) }
+            return .stack(column: ci, index: wi + 1)
         }
     }
 

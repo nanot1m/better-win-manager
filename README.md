@@ -20,8 +20,4 @@ Grant Accessibility access when prompted (System Settings → Privacy & Security
 
 ## Config
 
-`~/.config/betterwm/config.json` (created on first run):
-
-```json
-{ "gap": 16, "outerGap": 16, "handleWidth": 16 }
-```
+`~/.config/betterwm/config.conf` is created on first run with every option documented inline: gaps, auto-tiling and its strategy, the modifiers used for drag-tiling, and one `hotkey.<action>` line per bindable action. Use Reload Config from the menu after editing.
