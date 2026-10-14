@@ -33,7 +33,7 @@ make install        # builds, bundles, ad-hoc signs, copies to /Applications
 
 Or run the bare binary during development with `swift build && .build/debug/BetterWM`. Requires macOS 13+ and Swift 5.9+; Command Line Tools are enough, no Xcode needed.
 
-On the first run all windows on the current desktop are tiled, ordered left to right.
+Nothing is rearranged on launch. Use Retile Current Screen from the menu to tile what is open, or enable `tileExistingOnStart` in the config.
 
 ## Usage
 
@@ -75,6 +75,7 @@ gap = 16
 outerGap = 16
 handleWidth = 16
 
+tileExistingOnStart = false
 autoTile = true
 # rightmost, leftmost, position, nextToFocused, stackFocused, autoSplit, spiral
 autoTileStrategy = rightmost

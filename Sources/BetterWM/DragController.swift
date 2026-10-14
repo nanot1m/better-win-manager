@@ -17,6 +17,7 @@ final class DragController {
             | (1 << CGEventType.leftMouseDragged.rawValue)
             | (1 << CGEventType.leftMouseUp.rawValue)
             | (1 << CGEventType.scrollWheel.rawValue)
+            | (1 << CGEventType.keyDown.rawValue)
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
@@ -42,6 +43,11 @@ final class DragController {
         let p = event.location
         let alt = event.flags.contains(HotKey.eventFlags(manager.config.dragModifiers))
         switch type {
+        case .keyDown:
+            // Feed an active hotkey recorder before macOS gets a chance to treat the press as a system shortcut.
+            guard let recorder = KeyRecorderView.active else { return Unmanaged.passUnretained(event) }
+            let consumed = recorder.record(keyCode: event.getIntegerValueField(.keyboardEventKeycode), flags: event.flags)
+            return consumed ? nil : Unmanaged.passUnretained(event)
         case .scrollWheel:
             guard alt, dragged == nil else { return Unmanaged.passUnretained(event) }
             let dy = event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1)

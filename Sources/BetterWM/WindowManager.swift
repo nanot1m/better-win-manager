@@ -6,6 +6,10 @@ final class WindowManager {
     private var active: [(space: Spaces.SpaceID, layout: Layout)] = []
     /// Windows seen on each Space; a visible window not in here just arrived (opened or moved in).
     private var seen: [Spaces.SpaceID: Set<AXWindow>] = [:]
+    /// Spaces whose next reconcile should tile everything regardless of tileExistingOnStart (Retile action).
+    private var forceTile: Set<Spaces.SpaceID> = []
+    /// Set while a Space switch is in flight; the window list mixes both desktops during the slide.
+    private var switching = false
     var layouts: [Layout] { active.map(\.layout) }
     let overlay: ZoneOverlay
     var config: Config { didSet { focusRing.apply(config) } }
@@ -21,10 +25,18 @@ final class WindowManager {
         self.config = config
         focusRing = FocusRing(config: config)
         overlay = ZoneOverlay(screen: NSScreen.screens[0])
+        focusRing.isTiled = { [unowned self] w in self.isTiled(w) }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in self?.activateCurrentSpaces() }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
-                                                          object: nil, queue: .main) { [weak self] _ in self?.activateCurrentSpaces() }
+                                                          object: nil, queue: .main) { [weak self] _ in
+            // The window list is still in flux while the slide animation runs; settle first.
+            self?.switching = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                self?.switching = false
+                self?.activateCurrentSpaces()
+            }
+        }
         observer = WindowObserver(onNewWindow: { [weak self] _ in self?.reconcile() },
                                   onFocusChange: { [weak self] in self?.focusRing.update() })
         activateCurrentSpaces()
@@ -45,27 +57,29 @@ final class WindowManager {
 
     /// Syncs the active grids with what is really on screen: departed windows leave, arrivals get tiled.
     private func reconcile() {
-        guard !interacting else { return }
+        guard !interacting, !switching else { return }
         let visible = Spaces.visibleWindows()
         var changed = false
         for (space, l) in active {
-            let here = visible.filter { l.area.contains($0.frame.center) }
+            let here = visible.filter { l.area.contains($0.frame.center) && stillOn(space, $0) }
             let hereSet = Set(here)
-            for w in l.columns.flatMap(\.windows) where !hereSet.contains(w) {
+            for w in l.columns.flatMap(\.windows) where !hereSet.contains(w) && !stillOn(space, w) {
                 l.remove(w)
                 changed = true
             }
             // First look at a desktop keeps the existing order; later arrivals open on the right.
             let firstVisit = seen[space] == nil
             let known = seen[space] ?? []
-            if enabled, firstVisit || config.autoTile {
-                for w in here.sorted(by: { $0.frame.midX < $1.frame.midX }) where !known.contains(w) && !l.contains(w) && !isIgnored(w) {
+            if enabled, firstVisit ? config.tileExistingOnStart || forceTile.contains(space) : config.autoTile {
+                for w in here.sorted(by: { $0.frame.midX < $1.frame.midX })
+                where !known.contains(w) && !l.contains(w) && !isIgnored(w) {
                     l.apply(firstVisit ? .newColumn(index: l.columnIndex(forX: w.frame.midX)) : autoTileZone(for: w, in: l), to: w)
                     l.spiralAnchor = w
                     changed = true
                 }
             }
             seen[space] = hereSet
+            forceTile.remove(space)
         }
         if changed { relayout() }
     }
@@ -73,7 +87,8 @@ final class WindowManager {
     func retileCurrentScreen() {
         guard let i = active.firstIndex(where: { $0.layout.area.contains(NSEvent.mouseLocation.toAX()) }) ?? active.indices.first else { return }
         active[i].layout.clear()
-        seen[active[i].space] = []
+        seen[active[i].space] = nil
+        forceTile.insert(active[i].space)
         reconcile()
     }
 
@@ -129,6 +144,26 @@ final class WindowManager {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.tileWhenVisible(w, attempts: attempts - 1) }
     }
 
+    /// Windows the presets would arrange on the screen holding the focused window, in reading order.
+    func presetCandidates() -> (Layout, Spaces.SpaceID, [AXWindow])? {
+        let anchor = AXWindow.focused?.frame.center ?? NSEvent.mouseLocation.toAX()
+        guard let entry = active.first(where: { $0.layout.area.contains(anchor) }) ?? active.first else { return nil }
+        let windows = Spaces.visibleWindows()
+            .filter { entry.layout.area.contains($0.frame.center) && !isIgnored($0) }
+            .sorted { a, b in
+                let fa = a.frame, fb = b.frame
+                return abs(fa.minX - fb.minX) > 40 ? fa.minX < fb.minX : fa.minY < fb.minY
+            }
+        return (entry.layout, entry.space, windows)
+    }
+
+    func applyPreset(_ preset: LayoutPreset) {
+        guard let (l, space, windows) = presetCandidates() else { return }
+        l.apply(preset: preset, windows: windows)
+        seen[space] = Set(windows)
+        relayout()
+    }
+
     func canMoveFocused(_ dir: Layout.Move) -> Bool {
         guard let w = AXWindow.focused, let l = layouts.first(where: { $0.contains(w) }) else { return false }
         return l.canMove(w, dir)
@@ -148,6 +183,12 @@ final class WindowManager {
         } else {
             tile(w)
         }
+    }
+
+    /// A tiled window missing from the on-screen list may just be mid-transition; trust WindowServer's Space membership.
+    private func stillOn(_ space: Spaces.SpaceID, _ w: AXWindow) -> Bool {
+        guard w.isValid, w.isStandard, let id = w.windowID else { return false }
+        return Spaces.spaces(of: id).contains(space)
     }
 
     func isIgnored(_ w: AXWindow) -> Bool {

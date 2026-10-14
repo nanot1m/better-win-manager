@@ -4,26 +4,42 @@ import Cocoa
 /// Global hotkey via Carbon; works for background apps and needs no extra permission.
 final class HotKey {
     private var ref: EventHotKeyRef?
-    private var handler: EventHandlerRef?
+    private let id: UInt32
     private let action: () -> Void
+
+    private static var registry: [UInt32: HotKey] = [:]
+    private static var handler: EventHandlerRef?
+    private static let signature = OSType(0x4257_4D4B)
 
     /// Spec like "alt+cmd+space" or "ctrl+shift+k". Returns nil if it cannot be parsed or registered.
     init?(_ spec: String, id: UInt32, action: @escaping () -> Void) {
+        self.id = id
         self.action = action
         guard let (code, mods) = HotKey.parse(spec) else { return nil }
-        var type = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, userData in
-            Unmanaged<HotKey>.fromOpaque(userData!).takeUnretainedValue().action()
-            return noErr
-        }, 1, &type, selfPtr, &handler)
-        let id = EventHotKeyID(signature: OSType(0x4257_4D4B), id: id)
-        guard RegisterEventHotKey(code, mods, id, GetApplicationEventTarget(), 0, &ref) == noErr else { return nil }
+        HotKey.installHandlerOnce()
+        let hotKeyID = EventHotKeyID(signature: HotKey.signature, id: id)
+        guard RegisterEventHotKey(code, mods, hotKeyID, GetApplicationEventTarget(), 0, &ref) == noErr else { return nil }
+        HotKey.registry[id] = self
     }
 
     deinit {
         if let ref { UnregisterEventHotKey(ref) }
-        if let handler { RemoveEventHandler(handler) }
+        if HotKey.registry[id] === self { HotKey.registry[id] = nil }
+    }
+
+    // One handler for all hotkeys: Carbon delivers every hot-key event to every handler on the target,
+    // so dispatch must go by the ID carried in the event.
+    private static func installHandlerOnce() {
+        guard handler == nil else { return }
+        var type = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
+            var hotKeyID = EventHotKeyID()
+            GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                              nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyID)
+            guard hotKeyID.signature == HotKey.signature else { return OSStatus(eventNotHandledErr) }
+            HotKey.registry[hotKeyID.id]?.action()
+            return noErr
+        }, 1, &type, nil, &handler)
     }
 
     static let keyCodes: [String: UInt32] = [
@@ -52,12 +68,21 @@ final class HotKey {
 
     /// Builds a spec string from a key event, e.g. "alt+cmd+space"; nil for modifier-only presses.
     static func spec(from e: NSEvent) -> String? {
-        guard let name = keyCodes.first(where: { $0.value == UInt32(e.keyCode) })?.key else { return nil }
+        var flags: CGEventFlags = []
+        if e.modifierFlags.contains(.control) { flags.insert(.maskControl) }
+        if e.modifierFlags.contains(.option) { flags.insert(.maskAlternate) }
+        if e.modifierFlags.contains(.shift) { flags.insert(.maskShift) }
+        if e.modifierFlags.contains(.command) { flags.insert(.maskCommand) }
+        return spec(keyCode: UInt32(e.keyCode), flags: flags)
+    }
+
+    static func spec(keyCode: UInt32, flags: CGEventFlags) -> String? {
+        guard let name = keyCodes.first(where: { $0.value == keyCode })?.key else { return nil }
         var parts: [String] = []
-        if e.modifierFlags.contains(.control) { parts.append("ctrl") }
-        if e.modifierFlags.contains(.option) { parts.append("alt") }
-        if e.modifierFlags.contains(.shift) { parts.append("shift") }
-        if e.modifierFlags.contains(.command) { parts.append("cmd") }
+        if flags.contains(.maskControl) { parts.append("ctrl") }
+        if flags.contains(.maskAlternate) { parts.append("alt") }
+        if flags.contains(.maskShift) { parts.append("shift") }
+        if flags.contains(.maskCommand) { parts.append("cmd") }
         parts.append(name)
         return parts.joined(separator: "+")
     }

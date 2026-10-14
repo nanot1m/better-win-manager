@@ -4,6 +4,15 @@ final class ConfigWindow: NSObject {
     private var window: NSWindow?
     var windowNumber: Int? { window?.windowNumber }
 
+    func beginRecordingFirst() {
+        guard let r = recorders[Config.actions[0].key], let root = window?.contentView,
+              let tabs = root.subviews.compactMap({ $0 as? NSTabView }).first else { return }
+        tabs.selectTabViewItem(at: 2)
+        root.layoutSubtreeIfNeeded()
+        window?.makeFirstResponder(r)
+    }
+    var firstRecordedSpec: String? { recorders[Config.actions[0].key]?.spec }
+
     /// Dev aid: renders each tab's content to PNG files (path, path-1, path-2) without needing screen recording access.
     func snapshot(to path: String) {
         guard let w = window, let root = w.contentView, let tabs = root.subviews.compactMap({ $0 as? NSTabView }).first else { return }
@@ -24,6 +33,7 @@ final class ConfigWindow: NSObject {
     private var modifierButtons: [String: NSButton] = [:]
     private var strategyPopup: NSPopUpButton!
     private var autoTileCheck: NSButton!
+    private var tileOnStartCheck: NSButton!
     private var sliders: [(KeyPath<Config, CGFloat>, WritableKeyPath<Config, CGFloat>, NSSlider, NSTextField)] = []
     private var savedLabel: NSTextField!
     private var ignoreText: NSTextView!
@@ -124,6 +134,7 @@ final class ConfigWindow: NSObject {
         ])
 
         autoTileCheck = NSButton(checkboxWithTitle: "Tile new windows automatically", target: nil, action: nil)
+        tileOnStartCheck = NSButton(checkboxWithTitle: "Tile existing windows when a desktop is first seen", target: nil, action: nil)
         strategyPopup = NSPopUpButton()
         for st in Config.AutoTileStrategy.allCases {
             strategyPopup.addItem(withTitle: st.title)
@@ -140,6 +151,7 @@ final class ConfigWindow: NSObject {
         }
         let tiling = box("Tiling", rows: [
             [label("New windows"), autoTileCheck],
+            [label("On launch"), tileOnStartCheck],
             [label("Placement"), strategyPopup],
             [label("Drag to tile with"), mods],
         ])
@@ -235,7 +247,9 @@ final class ConfigWindow: NSObject {
         grid.column(at: 0).width = 220
         for i in 0..<grid.numberOfRows { grid.row(at: i).yPlacement = .center }
 
-        let hint = NSTextField(wrappingLabelWithString: "Click a field and press a key combination. Delete or Escape clears it.")
+        let hint = NSTextField(wrappingLabelWithString: "Click a field and press a key combination. Delete or Escape clears it.\nSystem shortcuts such as ⌃← / ⌃→ (Mission Control) never reach apps; disable them in System Settings › Keyboard › Keyboard Shortcuts to bind them here.")
+        hint.alignment = .center
+        hint.widthAnchor.constraint(lessThanOrEqualToConstant: 480).isActive = true
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .secondaryLabelColor
         let stack = NSStackView(views: [hint, grid])
@@ -303,6 +317,7 @@ final class ConfigWindow: NSObject {
             value.stringValue = "\(Int(config[keyPath: kp])) pt"
         }
         autoTileCheck.state = config.autoTile ? .on : .off
+        tileOnStartCheck.state = config.tileExistingOnStart ? .on : .off
         strategyPopup.selectItem(at: Config.AutoTileStrategy.allCases.firstIndex(of: config.autoTileStrategy) ?? 0)
         let mods = config.dragModifiers.lowercased().split(separator: "+").map(String.init)
         for (k, b) in modifierButtons { b.state = mods.contains(k) ? .on : .off }
@@ -332,6 +347,7 @@ final class ConfigWindow: NSObject {
     @objc private func save() {
         for (_, kp, slider, _) in sliders { config[keyPath: kp] = CGFloat(slider.doubleValue.rounded()) }
         config.autoTile = autoTileCheck.state == .on
+        config.tileExistingOnStart = tileOnStartCheck.state == .on
         if let raw = strategyPopup.selectedItem?.representedObject as? String, let st = Config.AutoTileStrategy(rawValue: raw) {
             config.autoTileStrategy = st
         }
@@ -357,8 +373,30 @@ final class ConfigWindow: NSObject {
 }
 
 final class KeyRecorderView: NSView {
+    /// The recorder currently waiting for keys; the global event tap feeds it so even system-reserved combos record.
+    static weak var active: KeyRecorderView?
+
     var spec: String? { didSet { needsDisplay = true } }
-    private var recording = false { didSet { needsDisplay = true } }
+    private var recording = false {
+        didSet {
+            needsDisplay = true
+            if recording { KeyRecorderView.active = self } else if KeyRecorderView.active === self { KeyRecorderView.active = nil }
+        }
+    }
+
+    /// Called from the event tap with a CGEvent key press. Returns true if consumed.
+    func record(keyCode: Int64, flags: CGEventFlags) -> Bool {
+        guard recording else { return false }
+        if keyCode == 53 || keyCode == 51 {
+            spec = nil
+        } else if let s = HotKey.spec(keyCode: UInt32(keyCode), flags: flags) {
+            spec = s
+        } else {
+            return false
+        }
+        window?.makeFirstResponder(nil)
+        return true
+    }
 
     override var intrinsicContentSize: NSSize { NSSize(width: 180, height: 24) }
     override var acceptsFirstResponder: Bool { true }

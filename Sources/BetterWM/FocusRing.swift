@@ -5,6 +5,8 @@ final class FocusRing {
     private let view = RingView()
     private var config: Config
     private var timer: Timer?
+    /// Only tiled windows get a ring; floating ones are left alone, which also keeps drags cheap.
+    var isTiled: (AXWindow) -> Bool = { _ in true }
 
     init(config: Config) {
         self.config = config
@@ -33,7 +35,7 @@ final class FocusRing {
     }
 
     func update() {
-        guard config.focusRing, let w = AXWindow.focused, w.isValid, Spaces.visibleWindows().contains(w) else {
+        guard config.focusRing, let w = AXWindow.focused, isTiled(w), w.isValid else {
             window.orderOut(nil)
             return
         }

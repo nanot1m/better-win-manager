@@ -44,6 +44,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showSettings()
             print("settings window:", configWindow.windowNumber ?? -1)
         }
+        if let i = CommandLine.arguments.firstIndex(of: "--snapshot-popup"), i + 1 < CommandLine.arguments.count {
+            let path = CommandLine.arguments[i + 1]
+            popup.show()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [popup] in
+                popup?.snapshot(to: path)
+                print("popup snapshot written")
+            }
+        }
+        if CommandLine.arguments.contains("--test-record") {
+            showSettings()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [configWindow] in
+                configWindow.beginRecordingFirst()
+                for down in [true, false] {
+                    let e = CGEvent(keyboardEventSource: nil, virtualKey: 123, keyDown: down)
+                    e?.flags = .maskControl
+                    e?.post(tap: .cghidEventTap)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    print("recorded:", configWindow.firstRecordedSpec ?? "nil")
+                }
+            }
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--snapshot-settings"), i + 1 < CommandLine.arguments.count {
             let path = CommandLine.arguments[i + 1]
             showSettings()

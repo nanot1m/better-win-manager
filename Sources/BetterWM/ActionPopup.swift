@@ -8,7 +8,7 @@ final class ActionPopup: NSPanel {
     init(manager: WindowManager) {
         self.manager = manager
         view = ActionView()
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 560, height: 290),
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 560, height: 390),
                    styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
@@ -22,6 +22,12 @@ final class ActionPopup: NSPanel {
 
     override var canBecomeKey: Bool { true }
     override func cancelOperation(_ sender: Any?) { close() }
+
+    func snapshot(to path: String) {
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+    }
 
     func toggle() {
         if isVisible { close() } else { show() }
@@ -55,10 +61,18 @@ final class ActionPopup: NSPanel {
         view.enabled = Dictionary(uniqueKeysWithValues: ActionView.actions.map { ($0.dir, manager.canMoveFocused($0.dir)) })
         view.tiled = AXWindow.focused.map(manager.isTiled) ?? false
         view.desktopCount = Spaces.desktops().count
+        view.presets = manager.presetCandidates().map { LayoutPreset.presets(for: $0.2.count) } ?? []
         view.currentDesktop = Spaces.currentDesktopIndex()
         view.needsDisplay = true
         let target = AXWindow.focused?.frame.toCocoa() ?? NSScreen.main?.visibleFrame ?? .zero
-        setFrameOrigin(NSPoint(x: target.midX - frame.width / 2, y: target.midY - frame.height / 2))
+        var origin = NSPoint(x: target.midX - frame.width / 2, y: target.midY - frame.height / 2)
+        // Keep the whole panel on the screen holding the target, with a small margin.
+        let screen = NSScreen.screens.first { $0.frame.contains(NSPoint(x: target.midX, y: target.midY)) } ?? NSScreen.main
+        if let bounds = screen?.visibleFrame.insetBy(dx: 12, dy: 12) {
+            origin.x = min(max(origin.x, bounds.minX), max(bounds.minX, bounds.maxX - frame.width))
+            origin.y = min(max(origin.y, bounds.minY), max(bounds.minY, bounds.maxY - frame.height))
+        }
+        setFrameOrigin(origin)
     }
 
     private func handle(_ e: NSEvent) -> Bool {
@@ -78,6 +92,13 @@ final class ActionPopup: NSPanel {
             manager.sendFocusedWindow(toNext: key == "n")
             return true
         case (53, _): close(); return true
+        case (_, let k) where ("1"..."9").contains(k) && k.count == 1 && e.modifierFlags.contains(.option):
+            let index = Int(k)! - 1
+            guard index < view.presets.count else { return true }
+            manager.applyPreset(view.presets[index])
+            refresh()
+            regainKey()
+            return true
         case (_, let k) where ("1"..."9").contains(k) && k.count == 1:
             let index = Int(k)! - 1
             guard index < Spaces.desktops().count else { return true }
@@ -123,6 +144,7 @@ private final class ActionView: NSView {
     var tiled = false
     var desktopCount = 0
     var currentDesktop: Int?
+    var presets: [LayoutPreset] = []
     var onKey: ((NSEvent) -> Bool)?
 
     override var acceptsFirstResponder: Bool { true }
@@ -134,8 +156,8 @@ private final class ActionView: NSView {
         NSColor.windowBackgroundColor.withAlphaComponent(0.92).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 14, yRadius: 14).fill()
 
-        let footerH: CGFloat = 36, desktopsH: CGFloat = 60
-        let grid = NSRect(x: 14, y: footerH + desktopsH, width: bounds.width - 28, height: bounds.height - footerH - desktopsH - 14)
+        let footerH: CGFloat = 36, desktopsH: CGFloat = 60, presetsH: CGFloat = 100
+        let grid = NSRect(x: 14, y: footerH + desktopsH + presetsH, width: bounds.width - 28, height: bounds.height - footerH - desktopsH - presetsH - 14)
         let cellW = grid.width / 5, cellH = grid.height / 3
         func cell(_ col: Int, _ row: Int) -> NSRect {
             NSRect(x: grid.minX + CGFloat(col) * cellW, y: grid.maxY - CGFloat(row + 1) * cellH, width: cellW, height: cellH).insetBy(dx: 4, dy: 4)
@@ -156,10 +178,40 @@ private final class ActionView: NSView {
             draw(a.keys, in: NSRect(x: r.minX, y: r.minY + 4, width: r.width, height: r.height / 2 - 2), color: color, size: 11, bold: false)
         }
 
+        drawPresets(in: NSRect(x: 14, y: footerH + desktopsH, width: bounds.width - 28, height: presetsH))
         drawDesktops(in: NSRect(x: 14, y: footerH, width: bounds.width - 28, height: desktopsH))
 
-        draw("Tab / ⇧Tab  focus next / previous      T  tile / untile      N / P  send to next / previous desktop      Esc  close",
+        draw("Tab / ⇧Tab  focus    T  tile / untile    N / P  send to next / prev desktop    Esc  close",
              in: NSRect(x: 0, y: 8, width: bounds.width, height: footerH - 12), color: .secondaryLabelColor, size: 11, bold: false)
+    }
+
+    private func drawPresets(in rect: NSRect) {
+        let n = presets.first?.windowCount ?? 0
+        let keys = presets.count > 1 ? "⌥1–⌥\(presets.count)" : "⌥1"
+        draw(n == 0 ? "Layouts   (no windows)" : "Layouts for \(n) window\(n == 1 ? "" : "s")   \(keys) apply",
+             in: NSRect(x: rect.minX, y: rect.maxY - 18, width: rect.width, height: 14), color: .secondaryLabelColor, size: 11, bold: false)
+        guard !presets.isEmpty else { return }
+        let thumbW: CGFloat = 72, thumbH: CGFloat = 46, gap: CGFloat = 10
+        var x = rect.midX - (CGFloat(presets.count) * thumbW + CGFloat(presets.count - 1) * gap) / 2
+        for (i, p) in presets.enumerated() {
+            let r = NSRect(x: x, y: rect.minY + 18, width: thumbW, height: thumbH)
+            NSColor.controlAccentColor.withAlphaComponent(0.12).setFill()
+            NSBezierPath(roundedRect: r, xRadius: 6, yRadius: 6).fill()
+            let total = p.columns.reduce(0) { $0 + $1.weight }
+            var cx = r.minX + 3
+            for c in p.columns {
+                let w = (r.width - 6 - CGFloat(p.columns.count - 1) * 2) * c.weight / total
+                let h = (r.height - 6 - CGFloat(c.count - 1) * 2) / CGFloat(c.count)
+                for k in 0..<c.count {
+                    let cell = NSRect(x: cx, y: r.maxY - 3 - CGFloat(k + 1) * h - CGFloat(k) * 2, width: w, height: h)
+                    NSColor.controlAccentColor.withAlphaComponent(0.7).setFill()
+                    NSBezierPath(roundedRect: cell, xRadius: 1.5, yRadius: 1.5).fill()
+                }
+                cx += w + 2
+            }
+            draw("⌥\(i + 1)  \(p.name)", in: NSRect(x: r.minX - 10, y: rect.minY, width: r.width + 20, height: 16), color: .labelColor, size: 10, bold: false)
+            x += thumbW + gap
+        }
     }
 
     private func drawDesktops(in rect: NSRect) {

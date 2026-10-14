@@ -6,6 +6,7 @@ struct Config {
     var handleWidth: CGFloat = 16
     var dragModifiers: String = "alt"
     var hotkeys: [String: String] = ["popup": "alt+cmd+space"]
+    var tileExistingOnStart: Bool = false
     var autoTile: Bool = true
     var autoTileStrategy: AutoTileStrategy = .rightmost
     var focusRing: Bool = true
@@ -86,6 +87,9 @@ struct Config {
         # Width of the draggable bar sitting in each gap.
         handleWidth = \(num(handleWidth))
 
+        # Tile the windows already open when a desktop is first seen (at launch or on first visit).
+        # Off by default so launching never rearranges anything; use Retile Current Screen on demand.
+        tileExistingOnStart = \(tileExistingOnStart)
         # Tile windows automatically when they open or arrive on a desktop.
         autoTile = \(autoTile)
         # Where an auto-tiled window goes: rightmost, leftmost, position, nextToFocused, stackFocused, autoSplit, spiral.
@@ -146,6 +150,7 @@ struct Config {
             case "outerGap": cfg.outerGap = Double(value).map { CGFloat($0) } ?? cfg.outerGap
             case "handleWidth": cfg.handleWidth = Double(value).map { CGFloat($0) } ?? cfg.handleWidth
             case "dragModifiers": cfg.dragModifiers = value
+            case "tileExistingOnStart": cfg.tileExistingOnStart = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "autoTile": cfg.autoTile = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "autoTileStrategy": cfg.autoTileStrategy = AutoTileStrategy(rawValue: value) ?? cfg.autoTileStrategy
                 case "focusRing": cfg.focusRing = ["true", "yes", "1", "on"].contains(value.lowercased())

@@ -37,6 +37,22 @@ final class Layout {
         columns.removeAll { $0.windows.isEmpty }
     }
 
+    /// Replaces the whole grid with `preset`, filling columns left to right from `windows`.
+    func apply(preset: LayoutPreset, windows: [AXWindow]) {
+        clear()
+        var rest = windows[...]
+        for c in preset.columns {
+            let slice = Array(rest.prefix(c.count))
+            rest = rest.dropFirst(c.count)
+            guard let first = slice.first else { break }
+            let col = Column(first)
+            col.windows = slice
+            col.weight = c.weight
+            columns.append(col)
+        }
+        for w in rest { columns.append(Column(w)) }
+    }
+
     func equalize() {
         for c in columns { c.weight = 1 }
         heightWeights.removeAll()
