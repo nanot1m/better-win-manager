@@ -12,7 +12,9 @@ enum DropZone: Equatable {
 }
 
 final class Layout {
-    private(set) var columns: [Column] = []
+    private(set) var columns: [Column] = [] { didSet { dirty = true } }
+    /// Membership changed since frames were last applied; checked when the desktop becomes active again.
+    var dirty = false
     private var minSizes: [AXWindow: CGSize] = [:]
     private var heightWeights: [AXWindow: CGFloat] = [:]
     /// Last auto-tiled window and whether the next spiral step goes beside (true) or below it.
@@ -30,6 +32,7 @@ final class Layout {
     func contains(_ w: AXWindow) -> Bool { columns.contains { $0.windows.contains(w) } }
 
     func remove(_ w: AXWindow) {
+        if columns.contains(where: { $0.windows.contains(w) }) { dirty = true }
         if spiralAnchor == w { spiralAnchor = nil }
         minSizes[w] = nil
         heightWeights[w] = nil
@@ -220,6 +223,7 @@ final class Layout {
     }
 
     func apply(_ zone: DropZone, to w: AXWindow) {
+        dirty = true
         let origin = columns.firstIndex { $0.windows.contains(w) }
         let originWasAlone = origin.map { columns[$0].windows.count == 1 } ?? false
         if let o = origin, originWasAlone {
@@ -269,6 +273,7 @@ final class Layout {
     }
 
     func move(_ w: AXWindow, _ dir: Move) {
+        dirty = true
         guard let ci = columns.firstIndex(where: { $0.windows.contains(w) }),
               let wi = columns[ci].windows.firstIndex(of: w) else { return }
         let alone = columns[ci].windows.count == 1
@@ -293,6 +298,7 @@ final class Layout {
     }
 
     func applyFrames() {
+        dirty = false
         for (w, f) in windowFrames() where w.frame != f { w.frame = f }
         var learned = false
         for (w, f) in windowFrames() {

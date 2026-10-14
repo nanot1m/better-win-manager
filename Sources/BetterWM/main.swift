@@ -52,6 +52,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 print("popup snapshot written")
             }
         }
+        if CommandLine.arguments.contains("--test-hotkeys") {
+            registerHotKeys(manager.config)
+            registerHotKeys(manager.config)
+            print("hotkeys registered twice ok:", hotKeys.count)
+        }
         if CommandLine.arguments.contains("--test-record") {
             showSettings()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [configWindow] in
@@ -174,11 +179,7 @@ extension AppDelegate {
         }
         for (index, (name, spec)) in config.hotkeys.sorted(by: { $0.key < $1.key }).enumerated() {
             guard let action = actions[name] else { print("Unknown hotkey action '\(name)'"); continue }
-            if let hk = HotKey(spec, id: UInt32(index + 1), action: action) {
-                hotKeys.append(hk)
-            } else {
-                print("Could not register hotkey '\(spec)' for \(name)")
-            }
+            if let hk = HotKey(spec, id: UInt32(index + 1), action: action) { hotKeys.append(hk) }
         }
     }
 

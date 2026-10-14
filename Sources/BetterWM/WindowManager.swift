@@ -80,6 +80,7 @@ final class WindowManager {
             }
             seen[space] = hereSet
             forceTile.remove(space)
+            if l.dirty { changed = true }
         }
         if changed { relayout() }
     }
@@ -122,13 +123,17 @@ final class WindowManager {
 
     func sendFocusedWindow(toDesktop index: Int) {
         guard let w = AXWindow.focused else { return }
-        untile(w)
+        let wasTiled = isTiled(w)
+        if wasTiled {
+            untile(w)
+            relayout()
+        }
         interacting = true
         Spaces.sendFocusedWindow(toDesktop: index) { [weak self] moved in
             guard let self else { return }
             self.interacting = false
             guard let moved else { return }
-            self.tileWhenVisible(moved, attempts: 10)
+            if wasTiled { self.tileWhenVisible(moved, attempts: 10) } else { self.activateCurrentSpaces() }
         }
     }
 

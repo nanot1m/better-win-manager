@@ -7,7 +7,9 @@ final class HotKey {
     private let id: UInt32
     private let action: () -> Void
 
-    private static var registry: [UInt32: HotKey] = [:]
+    private struct Weak { weak var value: HotKey? }
+    // Weak so that replacing an entry never deallocates a HotKey mid-mutation (its deinit would re-enter here).
+    private static var registry: [UInt32: Weak] = [:]
     private static var handler: EventHandlerRef?
     private static let signature = OSType(0x4257_4D4B)
 
@@ -15,16 +17,20 @@ final class HotKey {
     init?(_ spec: String, id: UInt32, action: @escaping () -> Void) {
         self.id = id
         self.action = action
-        guard let (code, mods) = HotKey.parse(spec) else { return nil }
+        guard let (code, mods) = HotKey.parse(spec) else { print("Hotkey '\(spec)': cannot parse"); return nil }
         HotKey.installHandlerOnce()
         let hotKeyID = EventHotKeyID(signature: HotKey.signature, id: id)
-        guard RegisterEventHotKey(code, mods, hotKeyID, GetApplicationEventTarget(), 0, &ref) == noErr else { return nil }
-        HotKey.registry[id] = self
+        let status = RegisterEventHotKey(code, mods, hotKeyID, GetApplicationEventTarget(), 0, &ref)
+        guard status == noErr else {
+            let why = status == OSStatus(eventHotKeyExistsErr) ? "already registered, probably by another running BetterWM instance" : "OSStatus \(status)"
+            print("Hotkey '\(spec)': \(why)")
+            return nil
+        }
+        HotKey.registry[id] = Weak(value: self)
     }
 
     deinit {
         if let ref { UnregisterEventHotKey(ref) }
-        if HotKey.registry[id] === self { HotKey.registry[id] = nil }
     }
 
     // One handler for all hotkeys: Carbon delivers every hot-key event to every handler on the target,
@@ -37,7 +43,7 @@ final class HotKey {
             GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
                               nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyID)
             guard hotKeyID.signature == HotKey.signature else { return OSStatus(eventNotHandledErr) }
-            HotKey.registry[hotKeyID.id]?.action()
+            HotKey.registry[hotKeyID.id]?.value?.action()
             return noErr
         }, 1, &type, nil, &handler)
     }
