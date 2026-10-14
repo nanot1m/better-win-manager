@@ -232,6 +232,32 @@ final class Layout {
         windowFrames().filter { w, f in w.isValid && !w.frame.approximatelyEquals(f) }.map(\.0)
     }
 
+    enum Move { case left, right, up, down, mergeLeft, mergeRight }
+
+    func move(_ w: AXWindow, _ dir: Move) {
+        guard let ci = columns.firstIndex(where: { $0.windows.contains(w) }),
+              let wi = columns[ci].windows.firstIndex(of: w) else { return }
+        let alone = columns[ci].windows.count == 1
+        switch dir {
+        case .left where alone:
+            if ci > 0 { columns.swapAt(ci, ci - 1) }
+        case .left:
+            apply(.newColumn(index: ci), to: w)
+        case .right where alone:
+            if ci + 1 < columns.count { columns.swapAt(ci, ci + 1) }
+        case .right:
+            apply(.newColumn(index: ci + 1), to: w)
+        case .mergeLeft:
+            if ci > 0 { apply(.stack(column: ci - 1, index: columns[ci - 1].windows.count), to: w) }
+        case .mergeRight:
+            if ci + 1 < columns.count { apply(.stack(column: ci + 1, index: columns[ci + 1].windows.count), to: w) }
+        case .up:
+            if wi > 0 { columns[ci].windows.swapAt(wi, wi - 1) }
+        case .down:
+            if wi + 1 < columns[ci].windows.count { columns[ci].windows.swapAt(wi, wi + 1) }
+        }
+    }
+
     func applyFrames() {
         for (w, f) in windowFrames() where w.frame != f { w.frame = f }
         var learned = false

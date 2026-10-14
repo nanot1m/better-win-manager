@@ -52,10 +52,13 @@ final class WindowManager {
                 l.remove(w)
                 changed = true
             }
+            // First look at a desktop keeps the existing order; later arrivals open on the right.
+            let firstVisit = seen[space] == nil
             let known = seen[space] ?? []
             if enabled {
                 for w in here.sorted(by: { $0.frame.midX < $1.frame.midX }) where !known.contains(w) && !l.contains(w) {
-                    l.apply(.newColumn(index: l.columnIndex(forX: w.frame.midX)), to: w)
+                    let index = firstVisit ? l.columnIndex(forX: w.frame.midX) : l.columns.count
+                    l.apply(.newColumn(index: index), to: w)
                     changed = true
                 }
             }
@@ -79,6 +82,12 @@ final class WindowManager {
     func reloadConfig() {
         config = Config.load()
         layoutsBySpace.values.forEach { $0.config = config }
+        relayout()
+    }
+
+    func moveFocused(_ dir: Layout.Move) {
+        guard let w = AXWindow.focused, let l = layouts.first(where: { $0.contains(w) }) else { return }
+        l.move(w, dir)
         relayout()
     }
 

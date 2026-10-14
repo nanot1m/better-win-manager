@@ -46,6 +46,16 @@ extension AppDelegate {
             item.target = self
         }
         add("Tile / Untile Focused Window", #selector(toggleFocused), "t")
+        let moveMenu = NSMenu()
+        for (title, dir) in [("Move Left", Layout.Move.left), ("Move Right", .right),
+                             ("Move Up", .up), ("Move Down", .down),
+                             ("Merge Into Left Column", .mergeLeft), ("Merge Into Right Column", .mergeRight)] {
+            let item = moveMenu.addItem(withTitle: title, action: #selector(moveFocused(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = dir
+        }
+        let move = menu.addItem(withTitle: "Move Focused Window", action: nil, keyEquivalent: "")
+        move.submenu = moveMenu
         add("Retile Current Screen", #selector(retile), "r")
         add("Equalize Sizes", #selector(equalize), "e")
         menu.addItem(.separator())
@@ -68,6 +78,9 @@ extension AppDelegate {
 
     @objc func switchDesktop(_ sender: NSMenuItem) { Spaces.switchToDesktop(sender.tag) }
     @objc func toggleFocused() { manager.toggleFocused() }
+    @objc func moveFocused(_ sender: NSMenuItem) {
+        if let dir = sender.representedObject as? Layout.Move { manager.moveFocused(dir) }
+    }
     @objc func retile() { manager.retileCurrentScreen() }
     @objc func equalize() { manager.equalize() }
     @objc func reloadConfig() { manager.reloadConfig() }
