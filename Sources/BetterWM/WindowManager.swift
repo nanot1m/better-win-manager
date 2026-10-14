@@ -12,6 +12,8 @@ final class WindowManager {
     private var timer: Timer?
     private var observer: WindowObserver?
     var enabled = true
+    /// Set while the user drags a window or a gap handle; reconciling mid-gesture would fight it.
+    var interacting = false
     private var handles: [HandleWindow] = []
 
     init(config: Config) {
@@ -40,6 +42,7 @@ final class WindowManager {
 
     /// Syncs the active grids with what is really on screen: departed windows leave, arrivals get tiled.
     private func reconcile() {
+        guard !interacting else { return }
         let visible = Spaces.visibleWindows()
         var changed = false
         for (space, l) in active {
@@ -128,13 +131,17 @@ final class WindowManager {
             h.setFrame(f.toCocoa(), display: true)
             h.isVertical = handle.isVertical
             h.onDrag = { [weak self, weak l] p in
+                self?.interacting = true
                 switch handle {
                 case let .column(i): l?.resize(boundary: i, toX: p.x)
                 case let .row(ci, i): l?.resize(column: ci, boundary: i, toY: p.y)
                 }
                 self?.relayout()
             }
-            h.onDragEnd = { [weak self] in self?.relayout() }
+            h.onDragEnd = { [weak self] in
+                self?.interacting = false
+                self?.relayout()
+            }
             h.orderFrontRegardless()
         }
     }

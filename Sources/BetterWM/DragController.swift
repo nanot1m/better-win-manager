@@ -57,6 +57,7 @@ final class DragController {
             dragStart = p
             guard manager.enabled, let w = AXWindow.at(point: p) else { return Unmanaged.passUnretained(event) }
             dragged = w
+            manager.interacting = true
             dragStart = p
             originalFrame = w.frame
             currentZone = nil
@@ -67,6 +68,7 @@ final class DragController {
             if dragged == nil, alt, manager.enabled, let w = AXWindow.focused {
                 // Hit-testing failed on mouse-down; the window being dragged is the frontmost app's focused one.
                 dragged = w
+                manager.interacting = true
                 originalFrame = w.frame
             }
             guard let w = dragged else { return Unmanaged.passUnretained(event) }
@@ -90,6 +92,7 @@ final class DragController {
             let wasIntercepting = intercepting
             intercepting = false
             let finish = { [manager] in
+                manager.interacting = false
                 if let w, let zone, let layout = manager.layout(for: p) {
                     manager.untile(w, except: layout)
                     layout.apply(zone, to: w)
