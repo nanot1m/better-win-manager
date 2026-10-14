@@ -5,6 +5,7 @@ final class ActionPopup: NSPanel {
     private let manager: WindowManager
     private let view: ActionView
     private var clickMonitor: Any?
+    var onAction: ((String?, String) -> Void)?
 
     init(manager: WindowManager) {
         self.manager = manager
@@ -81,21 +82,28 @@ final class ActionPopup: NSPanel {
         let key = e.charactersIgnoringModifiers?.lowercased() ?? ""
         let code = e.keyCode
         var dir: Move?
+        func pressed(_ k: String) -> String { (shift ? "⇧" : "") + k }
         switch (code, key) {
         case (123, _), (_, "h"): dir = shift ? .mergeLeft : .left
         case (124, _), (_, "l"): dir = shift ? .mergeRight : .right
         case (126, _), (_, "k"): dir = .up
         case (125, _), (_, "j"): dir = .down
-        case (48, _): manager.focusNext(reverse: shift)
-        case (_, "t"): manager.toggleFocused()
+        case (48, _):
+            onAction?(pressed("Tab"), shift ? "Focus previous window" : "Focus next window")
+            manager.focusNext(reverse: shift)
+        case (_, "t"):
+            onAction?("T", "Tile / untile focused window")
+            manager.toggleFocused()
         case (_, "n"), (_, "p"):
             close()
+            onAction?(key.uppercased(), key == "n" ? "Send to next desktop" : "Send to previous desktop")
             manager.sendFocusedWindow(toNext: key == "n")
             return true
         case (53, _): close(); return true
         case (_, let k) where ("1"..."9").contains(k) && k.count == 1 && e.modifierFlags.contains(.option):
             let index = Int(k)! - 1
             guard index < view.presets.count else { return true }
+            onAction?("⌥\(k)", "Layout: \(view.presets[index].name)")
             manager.applyPreset(view.presets[index])
             refresh()
             regainKey()
@@ -105,9 +113,11 @@ final class ActionPopup: NSPanel {
             guard index < Spaces.desktops().count else { return true }
             if shift {
                 close()
+                onAction?("⇧\(k)", "Send to desktop \(index + 1)")
                 manager.sendFocusedWindow(toDesktop: index)
                 return true
             }
+            onAction?(k, "Switch to desktop \(index + 1)")
             Spaces.switchToDesktop(index)
             // The switch is asynchronous; re-read the focused window once it has landed.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.regainKey() }
@@ -116,6 +126,9 @@ final class ActionPopup: NSPanel {
         }
         if let dir {
             guard manager.canMoveFocused(dir) else { return true }
+            let names: [Move: String] = [.left: "Move left", .right: "Move right", .up: "Move up", .down: "Move down",
+                                         .mergeLeft: "Merge into left column", .mergeRight: "Merge into right column"]
+            onAction?(pressed(key.uppercased()), names[dir] ?? "Move")
             manager.moveFocused(dir)
         }
         refresh()

@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var autoTileItem: NSMenuItem?
     var popup: ActionPopup!
     var hotKeys: [HotKey] = []
+    let hud = ActionHUD()
+    var overlayItem: NSMenuItem?
     let configWindow = ConfigWindow()
 
     func applicationDidFinishLaunching(_ n: Notification) {
@@ -31,6 +33,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let config = Config.load()
         manager = WindowManager(config: config)
         popup = ActionPopup(manager: manager)
+        hud.enabled = config.actionOverlay
+        popup.onAction = { [weak self] keys, name in self?.hud.show(keys: keys, action: name, preformatted: true) }
         registerHotKeys(config)
         drag = DragController(manager: manager)
         if !drag.start() {
@@ -51,6 +55,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [popup] in
                 popup?.snapshot(to: path)
                 print("popup snapshot written")
+            }
+        }
+        if let i = CommandLine.arguments.firstIndex(of: "--snapshot-hud"), i + 1 < CommandLine.arguments.count {
+            let path = CommandLine.arguments[i + 1]
+            hud.enabled = true
+            hud.show(keys: "alt+cmd+space", action: "Window actions popup")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [hud] in
+                hud.snapshot(to: path)
+                print("hud snapshot written")
             }
         }
         if CommandLine.arguments.contains("--test-hotkeys") {
@@ -127,6 +140,9 @@ extension AppDelegate {
         let pause = menu.addItem(withTitle: "Pause Tiling", action: #selector(togglePause), keyEquivalent: "p")
         pause.target = self
         pauseItem = pause
+        let overlay = menu.addItem(withTitle: "Show Action Overlay", action: #selector(toggleOverlay), keyEquivalent: "")
+        overlay.target = self
+        overlayItem = overlay
         let auto = menu.addItem(withTitle: "Auto-tile New Windows", action: #selector(toggleAutoTile), keyEquivalent: "")
         auto.target = self
         autoTileItem = auto
@@ -180,7 +196,12 @@ extension AppDelegate {
         }
         for (index, (name, spec)) in config.hotkeys.sorted(by: { $0.key < $1.key }).enumerated() {
             guard let action = actions[name] else { print("Unknown hotkey action '\(name)'"); continue }
-            if let hk = HotKey(spec, id: UInt32(index + 1), action: action) { hotKeys.append(hk) }
+            let title = Config.actions.first { $0.key == name }?.title ?? name
+            let wrapped = { [weak self] in
+                self?.hud.show(keys: spec, action: title)
+                action()
+            }
+            if let hk = HotKey(spec, id: UInt32(index + 1), action: wrapped) { hotKeys.append(hk) }
         }
     }
 
@@ -209,6 +230,12 @@ extension AppDelegate {
     }
     func syncAutoTileItems() {
         autoTileItem?.state = manager.config.autoTile ? .on : .off
+        overlayItem?.state = manager.config.actionOverlay ? .on : .off
+        hud.enabled = manager.config.actionOverlay
+    }
+    @objc func toggleOverlay() {
+        manager.config.actionOverlay.toggle()
+        syncAutoTileItems()
     }
     @objc func openConfig() { NSWorkspace.shared.open(Config.path) }
     @objc func showSettings() {

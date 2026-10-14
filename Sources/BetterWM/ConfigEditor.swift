@@ -35,6 +35,7 @@ final class ConfigWindow: NSObject {
     private var strategyPopup: NSPopUpButton!
     private var autoTileCheck: NSButton!
     private var tileOnStartCheck: NSButton!
+    private var overlayCheck: NSButton!
     private var sliders: [(KeyPath<Config, CGFloat>, WritableKeyPath<Config, CGFloat>, NSSlider, NSTextField)] = []
     private var savedLabel: NSTextField!
     private var ignoreText: NSTextView!
@@ -136,6 +137,7 @@ final class ConfigWindow: NSObject {
 
         autoTileCheck = NSButton(checkboxWithTitle: "Tile new windows automatically", target: nil, action: nil)
         tileOnStartCheck = NSButton(checkboxWithTitle: "Tile existing windows when a desktop is first seen", target: nil, action: nil)
+        overlayCheck = NSButton(checkboxWithTitle: "Show pressed hotkey and action on screen (for demos)", target: nil, action: nil)
         strategyPopup = NSPopUpButton()
         for st in Config.AutoTileStrategy.allCases {
             strategyPopup.addItem(withTitle: st.title)
@@ -155,6 +157,7 @@ final class ConfigWindow: NSObject {
             [label("On launch"), tileOnStartCheck],
             [label("Placement"), strategyPopup],
             [label("Drag to tile with"), mods],
+            [label("Action overlay"), overlayCheck],
         ])
         ringCheck = NSButton(checkboxWithTitle: "Highlight the focused window", target: nil, action: nil)
         ringStyle = NSPopUpButton()
@@ -319,6 +322,7 @@ final class ConfigWindow: NSObject {
         }
         autoTileCheck.state = config.autoTile ? .on : .off
         tileOnStartCheck.state = config.tileExistingOnStart ? .on : .off
+        overlayCheck.state = config.actionOverlay ? .on : .off
         strategyPopup.selectItem(at: Config.AutoTileStrategy.allCases.firstIndex(of: config.autoTileStrategy) ?? 0)
         let mods = config.dragModifiers.lowercased().split(separator: "+").map(String.init)
         for (k, b) in modifierButtons { b.state = mods.contains(k) ? .on : .off }
@@ -349,6 +353,7 @@ final class ConfigWindow: NSObject {
         for (_, kp, slider, _) in sliders { config[keyPath: kp] = CGFloat(slider.doubleValue.rounded()) }
         config.autoTile = autoTileCheck.state == .on
         config.tileExistingOnStart = tileOnStartCheck.state == .on
+        config.actionOverlay = overlayCheck.state == .on
         if let raw = strategyPopup.selectedItem?.representedObject as? String, let st = Config.AutoTileStrategy(rawValue: raw) {
             config.autoTileStrategy = st
         }

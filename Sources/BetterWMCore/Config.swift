@@ -11,6 +11,7 @@ public struct Config {
     public var autoTile: Bool = true
     public var autoTileStrategy: AutoTileStrategy = .rightmost
     public var focusRing: Bool = true
+    public var actionOverlay: Bool = false
     public var focusRingStyle: FocusRingStyle = .outline
     public var focusRingWidth: CGFloat = 3
     public var focusRingRadius: CGFloat = 10
@@ -99,6 +100,9 @@ public struct Config {
         #   spiral         alternately beside and below the last auto-tiled window (approximates dwindle layouts)
         autoTileStrategy = \(autoTileStrategy.rawValue)
 
+        # Flash the pressed hotkey and action name at the bottom of the screen (handy for demos).
+        actionOverlay = \(actionOverlay)
+
         # Highlight the focused window. Style: outline (ring around it) or underneath (glow behind it).
         focusRing = \(focusRing)
         focusRingStyle = \(focusRingStyle.rawValue)
@@ -154,7 +158,8 @@ public struct Config {
             case "tileExistingOnStart": cfg.tileExistingOnStart = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "autoTile": cfg.autoTile = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "autoTileStrategy": cfg.autoTileStrategy = AutoTileStrategy(rawValue: value) ?? cfg.autoTileStrategy
-                case "focusRing": cfg.focusRing = ["true", "yes", "1", "on"].contains(value.lowercased())
+                case "actionOverlay": cfg.actionOverlay = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "focusRing": cfg.focusRing = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRingStyle": cfg.focusRingStyle = FocusRingStyle(rawValue: value) ?? cfg.focusRingStyle
             case "focusRingWidth": cfg.focusRingWidth = Double(value).map { CGFloat($0) } ?? cfg.focusRingWidth
             case "focusRingRadius": cfg.focusRingRadius = Double(value).map { CGFloat($0) } ?? cfg.focusRingRadius
