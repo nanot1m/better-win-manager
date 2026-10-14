@@ -9,18 +9,31 @@ Column-based tiling window manager for macOS. Tile windows by ⌥-dragging them 
 - Instant desktop switching that skips the slide animation
 - Menu bar menu, keyboard popup, global hotkeys, settings window
 
-Requires macOS 13+ and Swift 5.9+. No Xcode needed, only Command Line Tools.
-
 ## Install
+
+### From a release
+
+Download `BetterWM-x.y.z.zip` from [Releases](https://github.com/nanot1m/better-win-manager/releases), unzip, and move `BetterWM.app` to Applications.
+
+Releases are ad-hoc signed, not notarized, so Gatekeeper blocks the first launch. Either right-click the app and choose Open, or clear the quarantine flag:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/BetterWM.app
+```
+
+Grant Accessibility access when prompted (System Settings → Privacy & Security → Accessibility), then relaunch. Because the signature is ad-hoc, macOS treats each release as a new app and asks for Accessibility again after updating.
+
+### From source
 
 ```sh
 git clone git@github.com:nanot1m/better-win-manager.git
 cd better-win-manager
-swift build -c release
-.build/release/BetterWM
+make install        # builds, bundles, ad-hoc signs, copies to /Applications
 ```
 
-Grant Accessibility access when prompted (System Settings → Privacy & Security → Accessibility), then relaunch. On the first run all windows on the current desktop are tiled, ordered left to right.
+Or run the bare binary during development with `swift build && .build/debug/BetterWM`. Requires macOS 13+ and Swift 5.9+; Command Line Tools are enough, no Xcode needed.
+
+On the first run all windows on the current desktop are tiled, ordered left to right.
 
 ## Usage
 
@@ -101,4 +114,7 @@ Placement strategies:
 swift build
 .build/debug/BetterWM --settings                       # open Settings on launch
 .build/debug/BetterWM --snapshot-settings /tmp/s.png   # render each Settings tab to PNG
+make zip                                               # dist/BetterWM-<version>.zip, ad-hoc signed
 ```
+
+Pushing a tag like `v0.1.0` runs the Release workflow, which builds the zip and publishes a GitHub release.
