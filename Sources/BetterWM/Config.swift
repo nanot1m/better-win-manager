@@ -27,14 +27,17 @@ struct Config {
     ]
 
     enum AutoTileStrategy: String, CaseIterable {
-        case rightmost, leftmost, position, stackFocused
+        case rightmost, leftmost, position, nextToFocused, stackFocused, autoSplit, spiral
 
         var title: String {
             switch self {
             case .rightmost: return "New column on the right"
             case .leftmost: return "New column on the left"
             case .position: return "New column at window position"
+            case .nextToFocused: return "Next to focused window (i3 default)"
             case .stackFocused: return "Stack below focused window"
+            case .autoSplit: return "Auto split by focused window shape (i3 autotiling)"
+            case .spiral: return "Spiral (approximate)"
             }
         }
     }
@@ -72,7 +75,10 @@ struct Config {
 
         # Tile windows automatically when they open or arrive on a desktop.
         autoTile = \(autoTile)
-        # Where an auto-tiled window goes: rightmost, leftmost, position, stackFocused.
+        # Where an auto-tiled window goes: rightmost, leftmost, position, nextToFocused, stackFocused, autoSplit, spiral.
+        #   nextToFocused  new column right after the focused window's column (i3 default)
+        #   autoSplit      beside the focused window if it is wider than tall, below it otherwise (i3 autotiling)
+        #   spiral         alternately beside and below the last auto-tiled window (approximates dwindle layouts)
         autoTileStrategy = \(autoTileStrategy.rawValue)
 
         # Apps never tiled automatically, by bundle identifier, comma separated. Manual ⌥-drag still works.

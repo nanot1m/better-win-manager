@@ -58,6 +58,7 @@ final class WindowManager {
             if enabled, firstVisit || config.autoTile {
                 for w in here.sorted(by: { $0.frame.midX < $1.frame.midX }) where !known.contains(w) && !l.contains(w) && !isIgnored(w) {
                     l.apply(firstVisit ? .newColumn(index: l.columnIndex(forX: w.frame.midX)) : autoTileZone(for: w, in: l), to: w)
+                    l.spiralAnchor = w
                     changed = true
                 }
             }
@@ -127,14 +128,32 @@ final class WindowManager {
     }
 
     private func autoTileZone(for w: AXWindow, in l: Layout) -> DropZone {
+        let focused = AXWindow.focused.flatMap { f -> (Int, Int, CGRect)? in
+            guard let ci = l.columns.firstIndex(where: { $0.windows.contains(f) }),
+                  let wi = l.columns[ci].windows.firstIndex(of: f), let fr = l.frame(of: f) else { return nil }
+            return (ci, wi, fr)
+        }
         switch config.autoTileStrategy {
         case .rightmost: return .newColumn(index: l.columns.count)
         case .leftmost: return .newColumn(index: 0)
         case .position: return .newColumn(index: l.columnIndex(forX: w.frame.midX))
+        case .nextToFocused:
+            guard let (ci, _, _) = focused else { return .newColumn(index: l.columns.count) }
+            return .newColumn(index: ci + 1)
         case .stackFocused:
-            guard let f = AXWindow.focused, let ci = l.columns.firstIndex(where: { $0.windows.contains(f) }),
-                  let wi = l.columns[ci].windows.firstIndex(of: f) else { return .newColumn(index: l.columns.count) }
+            guard let (ci, wi, _) = focused else { return .newColumn(index: l.columns.count) }
             return .stack(column: ci, index: wi + 1)
+        case .autoSplit:
+            guard let (ci, wi, fr) = focused else { return .newColumn(index: l.columns.count) }
+            return fr.width > fr.height ? .newColumn(index: ci + 1) : .stack(column: ci, index: wi + 1)
+        case .spiral:
+            guard let a = l.spiralAnchor, let ci = l.columns.firstIndex(where: { $0.windows.contains(a) }),
+                  let wi = l.columns[ci].windows.firstIndex(of: a) else {
+                l.spiralBeside = false
+                return .newColumn(index: l.columns.count)
+            }
+            defer { l.spiralBeside.toggle() }
+            return l.spiralBeside ? .newColumn(index: ci + 1) : .stack(column: ci, index: wi + 1)
         }
     }
 

@@ -15,6 +15,9 @@ final class Layout {
     private(set) var columns: [Column] = []
     private var minSizes: [AXWindow: CGSize] = [:]
     private var heightWeights: [AXWindow: CGFloat] = [:]
+    /// Last auto-tiled window and whether the next spiral step goes beside (true) or below it.
+    var spiralAnchor: AXWindow?
+    var spiralBeside = true
     var config: Config
     /// Work area in top-left-origin global coordinates (AX space).
     var area: CGRect
@@ -27,6 +30,7 @@ final class Layout {
     func contains(_ w: AXWindow) -> Bool { columns.contains { $0.windows.contains(w) } }
 
     func remove(_ w: AXWindow) {
+        if spiralAnchor == w { spiralAnchor = nil }
         minSizes[w] = nil
         heightWeights[w] = nil
         for c in columns { c.windows.removeAll { $0 == w } }

@@ -44,6 +44,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showSettings()
             print("settings window:", configWindow.windowNumber ?? -1)
         }
+        if let i = CommandLine.arguments.firstIndex(of: "--snapshot-settings"), i + 1 < CommandLine.arguments.count {
+            let path = CommandLine.arguments[i + 1]
+            showSettings()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [configWindow] in
+                configWindow.snapshot(to: path)
+                print("snapshot written")
+            }
+        }
     }
 }
 
