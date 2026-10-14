@@ -73,10 +73,19 @@ final class ActionPopup: NSPanel {
         case (125, _), (_, "j"): dir = .down
         case (48, _): manager.focusNext(reverse: shift)
         case (_, "t"): manager.toggleFocused()
+        case (_, "n"), (_, "p"):
+            close()
+            manager.sendFocusedWindow(toNext: key == "n")
+            return true
         case (53, _): close(); return true
         case (_, let k) where ("1"..."9").contains(k) && k.count == 1:
             let index = Int(k)! - 1
             guard index < Spaces.desktops().count else { return true }
+            if shift {
+                close()
+                manager.sendFocusedWindow(toDesktop: index)
+                return true
+            }
             Spaces.switchToDesktop(index)
             // The switch is asynchronous; re-read the focused window once it has landed.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.regainKey() }
@@ -149,12 +158,12 @@ private final class ActionView: NSView {
 
         drawDesktops(in: NSRect(x: 14, y: footerH, width: bounds.width - 28, height: desktopsH))
 
-        draw("Tab / ⇧Tab  focus next / previous      T  tile / untile      Esc  close",
+        draw("Tab / ⇧Tab  focus next / previous      T  tile / untile      N / P  send to next / previous desktop      Esc  close",
              in: NSRect(x: 0, y: 8, width: bounds.width, height: footerH - 12), color: .secondaryLabelColor, size: 11, bold: false)
     }
 
     private func drawDesktops(in rect: NSRect) {
-        draw("Desktops", in: NSRect(x: rect.minX, y: rect.maxY - 18, width: rect.width, height: 14), color: .secondaryLabelColor, size: 11, bold: false)
+        draw("Desktops   1–9 switch   ⇧1–9 send window", in: NSRect(x: rect.minX, y: rect.maxY - 18, width: rect.width, height: 14), color: .secondaryLabelColor, size: 11, bold: false)
         let n = min(desktopCount, 9)
         guard n > 0 else { return }
         let chip: CGFloat = 32, gap: CGFloat = 8

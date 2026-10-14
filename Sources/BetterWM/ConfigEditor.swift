@@ -30,6 +30,13 @@ final class ConfigWindow: NSObject {
     private var floatSmallCheck: NSButton!
     private var smallW: NSTextField!
     private var smallH: NSTextField!
+    private var ringCheck: NSButton!
+    private var ringStyle: NSPopUpButton!
+    private var ringColor: NSColorWell!
+    private var ringWidth: NSSlider!
+    private var ringWidthLabel: NSTextField!
+    private var ringRadius: NSSlider!
+    private var ringRadiusLabel: NSTextField!
 
     func show(config: Config, onSave: @escaping (Config) -> Void) {
         self.config = config
@@ -79,6 +86,8 @@ final class ConfigWindow: NSObject {
         w.title = "BetterWM Settings"
         w.contentView = root
         w.isReleasedWhenClosed = false
+        // Otherwise reopening pulls the user back to whichever desktop the window was last shown on.
+        w.collectionBehavior = [.moveToActiveSpace]
         return w
     }
 
@@ -94,6 +103,7 @@ final class ConfigWindow: NSObject {
         stack.orientation = .vertical
         stack.alignment = .width
         stack.spacing = 14
+        for b in boxes { b.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
         let container = NSView()
         container.addSubview(stack)
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -133,7 +143,37 @@ final class ConfigWindow: NSObject {
             [label("Placement"), strategyPopup],
             [label("Drag to tile with"), mods],
         ])
-        return [layout, tiling]
+        ringCheck = NSButton(checkboxWithTitle: "Highlight the focused window", target: nil, action: nil)
+        ringStyle = NSPopUpButton()
+        for st in Config.FocusRingStyle.allCases {
+            ringStyle.addItem(withTitle: st.title)
+            ringStyle.lastItem?.representedObject = st.rawValue
+        }
+        ringColor = NSColorWell()
+        ringColor.widthAnchor.constraint(equalToConstant: 60).isActive = true
+        ringColor.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        ringWidth = NSSlider(value: 3, minValue: 1, maxValue: 12, target: self, action: #selector(ringSliderChanged(_:)))
+        ringWidth.widthAnchor.constraint(equalToConstant: 200).isActive = true
+        ringWidthLabel = NSTextField(labelWithString: "3 pt")
+        ringWidthLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        ringWidthLabel.widthAnchor.constraint(equalToConstant: 48).isActive = true
+        ringRadius = NSSlider(value: 10, minValue: 0, maxValue: 30, target: self, action: #selector(ringSliderChanged(_:)))
+        ringRadius.widthAnchor.constraint(equalToConstant: 200).isActive = true
+        ringRadiusLabel = NSTextField(labelWithString: "10 pt")
+        ringRadiusLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        ringRadiusLabel.widthAnchor.constraint(equalToConstant: 48).isActive = true
+        let ring = box("Focus Ring", rows: [
+            [label("Focused window"), ringCheck],
+            [label("Style"), ringStyle],
+            [label("Color"), ringColor],
+            [label("Thickness"), NSStackView(views: [ringWidth, ringWidthLabel])],
+            [label("Corner radius"), NSStackView(views: [ringRadius, ringRadiusLabel])],
+        ])
+        return [layout, tiling, ring]
+    }
+
+    @objc private func ringSliderChanged(_ s: NSSlider) {
+        (s === ringWidth ? ringWidthLabel : ringRadiusLabel)?.stringValue = "\(Int(s.doubleValue.rounded())) pt"
     }
 
     private func appBoxes() -> [NSView] {
@@ -267,6 +307,13 @@ final class ConfigWindow: NSObject {
         let mods = config.dragModifiers.lowercased().split(separator: "+").map(String.init)
         for (k, b) in modifierButtons { b.state = mods.contains(k) ? .on : .off }
         for (k, r) in recorders { r.spec = config.hotkeys[k] }
+        ringCheck.state = config.focusRing ? .on : .off
+        ringStyle.selectItem(at: Config.FocusRingStyle.allCases.firstIndex(of: config.focusRingStyle) ?? 0)
+        ringColor.color = NSColor(hex: config.focusRingColor) ?? .controlAccentColor
+        ringWidth.doubleValue = Double(config.focusRingWidth)
+        ringRadius.doubleValue = Double(config.focusRingRadius)
+        ringSliderChanged(ringWidth)
+        ringSliderChanged(ringRadius)
         ignoreText.string = config.ignoreApps.joined(separator: "\n")
         floatSmallCheck.state = config.floatSmallWindows ? .on : .off
         smallW.stringValue = String(Int(config.smallWindowWidth))
@@ -291,6 +338,13 @@ final class ConfigWindow: NSObject {
         config.dragModifiers = ["cmd", "alt", "ctrl", "shift"].filter { modifierButtons[$0]?.state == .on }.joined(separator: "+")
         if config.dragModifiers.isEmpty { config.dragModifiers = "alt" }
         config.hotkeys = recorders.compactMapValues(\.spec)
+        config.focusRing = ringCheck.state == .on
+        if let raw = ringStyle.selectedItem?.representedObject as? String, let st = Config.FocusRingStyle(rawValue: raw) {
+            config.focusRingStyle = st
+        }
+        config.focusRingColor = ringColor.color.hexString
+        config.focusRingWidth = CGFloat(ringWidth.doubleValue.rounded())
+        config.focusRingRadius = CGFloat(ringRadius.doubleValue.rounded())
         config.ignoreApps = ignoreText.string.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         config.floatSmallWindows = floatSmallCheck.state == .on
         config.smallWindowWidth = CGFloat(Double(smallW.stringValue) ?? 500)

@@ -8,7 +8,8 @@ final class WindowManager {
     private var seen: [Spaces.SpaceID: Set<AXWindow>] = [:]
     var layouts: [Layout] { active.map(\.layout) }
     let overlay: ZoneOverlay
-    var config: Config
+    var config: Config { didSet { focusRing.apply(config) } }
+    let focusRing: FocusRing
     private var timer: Timer?
     private var observer: WindowObserver?
     var enabled = true
@@ -18,12 +19,14 @@ final class WindowManager {
 
     init(config: Config) {
         self.config = config
+        focusRing = FocusRing(config: config)
         overlay = ZoneOverlay(screen: NSScreen.screens[0])
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in self?.activateCurrentSpaces() }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
                                                           object: nil, queue: .main) { [weak self] _ in self?.activateCurrentSpaces() }
-        observer = WindowObserver { [weak self] _ in self?.reconcile() }
+        observer = WindowObserver(onNewWindow: { [weak self] _ in self?.reconcile() },
+                                  onFocusChange: { [weak self] in self?.focusRing.update() })
         activateCurrentSpaces()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in self?.reconcile() }
     }
@@ -95,6 +98,35 @@ final class WindowManager {
         guard !order.isEmpty else { return }
         let i = focused.flatMap(order.firstIndex) ?? (reverse ? 0 : order.count - 1)
         order[(i + (reverse ? -1 : 1) + order.count) % order.count].raise()
+    }
+
+    func sendFocusedWindow(toNext: Bool) {
+        guard let cur = Spaces.currentDesktopIndex() else { return }
+        sendFocusedWindow(toDesktop: cur + (toNext ? 1 : -1))
+    }
+
+    func sendFocusedWindow(toDesktop index: Int) {
+        guard let w = AXWindow.focused else { return }
+        untile(w)
+        interacting = true
+        Spaces.sendFocusedWindow(toDesktop: index) { [weak self] moved in
+            guard let self else { return }
+            self.interacting = false
+            guard let moved else { return }
+            self.tileWhenVisible(moved, attempts: 10)
+        }
+    }
+
+    /// The Space switch and the drop land asynchronously; wait until the window shows up on the active desktop.
+    private func tileWhenVisible(_ w: AXWindow, attempts: Int) {
+        activateCurrentSpaces()
+        if Spaces.visibleWindows().contains(w) {
+            if !isTiled(w) { tile(w) }
+            w.raise()
+            return
+        }
+        guard attempts > 0 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.tileWhenVisible(w, attempts: attempts - 1) }
     }
 
     func canMoveFocused(_ dir: Layout.Move) -> Bool {
@@ -184,6 +216,7 @@ final class WindowManager {
     func relayout() {
         layouts.forEach { $0.applyFrames() }
         refreshHandles()
+        focusRing.update()
     }
 
     private func refreshHandles() {

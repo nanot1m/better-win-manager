@@ -1,4 +1,5 @@
 import Cocoa
+import SkyLightBridge
 
 /// Thin bridge to SkyLight's private Space API; there is no public way to identify the current Space.
 enum Spaces {
@@ -8,6 +9,7 @@ enum Spaces {
     private static let mainConnection: (@convention(c) () -> Int32)? = sym("CGSMainConnectionID")
     private static let currentSpace: (@convention(c) (Int32, CFString) -> SpaceID)? = sym("CGSManagedDisplayGetCurrentSpace")
     private static let managedDisplaySpaces: (@convention(c) (Int32) -> CFArray?)? = sym("CGSCopyManagedDisplaySpaces")
+    private static let spacesForWindows: (@convention(c) (Int32, Int32, CFArray) -> CFArray?)? = sym("SLSCopySpacesForWindows")
 
     private static func sym<T>(_ name: String) -> T? {
         guard let h = handle, let p = dlsym(h, name) else { return nil }
@@ -94,6 +96,84 @@ enum Spaces {
             ev.post(tap: .cgSessionEventTap)
             companion.post(tap: .cgSessionEventTap)
         }
+    }
+
+    static func spaces(of windowID: CGWindowID) -> [SpaceID] {
+        guard let cid = mainConnection?(), let f = spacesForWindows else { return [] }
+        return (f(cid, 7, [NSNumber(value: windowID)] as CFArray) as? [SpaceID]) ?? []
+    }
+
+    /// Native move via SkyLight's bridged window-management operation (vendored from WhichSpace, MIT).
+    /// Returns true once WindowServer confirms the window is on the target Space.
+    static func moveWindow(_ windowID: CGWindowID, toSpace space: SpaceID, completion: @escaping (Bool) -> Void) {
+        guard spaces(of: windowID).count == 1 else { completion(false); return }
+        var issued = WSMoveBridged(windowID, space)
+        if !issued, let cid = mainConnection?() { issued = WSMoveManagedSpace(cid, windowID, space) }
+        guard issued else { completion(false); return }
+        let deadline = Date().addingTimeInterval(1.5)
+        func poll() {
+            if spaces(of: windowID) == [space] { completion(true); return }
+            guard Date() < deadline else { completion(false); return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03, execute: poll)
+        }
+        poll()
+    }
+
+    static var nativeMoveAvailable: Bool { WSMoveBridgedIsAvailable() || WSMoveManagedSpaceIsAvailable() }
+
+    /// Carries the focused window to another desktop by holding a synthetic drag on its title bar
+    /// while switching Spaces, the same trick as dragging a window during a trackpad swipe.
+    static func sendFocusedWindow(toDesktop target: Int, completion: ((AXWindow?) -> Void)? = nil) {
+        guard let w = AXWindow.focused, let cur = currentDesktopIndex(),
+              target != cur, (0..<desktops().count).contains(target) else { completion?(nil); return }
+        if nativeMoveAvailable, let id = w.windowID {
+            moveWindow(id, toSpace: desktops()[target]) { ok in
+                if ok { switchToDesktop(target) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { completion?(ok ? w : nil) }
+            }
+            return
+        }
+        dragFocusedWindow(w, from: cur, toDesktop: target, completion: completion)
+    }
+
+    /// Fallback when the private operation is unavailable: hold a synthetic drag on the title bar across the switch.
+    private static func dragFocusedWindow(_ w: AXWindow, from cur: Int, toDesktop target: Int, completion: ((AXWindow?) -> Void)?) {
+        let f = w.frame
+        // Right end of the title bar: clear of traffic lights and most browsers' tab strips.
+        let grab = CGPoint(x: f.maxX - 40, y: f.minY + 10)
+        func mouse(_ type: CGEventType, _ p: CGPoint) {
+            let e = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: p, mouseButton: .left)
+            // A hotkey's modifiers may still be held; without this our own tap would treat the drag as ⌥-tiling.
+            e?.flags = []
+            e?.post(tap: .cghidEventTap)
+        }
+        func key(_ code: CGKeyCode) {
+            for down in [true, false] {
+                let e = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: down)
+                e?.flags = .maskControl
+                e?.post(tap: .cghidEventTap)
+            }
+        }
+        w.raise()
+        let q = DispatchQueue.main
+        var t = 0.10
+        func at(_ delay: Double, _ block: @escaping () -> Void) { t += delay; q.asyncAfter(deadline: .now() + t, execute: block) }
+        at(0) { mouse(.leftMouseDown, grab) }
+        at(0.08) { mouse(.leftMouseDragged, CGPoint(x: grab.x + 6, y: grab.y + 6)) }
+        at(0.08) { mouse(.leftMouseDragged, CGPoint(x: grab.x + 12, y: grab.y + 12)) }
+        let steps = abs(target - cur), code: CGKeyCode = target > cur ? 124 : 123
+        for _ in 0..<steps {
+            at(0.08) { key(code) }
+            // Each slide animation must finish before the next step or the drop, or the window stays behind.
+            at(0.75) { mouse(.leftMouseDragged, CGPoint(x: grab.x + 8, y: grab.y + 8)) }
+        }
+        at(0.10) { mouse(.leftMouseUp, CGPoint(x: grab.x + 8, y: grab.y + 8)) }
+        at(0.20) { completion?(w) }
+    }
+
+    static func sendFocusedWindow(toNext: Bool, completion: ((AXWindow?) -> Void)? = nil) {
+        guard let cur = currentDesktopIndex() else { completion?(nil); return }
+        sendFocusedWindow(toDesktop: cur + (toNext ? 1 : -1), completion: completion)
     }
 
     /// Standard windows visible right now, i.e. on the active Spaces, front to back.

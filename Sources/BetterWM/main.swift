@@ -81,6 +81,12 @@ extension AppDelegate {
         }
         let move = menu.addItem(withTitle: "Move Focused Window", action: nil, keyEquivalent: "")
         move.submenu = moveMenu
+        add("Send Focused Window to Next Desktop", #selector(sendNext))
+        add("Send Focused Window to Previous Desktop", #selector(sendPrevious))
+        let sendMenu = NSMenu(title: "SendTo")
+        sendMenu.autoenablesItems = false
+        sendMenu.delegate = self
+        menu.addItem(withTitle: "Send Focused Window to Desktop", action: nil, keyEquivalent: "").submenu = sendMenu
         add("Retile Current Screen", #selector(retile), "r")
         add("Equalize Sizes", #selector(equalize), "e")
         menu.addItem(.separator())
@@ -115,6 +121,7 @@ extension AppDelegate {
     }
 
     @objc func switchDesktop(_ sender: NSMenuItem) { Spaces.switchToDesktop(sender.tag) }
+    @objc func sendToDesktop(_ sender: NSMenuItem) { manager.sendFocusedWindow(toDesktop: sender.tag) }
     @objc func toggleFocused() { manager.toggleFocused() }
     @objc func showPopup() { popup.toggle() }
 
@@ -135,9 +142,14 @@ extension AppDelegate {
             "equalize": { [weak self] in self?.manager.equalize() },
             "pause": { [weak self] in self?.togglePause() },
             "desktopNext": { Spaces.swipe(toNext: true) },
+            "sendToNextDesktop": { [weak self] in self?.manager.sendFocusedWindow(toNext: true) },
+            "sendToPreviousDesktop": { [weak self] in self?.manager.sendFocusedWindow(toNext: false) },
             "desktopPrevious": { Spaces.swipe(toNext: false) },
         ]
-        for i in 1...9 { actions["desktop\(i)"] = { Spaces.switchToDesktop(i - 1) } }
+        for i in 1...9 {
+            actions["desktop\(i)"] = { Spaces.switchToDesktop(i - 1) }
+            actions["sendToDesktop\(i)"] = { [weak self] in self?.manager.sendFocusedWindow(toDesktop: i - 1) }
+        }
         for (index, (name, spec)) in config.hotkeys.sorted(by: { $0.key < $1.key }).enumerated() {
             guard let action = actions[name] else { print("Unknown hotkey action '\(name)'"); continue }
             if let hk = HotKey(spec, id: UInt32(index + 1), action: action) {
@@ -149,6 +161,8 @@ extension AppDelegate {
     }
 
     @objc func focusNext() { manager.focusNext() }
+    @objc func sendNext() { manager.sendFocusedWindow(toNext: true) }
+    @objc func sendPrevious() { manager.sendFocusedWindow(toNext: false) }
     @objc func focusPrevious() { manager.focusNext(reverse: true) }
     @objc func moveFocused(_ sender: NSMenuItem) {
         if let dir = sender.representedObject as? Layout.Move { manager.moveFocused(dir) }
@@ -203,14 +217,16 @@ extension AppDelegate: NSMenuDelegate {
             }
             return
         }
-        guard menu.title == "Desktops" else { return }
+        guard menu.title == "Desktops" || menu.title == "SendTo" else { return }
+        let sending = menu.title == "SendTo"
         menu.removeAllItems()
         let current = Spaces.currentDesktopIndex()
         for i in Spaces.desktops().indices {
-            let item = menu.addItem(withTitle: "Desktop \(i + 1)", action: #selector(switchDesktop(_:)), keyEquivalent: "")
+            let item = menu.addItem(withTitle: "Desktop \(i + 1)", action: sending ? #selector(sendToDesktop(_:)) : #selector(switchDesktop(_:)), keyEquivalent: "")
             item.target = self
             item.tag = i
             item.state = i == current ? .on : .off
+            if sending { item.isEnabled = i != current }
         }
     }
 }

@@ -4,9 +4,11 @@ import ApplicationServices
 final class WindowObserver {
     private var observers: [pid_t: AXObserver] = [:]
     private let onNewWindow: (AXWindow) -> Void
+    private let onFocusChange: () -> Void
 
-    init(onNewWindow: @escaping (AXWindow) -> Void) {
+    init(onNewWindow: @escaping (AXWindow) -> Void, onFocusChange: @escaping () -> Void) {
         self.onNewWindow = onNewWindow
+        self.onFocusChange = onFocusChange
         for app in NSWorkspace.shared.runningApplications { observe(app) }
         let nc = NSWorkspace.shared.notificationCenter
         nc.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] n in
@@ -24,8 +26,12 @@ final class WindowObserver {
               observers[app.processIdentifier] == nil else { return }
         let pid = app.processIdentifier
         var obs: AXObserver?
-        let cb: AXObserverCallback = { _, element, _, refcon in
+        let cb: AXObserverCallback = { _, element, notification, refcon in
             let me = Unmanaged<WindowObserver>.fromOpaque(refcon!).takeUnretainedValue()
+            if notification as String != kAXWindowCreatedNotification {
+                me.onFocusChange()
+                return
+            }
             var pid: pid_t = 0
             AXUIElementGetPid(element, &pid)
             let w = AXWindow(element: element, pid: pid)
@@ -38,6 +44,10 @@ final class WindowObserver {
         let appEl = AXUIElementCreateApplication(pid)
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         AXObserverAddNotification(obs, appEl, kAXWindowCreatedNotification as CFString, refcon)
+        for n in [kAXFocusedWindowChangedNotification, kAXWindowMovedNotification, kAXWindowResizedNotification,
+                  kAXWindowMiniaturizedNotification, kAXUIElementDestroyedNotification] {
+            AXObserverAddNotification(obs, appEl, n as CFString, refcon)
+        }
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .commonModes)
         observers[pid] = obs
     }

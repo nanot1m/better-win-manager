@@ -8,6 +8,11 @@ struct Config {
     var hotkeys: [String: String] = ["popup": "alt+cmd+space"]
     var autoTile: Bool = true
     var autoTileStrategy: AutoTileStrategy = .rightmost
+    var focusRing: Bool = true
+    var focusRingStyle: FocusRingStyle = .outline
+    var focusRingWidth: CGFloat = 3
+    var focusRingRadius: CGFloat = 10
+    var focusRingColor: String = "#4C8BF5"
     var ignoreApps: [String] = Config.defaultIgnoreApps
     var floatSmallWindows: Bool = true
     var smallWindowWidth: CGFloat = 500
@@ -25,6 +30,11 @@ struct Config {
         "com.apple.loginwindow", "com.apple.dock", "com.apple.notificationcenterui",
         "com.1password.1password", "org.pqrs.Karabiner-Elements.Settings", "com.apple.CoreSimulator.SimulatorTrampoline",
     ]
+
+    enum FocusRingStyle: String, CaseIterable {
+        case outline, underneath
+        var title: String { self == .outline ? "Outline around the window" : "Glow underneath the window" }
+    }
 
     enum AutoTileStrategy: String, CaseIterable {
         case rightmost, leftmost, position, nextToFocused, stackFocused, autoSplit, spiral
@@ -54,7 +64,10 @@ struct Config {
         ("toggleTile", "Tile / untile focused window"), ("retile", "Retile current screen"),
         ("equalize", "Equalize sizes"), ("pause", "Pause / resume tiling"),
         ("desktopNext", "Next desktop"), ("desktopPrevious", "Previous desktop"),
+        ("sendToNextDesktop", "Send focused window to next desktop"),
+        ("sendToPreviousDesktop", "Send focused window to previous desktop"),
     ] + (1...9).map { ("desktop\($0)", "Switch to desktop \($0)") }
+      + (1...9).map { ("sendToDesktop\($0)", "Send focused window to desktop \($0)") }
 
     func save() {
         try? FileManager.default.createDirectory(at: Config.path.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -80,6 +93,13 @@ struct Config {
         #   autoSplit      beside the focused window if it is wider than tall, below it otherwise (i3 autotiling)
         #   spiral         alternately beside and below the last auto-tiled window (approximates dwindle layouts)
         autoTileStrategy = \(autoTileStrategy.rawValue)
+
+        # Highlight the focused window. Style: outline (ring around it) or underneath (glow behind it).
+        focusRing = \(focusRing)
+        focusRingStyle = \(focusRingStyle.rawValue)
+        focusRingWidth = \(num(focusRingWidth))
+        focusRingRadius = \(num(focusRingRadius))
+        focusRingColor = \(focusRingColor)
 
         # Apps never tiled automatically, by bundle identifier, comma separated. Manual ⌥-drag still works.
         ignoreApps = \(ignoreApps.joined(separator: ", "))
@@ -128,7 +148,12 @@ struct Config {
             case "dragModifiers": cfg.dragModifiers = value
             case "autoTile": cfg.autoTile = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "autoTileStrategy": cfg.autoTileStrategy = AutoTileStrategy(rawValue: value) ?? cfg.autoTileStrategy
-                case "ignoreApps": cfg.ignoreApps = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                case "focusRing": cfg.focusRing = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "focusRingStyle": cfg.focusRingStyle = FocusRingStyle(rawValue: value) ?? cfg.focusRingStyle
+            case "focusRingWidth": cfg.focusRingWidth = Double(value).map { CGFloat($0) } ?? cfg.focusRingWidth
+            case "focusRingRadius": cfg.focusRingRadius = Double(value).map { CGFloat($0) } ?? cfg.focusRingRadius
+            case "focusRingColor": cfg.focusRingColor = value
+            case "ignoreApps": cfg.ignoreApps = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             case "floatSmallWindows": cfg.floatSmallWindows = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "smallWindowSize":
                 let parts = value.lowercased().split(separator: "x").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }

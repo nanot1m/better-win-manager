@@ -1,6 +1,9 @@
 import Cocoa
 import ApplicationServices
 
+@_silgen_name("_AXUIElementGetWindow")
+func _AXUIElementGetWindow(_ element: AXUIElement, _ id: UnsafeMutablePointer<CGWindowID>) -> AXError
+
 final class AXWindow: Hashable {
     let element: AXUIElement
     let pid: pid_t
@@ -12,6 +15,12 @@ final class AXWindow: Hashable {
 
     static func == (a: AXWindow, b: AXWindow) -> Bool { CFEqual(a.element, b.element) }
     func hash(into h: inout Hasher) { h.combine(CFHash(element)) }
+
+    /// CGWindowID via the undocumented but long-stable _AXUIElementGetWindow.
+    var windowID: CGWindowID? {
+        var id: CGWindowID = 0
+        return _AXUIElementGetWindow(element, &id) == .success ? id : nil
+    }
 
     var bundleID: String? { NSRunningApplication(processIdentifier: pid)?.bundleIdentifier }
 
