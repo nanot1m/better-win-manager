@@ -1,3 +1,4 @@
+import BetterWMCore
 import Cocoa
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -99,7 +100,7 @@ extension AppDelegate {
         let moveMenu = NSMenu(title: "Move")
         moveMenu.delegate = self
         moveMenu.autoenablesItems = false
-        for (title, dir) in [("Move Left", Layout.Move.left), ("Move Right", .right),
+        for (title, dir) in [("Move Left", Move.left), ("Move Right", .right),
                              ("Move Up", .up), ("Move Down", .down),
                              ("Merge Into Left Column", .mergeLeft), ("Merge Into Right Column", .mergeRight)] {
             let item = moveMenu.addItem(withTitle: title, action: #selector(moveFocused(_:)), keyEquivalent: "")
@@ -188,7 +189,7 @@ extension AppDelegate {
     @objc func sendPrevious() { manager.sendFocusedWindow(toNext: false) }
     @objc func focusPrevious() { manager.focusNext(reverse: true) }
     @objc func moveFocused(_ sender: NSMenuItem) {
-        if let dir = sender.representedObject as? Layout.Move { manager.moveFocused(dir) }
+        if let dir = sender.representedObject as? Move { manager.moveFocused(dir) }
     }
     @objc func retile() { manager.retileCurrentScreen() }
     @objc func equalize() { manager.equalize() }
@@ -236,7 +237,7 @@ extension AppDelegate: NSMenuDelegate {
         }
         if menu.title == "Move" {
             for item in menu.items {
-                if let dir = item.representedObject as? Layout.Move { item.isEnabled = manager.canMoveFocused(dir) }
+                if let dir = item.representedObject as? Move { item.isEnabled = manager.canMoveFocused(dir) }
             }
             return
         }

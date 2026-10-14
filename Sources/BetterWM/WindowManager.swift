@@ -1,120 +1,213 @@
+import BetterWMCore
 import Cocoa
 
+/// Thin shell: owns the desired state, feeds snapshots to the pure reconciler, executes the resulting commands,
+/// and translates UI gestures into state mutations.
 final class WindowManager {
-    /// One grid per Space; only the grids of the currently visible Spaces are touched.
-    private var layoutsBySpace: [Spaces.SpaceID: Layout] = [:]
-    private var active: [(space: Spaces.SpaceID, layout: Layout)] = []
-    /// Windows seen on each Space; a visible window not in here just arrived (opened or moved in).
-    private var seen: [Spaces.SpaceID: Set<AXWindow>] = [:]
-    /// Spaces whose next reconcile should tile everything regardless of tileExistingOnStart (Retile action).
-    private var forceTile: Set<Spaces.SpaceID> = []
+    private(set) var state = DesiredState()
+    private var reconciler: Reconciler
+    let system = SystemObserver()
+    let overlay: ZoneOverlay
+    let focusRing: FocusRing
+    private var handles: [HandleWindow] = []
+    private var timer: Timer?
+    private var axObserver: WindowObserver?
     /// Set while a Space switch is in flight; the window list mixes both desktops during the slide.
     private var switching = false
-    var layouts: [Layout] { active.map(\.layout) }
-    let overlay: ZoneOverlay
-    var config: Config { didSet { focusRing.apply(config) } }
-    let focusRing: FocusRing
-    private var timer: Timer?
-    private var observer: WindowObserver?
-    var enabled = true
     /// Set while the user drags a window or a gap handle; reconciling mid-gesture would fight it.
     var interacting = false
-    private var handles: [HandleWindow] = []
+
+    var config: Config {
+        didSet {
+            reconciler.config = config
+            focusRing.apply(config)
+        }
+    }
+
+    var enabled: Bool {
+        get { reconciler.enabled }
+        set { reconciler.enabled = newValue }
+    }
 
     init(config: Config) {
         self.config = config
+        reconciler = Reconciler(config: config)
         focusRing = FocusRing(config: config)
         overlay = ZoneOverlay(screen: NSScreen.screens[0])
         focusRing.isTiled = { [unowned self] w in self.isTiled(w) }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
-                                               object: nil, queue: .main) { [weak self] _ in self?.activateCurrentSpaces() }
+                                               object: nil, queue: .main) { [weak self] _ in self?.tick() }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
                                                           object: nil, queue: .main) { [weak self] _ in
             // The window list is still in flux while the slide animation runs; settle first.
             self?.switching = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 self?.switching = false
-                self?.activateCurrentSpaces()
+                self?.tick()
             }
         }
-        observer = WindowObserver(onNewWindow: { [weak self] _ in self?.reconcile() },
-                                  onFocusChange: { [weak self] in self?.focusRing.update() })
-        activateCurrentSpaces()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in self?.reconcile() }
+        axObserver = WindowObserver(onNewWindow: { [weak self] _ in self?.tick() },
+                                    onFocusChange: { [weak self] in self?.focusRing.update() })
+        tick()
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in self?.tick() }
     }
 
-    private func activateCurrentSpaces() {
-        active = NSScreen.screens.map { s in
-            let area = s.visibleFrame.toCocoa()
-            let id = Spaces.current(for: s)
-            if let l = layoutsBySpace[id] { l.area = area; return (id, l) }
-            let l = Layout(config: config, area: area)
-            layoutsBySpace[id] = l
-            return (id, l)
-        }
-        reconcile()
-    }
+    // MARK: Reconcile loop
 
-    /// Syncs the active grids with what is really on screen: departed windows leave, arrivals get tiled.
-    private func reconcile() {
+    private var tracked: [WindowID] { state.grids.values.flatMap(\.windows) }
+
+    /// Full reconcile: observe, reconcile, execute, and settle (windows that refuse a size need a second pass).
+    func tick() {
         guard !interacting, !switching else { return }
-        let visible = Spaces.visibleWindows()
-        var changed = false
-        for (space, l) in active {
-            let here = visible.filter { l.area.contains($0.frame.center) && stillOn(space, $0) }
-            let hereSet = Set(here)
-            for w in l.columns.flatMap(\.windows) where !hereSet.contains(w) && !stillOn(space, w) {
-                l.remove(w)
-                changed = true
-            }
-            // First look at a desktop keeps the existing order; later arrivals open on the right.
-            let firstVisit = seen[space] == nil
-            let known = seen[space] ?? []
-            if enabled, firstVisit ? config.tileExistingOnStart || forceTile.contains(space) : config.autoTile {
-                for w in here.sorted(by: { $0.frame.midX < $1.frame.midX })
-                where !known.contains(w) && !l.contains(w) && !isIgnored(w) {
-                    l.apply(firstVisit ? .newColumn(index: l.columnIndex(forX: w.frame.midX)) : autoTileZone(for: w, in: l), to: w)
-                    l.spiralAnchor = w
-                    changed = true
-                }
-            }
-            seen[space] = hereSet
-            forceTile.remove(space)
-            if l.dirty { changed = true }
+        for _ in 0..<3 {
+            let snap = system.snapshot(tracked: tracked)
+            let (next, commands) = reconciler.reconcile(state, snap)
+            state = next
+            guard !commands.isEmpty else { break }
+            system.execute(commands)
         }
-        if changed { relayout() }
+        refreshChrome()
+    }
+
+    /// Push the current desired state to the screen without re-reconciling; used during gestures and after edits.
+    func apply() {
+        let snap = system.lightSnapshot(tracked: tracked)
+        let cmds = reconciler.commands(for: state, snap)
+        for case let .setFrame(w, f) in cmds { state.requested[w] = f }
+        system.execute(cmds)
+        refreshChrome()
+    }
+
+    func relayout() { apply() }
+
+    private func refreshChrome() {
+        refreshHandles()
+        focusRing.update()
+    }
+
+    // MARK: Queries used by the UI
+
+    func id(_ w: AXWindow) -> WindowID? { system.id(of: w) }
+    func isTiled(_ w: AXWindow) -> Bool { id(w).map(state.isTiled) ?? false }
+
+    private func screen(at p: CGPoint) -> ScreenInfo? { system.screens().first { $0.area.contains(p) } ?? system.screens().first }
+
+    private func geometry(for space: SpaceID) -> GridGeometry? {
+        guard let screen = system.screens().first(where: { $0.space == space }) else { return nil }
+        return reconciler.geometry(state.grid(for: space), screen)
+    }
+
+    private func activeGeometries() -> [(SpaceID, GridGeometry)] {
+        system.screens().map { ($0.space, reconciler.geometry(state.grid(for: $0.space), $0)) }
+    }
+
+    func zone(at p: CGPoint, dragging w: AXWindow) -> (DropZone, CGRect)? {
+        guard let screen = screen(at: p) else { return nil }
+        return reconciler.geometry(state.grid(for: screen.space), screen).zone(at: p, dragging: id(w))
+    }
+
+    // MARK: Mutations
+
+    func drop(_ w: AXWindow, into zone: DropZone, at p: CGPoint) {
+        guard let id = id(w), let screen = screen(at: p) else { return }
+        for space in state.grids.keys where space != screen.space { state.grids[space]?.remove(id) }
+        state.mutate(screen.space) { $0.apply(zone, to: id) }
+        state.seen[screen.space, default: []].insert(id)
+        apply()
+        w.raise()
+    }
+
+    func untile(_ w: AXWindow) {
+        guard let id = id(w) else { return }
+        state.untile(id)
+    }
+
+    func tile(_ w: AXWindow) {
+        guard let id = id(w), !state.isTiled(id), let screen = screen(at: w.frame.center) else { return }
+        let geo = reconciler.geometry(state.grid(for: screen.space), screen)
+        state.mutate(screen.space) { $0.apply(.newColumn(index: geo.columnIndex(forX: w.frame.midX)), to: id) }
+        state.seen[screen.space, default: []].insert(id)
+        apply()
+    }
+
+    func toggleFocused() {
+        guard let w = AXWindow.focused else { return }
+        if isTiled(w) { untile(w); apply() } else { tile(w) }
+    }
+
+    /// Called on mouse-up: anything moved or resized by hand leaves the grid and floats.
+    func releaseDisplacedWindows() {
+        let snap = system.lightSnapshot(tracked: tracked)
+        let displaced = reconciler.displaced(state, snap)
+        guard !displaced.isEmpty else { return }
+        displaced.forEach { state.untile($0) }
+        apply()
     }
 
     func retileCurrentScreen() {
-        guard let i = active.firstIndex(where: { $0.layout.area.contains(NSEvent.mouseLocation.toAX()) }) ?? active.indices.first else { return }
-        active[i].layout.clear()
-        seen[active[i].space] = nil
-        forceTile.insert(active[i].space)
-        reconcile()
+        guard let screen = screen(at: NSEvent.mouseLocation.toAX()) else { return }
+        state.grids[screen.space] = Grid()
+        state.seen[screen.space] = nil
+        state.retileRequested.insert(screen.space)
+        tick()
     }
 
     func equalize() {
-        layouts.forEach { $0.equalize() }
-        relayout()
+        for k in state.grids.keys { state.grids[k]?.equalize() }
+        apply()
     }
 
     func reloadConfig() {
         config = Config.load()
-        layoutsBySpace.values.forEach { $0.config = config }
-        relayout()
+        apply()
+    }
+
+    func canMoveFocused(_ dir: Move) -> Bool {
+        guard let w = AXWindow.focused, let id = id(w), let space = state.space(containing: id) else { return false }
+        return state.grid(for: space).canMove(id, dir)
+    }
+
+    func moveFocused(_ dir: Move) {
+        guard let w = AXWindow.focused, let id = id(w), let space = state.space(containing: id) else { return }
+        state.mutate(space) { $0.move(id, dir) }
+        apply()
     }
 
     /// Cycles through tiled windows left to right, top to bottom, on the screen holding the focused window.
     func focusNext(reverse: Bool = false) {
         let focused = AXWindow.focused
-        let l = focused.flatMap { f in layouts.first { $0.contains(f) } }
-            ?? layout(for: focused?.frame.center ?? NSEvent.mouseLocation.toAX())
-        guard let l else { return }
-        let order = l.windowFrames().map(\.0)
+        let fid = focused.flatMap(id)
+        let space = fid.flatMap(state.space) ?? screen(at: focused?.frame.center ?? NSEvent.mouseLocation.toAX())?.space
+        guard let space, let geo = geometry(for: space) else { return }
+        let order = geo.windowFrames().map(\.0)
         guard !order.isEmpty else { return }
-        let i = focused.flatMap(order.firstIndex) ?? (reverse ? 0 : order.count - 1)
-        order[(i + (reverse ? -1 : 1) + order.count) % order.count].raise()
+        let i = fid.flatMap(order.firstIndex) ?? (reverse ? 0 : order.count - 1)
+        system.execute([.raise(order[(i + (reverse ? -1 : 1) + order.count) % order.count])])
     }
+
+    // MARK: Presets
+
+    /// Windows the presets would arrange on the screen holding the focused window, in reading order.
+    func presetCandidates() -> (SpaceID, [WindowID])? {
+        let anchor = AXWindow.focused?.frame.center ?? NSEvent.mouseLocation.toAX()
+        guard let screen = screen(at: anchor) else { return nil }
+        let snap = system.snapshot(tracked: [])
+        let windows = snap.windows
+            .filter { screen.area.contains($0.frame.center) && $0.spaces.contains(screen.space) && !reconciler.isIgnored($0) }
+            .sorted { a, b in
+                abs(a.frame.minX - b.frame.minX) > 40 ? a.frame.minX < b.frame.minX : a.frame.minY < b.frame.minY
+            }
+        return (screen.space, windows.map(\.id))
+    }
+
+    func applyPreset(_ preset: LayoutPreset) {
+        guard let (space, windows) = presetCandidates() else { return }
+        state.mutate(space) { $0.apply(preset: preset, windows: windows) }
+        state.seen[space] = Set(windows)
+        apply()
+    }
+
+    // MARK: Desktops
 
     func sendFocusedWindow(toNext: Bool) {
         guard let cur = Spaces.currentDesktopIndex() else { return }
@@ -126,20 +219,20 @@ final class WindowManager {
         let wasTiled = isTiled(w)
         if wasTiled {
             untile(w)
-            relayout()
+            apply()
         }
         interacting = true
         Spaces.sendFocusedWindow(toDesktop: index) { [weak self] moved in
             guard let self else { return }
             self.interacting = false
             guard let moved else { return }
-            if wasTiled { self.tileWhenVisible(moved, attempts: 10) } else { self.activateCurrentSpaces() }
+            if wasTiled { self.tileWhenVisible(moved, attempts: 10) } else { self.tick() }
         }
     }
 
     /// The Space switch and the drop land asynchronously; wait until the window shows up on the active desktop.
     private func tileWhenVisible(_ w: AXWindow, attempts: Int) {
-        activateCurrentSpaces()
+        tick()
         if Spaces.visibleWindows().contains(w) {
             if !isTiled(w) { tile(w) }
             w.raise()
@@ -149,148 +242,31 @@ final class WindowManager {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.tileWhenVisible(w, attempts: attempts - 1) }
     }
 
-    /// Windows the presets would arrange on the screen holding the focused window, in reading order.
-    func presetCandidates() -> (Layout, Spaces.SpaceID, [AXWindow])? {
-        let anchor = AXWindow.focused?.frame.center ?? NSEvent.mouseLocation.toAX()
-        guard let entry = active.first(where: { $0.layout.area.contains(anchor) }) ?? active.first else { return nil }
-        let windows = Spaces.visibleWindows()
-            .filter { entry.layout.area.contains($0.frame.center) && !isIgnored($0) }
-            .sorted { a, b in
-                let fa = a.frame, fb = b.frame
-                return abs(fa.minX - fb.minX) > 40 ? fa.minX < fb.minX : fa.minY < fb.minY
-            }
-        return (entry.layout, entry.space, windows)
-    }
-
-    func applyPreset(_ preset: LayoutPreset) {
-        guard let (l, space, windows) = presetCandidates() else { return }
-        l.apply(preset: preset, windows: windows)
-        seen[space] = Set(windows)
-        relayout()
-    }
-
-    func canMoveFocused(_ dir: Layout.Move) -> Bool {
-        guard let w = AXWindow.focused, let l = layouts.first(where: { $0.contains(w) }) else { return false }
-        return l.canMove(w, dir)
-    }
-
-    func moveFocused(_ dir: Layout.Move) {
-        guard let w = AXWindow.focused, let l = layouts.first(where: { $0.contains(w) }) else { return }
-        l.move(w, dir)
-        relayout()
-    }
-
-    func toggleFocused() {
-        guard let w = AXWindow.focused else { return }
-        if isTiled(w) {
-            untile(w)
-            relayout()
-        } else {
-            tile(w)
-        }
-    }
-
-    /// A tiled window missing from the on-screen list may just be mid-transition; trust WindowServer's Space membership.
-    private func stillOn(_ space: Spaces.SpaceID, _ w: AXWindow) -> Bool {
-        guard w.isValid, w.isStandard, let id = w.windowID else { return false }
-        return Spaces.spaces(of: id).contains(space)
-    }
-
-    func isIgnored(_ w: AXWindow) -> Bool {
-        if let id = w.bundleID, config.ignoreApps.contains(id) { return true }
-        if config.floatSmallWindows {
-            let f = w.frame.size
-            if f.width < config.smallWindowWidth && f.height < config.smallWindowHeight { return true }
-        }
-        return false
-    }
-
-    private func autoTileZone(for w: AXWindow, in l: Layout) -> DropZone {
-        let focused = AXWindow.focused.flatMap { f -> (Int, Int, CGRect)? in
-            guard let ci = l.columns.firstIndex(where: { $0.windows.contains(f) }),
-                  let wi = l.columns[ci].windows.firstIndex(of: f), let fr = l.frame(of: f) else { return nil }
-            return (ci, wi, fr)
-        }
-        switch config.autoTileStrategy {
-        case .rightmost: return .newColumn(index: l.columns.count)
-        case .leftmost: return .newColumn(index: 0)
-        case .position: return .newColumn(index: l.columnIndex(forX: w.frame.midX))
-        case .nextToFocused:
-            guard let (ci, _, _) = focused else { return .newColumn(index: l.columns.count) }
-            return .newColumn(index: ci + 1)
-        case .stackFocused:
-            guard let (ci, wi, _) = focused else { return .newColumn(index: l.columns.count) }
-            return .stack(column: ci, index: wi + 1)
-        case .autoSplit:
-            guard let (ci, wi, fr) = focused else { return .newColumn(index: l.columns.count) }
-            return fr.width > fr.height ? .newColumn(index: ci + 1) : .stack(column: ci, index: wi + 1)
-        case .spiral:
-            guard let a = l.spiralAnchor, let ci = l.columns.firstIndex(where: { $0.windows.contains(a) }),
-                  let wi = l.columns[ci].windows.firstIndex(of: a) else {
-                l.spiralBeside = false
-                return .newColumn(index: l.columns.count)
-            }
-            defer { l.spiralBeside.toggle() }
-            return l.spiralBeside ? .newColumn(index: ci + 1) : .stack(column: ci, index: wi + 1)
-        }
-    }
-
-    func tile(_ w: AXWindow) {
-        guard !isTiled(w), let l = layout(for: w.frame.center) else { return }
-        l.apply(.newColumn(index: l.columnIndex(forX: w.frame.midX)), to: w)
-        relayout()
-    }
-
-    func layout(for p: CGPoint) -> Layout? {
-        layouts.first { $0.area.contains(p) } ?? layouts.first
-    }
-
-    func isTiled(_ w: AXWindow) -> Bool { layouts.contains { $0.contains(w) } }
-
-    func untile(_ w: AXWindow, except keep: Layout? = nil) {
-        layouts.forEach { if $0 !== keep { $0.remove(w) } }
-    }
-
-    /// Called on mouse-up: anything moved or resized by hand leaves the grid and floats.
-    func releaseDisplacedWindows() {
-        let displaced = layouts.flatMap { $0.displacedWindows() }
-        guard !displaced.isEmpty else { return }
-        displaced.forEach { untile($0) }
-        relayout()
-    }
-
-    func relayout() {
-        layouts.forEach { $0.applyFrames() }
-        refreshHandles()
-        focusRing.update()
-    }
+    // MARK: Gap handles
 
     private func refreshHandles() {
-        var needed: [(Layout, Layout.Handle, CGRect)] = []
-        for l in layouts { for (h, f) in l.handleFrames() { needed.append((l, h, f)) } }
+        var needed: [(SpaceID, Handle, CGRect)] = []
+        for (space, geo) in activeGeometries() { for (h, f) in geo.handleFrames() { needed.append((space, h, f)) } }
         while handles.count < needed.count { handles.append(HandleWindow()) }
         for (idx, h) in handles.enumerated() {
             guard idx < needed.count else { h.orderOut(nil); continue }
-            let (l, handle, f) = needed[idx]
+            let (space, handle, f) = needed[idx]
             h.setFrame(f.toCocoa(), display: true)
             h.isVertical = handle.isVertical
-            h.onDrag = { [weak self, weak l] p in
-                self?.interacting = true
+            h.onDrag = { [weak self] p in
+                guard let self, let geo = self.geometry(for: space) else { return }
+                self.interacting = true
                 switch handle {
-                case let .column(i): l?.resize(boundary: i, toX: p.x)
-                case let .row(ci, i): l?.resize(column: ci, boundary: i, toY: p.y)
+                case let .column(i): self.state.grids[space] = geo.resizing(boundary: i, toX: p.x)
+                case let .row(ci, i): self.state.grids[space] = geo.resizing(column: ci, boundary: i, toY: p.y)
                 }
-                self?.relayout()
+                self.apply()
             }
             h.onDragEnd = { [weak self] in
                 self?.interacting = false
-                self?.relayout()
+                self?.apply()
             }
             h.orderFrontRegardless()
         }
     }
-}
-
-extension CGRect {
-    var center: CGPoint { CGPoint(x: midX, y: midY) }
 }

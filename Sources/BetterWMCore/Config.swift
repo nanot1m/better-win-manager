@@ -1,26 +1,27 @@
 import Foundation
 
-struct Config {
-    var gap: CGFloat = 16
-    var outerGap: CGFloat = 16
-    var handleWidth: CGFloat = 16
-    var dragModifiers: String = "alt"
-    var hotkeys: [String: String] = ["popup": "alt+cmd+space"]
-    var tileExistingOnStart: Bool = false
-    var autoTile: Bool = true
-    var autoTileStrategy: AutoTileStrategy = .rightmost
-    var focusRing: Bool = true
-    var focusRingStyle: FocusRingStyle = .outline
-    var focusRingWidth: CGFloat = 3
-    var focusRingRadius: CGFloat = 10
-    var focusRingColor: String = "#4C8BF5"
-    var ignoreApps: [String] = Config.defaultIgnoreApps
-    var floatSmallWindows: Bool = true
-    var smallWindowWidth: CGFloat = 500
-    var smallWindowHeight: CGFloat = 400
+public struct Config {
+    public init() {}
+    public var gap: CGFloat = 16
+    public var outerGap: CGFloat = 16
+    public var handleWidth: CGFloat = 16
+    public var dragModifiers: String = "alt"
+    public var hotkeys: [String: String] = ["popup": "alt+cmd+space"]
+    public var tileExistingOnStart: Bool = false
+    public var autoTile: Bool = true
+    public var autoTileStrategy: AutoTileStrategy = .rightmost
+    public var focusRing: Bool = true
+    public var focusRingStyle: FocusRingStyle = .outline
+    public var focusRingWidth: CGFloat = 3
+    public var focusRingRadius: CGFloat = 10
+    public var focusRingColor: String = "#4C8BF5"
+    public var ignoreApps: [String] = Config.defaultIgnoreApps
+    public var floatSmallWindows: Bool = true
+    public var smallWindowWidth: CGFloat = 500
+    public var smallWindowHeight: CGFloat = 400
 
     /// Utility apps whose windows are dialogs or fixed-size panels; the usual suspects in community yabai/Amethyst rules.
-    static let defaultIgnoreApps = [
+    public static let defaultIgnoreApps = [
         "com.apple.systempreferences", "com.apple.calculator", "com.apple.archiveutility",
         "com.apple.ActivityMonitor", "com.apple.Installer", "com.apple.SoftwareUpdate",
         "com.apple.SystemProfiler", "com.apple.Dictionary", "com.apple.screenshot.launcher",
@@ -32,15 +33,15 @@ struct Config {
         "com.1password.1password", "org.pqrs.Karabiner-Elements.Settings", "com.apple.CoreSimulator.SimulatorTrampoline",
     ]
 
-    enum FocusRingStyle: String, CaseIterable {
+    public enum FocusRingStyle: String, CaseIterable {
         case outline, underneath
-        var title: String { self == .outline ? "Outline around the window" : "Glow underneath the window" }
+        public var title: String { self == .outline ? "Outline around the window" : "Glow underneath the window" }
     }
 
-    enum AutoTileStrategy: String, CaseIterable {
+    public enum AutoTileStrategy: String, CaseIterable {
         case rightmost, leftmost, position, nextToFocused, stackFocused, autoSplit, spiral
 
-        var title: String {
+        public var title: String {
             switch self {
             case .rightmost: return "New column on the right"
             case .leftmost: return "New column on the left"
@@ -53,12 +54,12 @@ struct Config {
         }
     }
 
-    static let path = FileManager.default.homeDirectoryForCurrentUser
+    public static let path = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".config/betterwm/config.conf")
 
     static var template: String { Config().serialized() }
 
-    static let actions: [(key: String, title: String)] = [
+    public static let actions: [(key: String, title: String)] = [
         ("popup", "Window actions popup"), ("focusNext", "Focus next window"), ("focusPrevious", "Focus previous window"),
         ("moveLeft", "Move left"), ("moveRight", "Move right"), ("moveUp", "Move up"), ("moveDown", "Move down"),
         ("mergeLeft", "Merge into left column"), ("mergeRight", "Merge into right column"),
@@ -70,14 +71,14 @@ struct Config {
     ] + (1...9).map { ("desktop\($0)", "Switch to desktop \($0)") }
       + (1...9).map { ("sendToDesktop\($0)", "Send focused window to desktop \($0)") }
 
-    func save() {
+    public func save() {
         try? FileManager.default.createDirectory(at: Config.path.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? serialized().write(to: Config.path, atomically: true, encoding: .utf8)
     }
 
     private func num(_ v: CGFloat) -> String { v == v.rounded() ? String(Int(v)) : String(Double(v)) }
 
-    func serialized() -> String {
+    public func serialized() -> String {
         var out = """
         # BetterWM configuration. Lines starting with # are comments.
 
@@ -128,7 +129,7 @@ struct Config {
         return out
     }
 
-    static func load() -> Config {
+    public static func load() -> Config {
         guard let text = try? String(contentsOf: path, encoding: .utf8) else {
             try? FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? template.write(to: path, atomically: true, encoding: .utf8)
@@ -137,7 +138,7 @@ struct Config {
         return parse(text)
     }
 
-    static func parse(_ text: String) -> Config {
+    public static func parse(_ text: String) -> Config {
         var cfg = Config()
         cfg.hotkeys = [:]
         for raw in text.split(whereSeparator: \.isNewline) {

@@ -1,3 +1,4 @@
+import BetterWMCore
 import Cocoa
 
 final class DragController {
@@ -83,7 +84,7 @@ final class DragController {
                 w.frame = CGRect(origin: CGPoint(x: originalFrame.minX + dx, y: originalFrame.minY + dy), size: originalFrame.size)
             }
             if intercepting || alt {
-                currentZone = manager.layout(for: p)?.zone(at: p, dragging: w)
+                currentZone = manager.zone(at: p, dragging: w)
                 manager.overlay.show(zone: currentZone?.1)
             } else {
                 currentZone = nil
@@ -99,11 +100,8 @@ final class DragController {
             intercepting = false
             let finish = { [manager] in
                 manager.interacting = false
-                if let w, let zone, let layout = manager.layout(for: p) {
-                    manager.untile(w, except: layout)
-                    layout.apply(zone, to: w)
-                    manager.relayout()
-                    w.raise()
+                if let w, let zone {
+                    manager.drop(w, into: zone, at: p)
                 } else {
                     manager.releaseDisplacedWindows()
                 }

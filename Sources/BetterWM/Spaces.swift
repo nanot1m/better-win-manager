@@ -1,3 +1,4 @@
+import BetterWMCore
 import Cocoa
 import SkyLightBridge
 
@@ -177,23 +178,30 @@ enum Spaces {
     }
 
     /// Standard windows visible right now, i.e. on the active Spaces, front to back.
+    /// Matched to Accessibility windows by window ID; frames are ambiguous when two windows overlap exactly.
     static func visibleWindows() -> [AXWindow] {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return [] }
-        var axByPid: [pid_t: [AXWindow]] = [:]
+        var axByPid: [pid_t: [(CGWindowID?, CGRect, AXWindow)]] = [:]
         var out: [AXWindow] = []
+        var taken = Set<CGWindowID>()
         for info in list {
             guard (info[kCGWindowLayer as String] as? Int) == 0,
                   let pid = info[kCGWindowOwnerPID as String] as? pid_t, pid != getpid(),
+                  let number = info[kCGWindowNumber as String] as? CGWindowID,
                   let b = info[kCGWindowBounds as String] as? [String: CGFloat] else { continue }
             let bounds = CGRect(x: b["X"] ?? 0, y: b["Y"] ?? 0, width: b["Width"] ?? 0, height: b["Height"] ?? 0)
             if axByPid[pid] == nil {
                 var v: CFTypeRef?
                 AXUIElementCopyAttributeValue(AXUIElementCreateApplication(pid), kAXWindowsAttribute as CFString, &v)
-                axByPid[pid] = (v as? [AXUIElement] ?? []).map { AXWindow(element: $0, pid: pid) }.filter(\.isStandard)
+                axByPid[pid] = (v as? [AXUIElement] ?? []).map { AXWindow(element: $0, pid: pid) }
+                    .filter(\.isStandard).map { ($0.windowID, $0.frame, $0) }
             }
-            if let w = axByPid[pid]?.first(where: { $0.frame.approximatelyEquals(bounds, tolerance: 4) }), !out.contains(w) {
-                out.append(w)
-            }
+            let candidates = axByPid[pid] ?? []
+            let match = candidates.first { $0.0 == number }
+                ?? candidates.first { $0.0 == nil && $0.1.approximatelyEquals(bounds, tolerance: 4) }
+            guard let (_, _, w) = match, !taken.contains(number) else { continue }
+            taken.insert(number)
+            out.append(w)
         }
         return out
     }

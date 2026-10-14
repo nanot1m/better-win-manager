@@ -2,14 +2,20 @@ import Foundation
 
 /// A screen arrangement as columns of (relative width, window count), e.g. [(2,1),(1,2)] is a wide main window
 /// with two stacked beside it. Generated per window count so the popup can show what each would do.
-struct LayoutPreset: Equatable {
-    struct Col: Equatable { let weight: CGFloat; let count: Int }
-    let name: String
-    let columns: [Col]
+public struct LayoutPreset: Equatable {
+    public struct Col: Equatable {
+        public let weight: CGFloat
+        public let count: Int
+        public init(weight: CGFloat, count: Int) { self.weight = weight; self.count = count }
+    }
+    public let name: String
+    public let columns: [Col]
 
-    var windowCount: Int { columns.reduce(0) { $0 + $1.count } }
+    public init(name: String, columns: [Col]) { self.name = name; self.columns = columns }
 
-    static func presets(for n: Int) -> [LayoutPreset] {
+    public var windowCount: Int { columns.reduce(0) { $0 + $1.count } }
+
+    public static func presets(for n: Int) -> [LayoutPreset] {
         guard n > 0 else { return [] }
         var out: [LayoutPreset] = []
         func add(_ name: String, _ cols: [(CGFloat, Int)]) {

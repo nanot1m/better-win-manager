@@ -108,7 +108,7 @@ Placement strategies:
 - Windows are read and moved through the Accessibility API; a CGEvent tap catches ⌥-drags and ⌥-scroll.
 - Desktop identity and ordering come from SkyLight private functions loaded with `dlsym`. Desktop switching posts the same Dock-swipe event sequence a three-finger trackpad swipe produces, which is why it is instant. Sending a window to another desktop uses SkyLight's bridged move operation via code vendored from [WhichSpace](https://github.com/gechr/WhichSpace) (MIT); the exported APIs for this stopped working with SIP enabled. All of these are undocumented and may need updating on new macOS releases.
 - The focus ring is a click-through overlay that follows Accessibility focus, move and resize notifications.
-- Windows that refuse a size are remembered as minimums and the layout distributes space around them.
+- Windows that ignore a requested size are remembered as minimums and the layout distributes space around them.
 
 ## Development
 
@@ -117,6 +117,9 @@ swift build
 .build/debug/BetterWM --settings                       # open Settings on launch
 .build/debug/BetterWM --snapshot-settings /tmp/s.png   # render each Settings tab to PNG
 make zip                                               # dist/BetterWM-<version>.zip, ad-hoc signed
+swift run CoreTests                                    # reconciler tests (plain executable; CLT has no XCTest)
 ```
+
+The layout logic lives in the `BetterWMCore` library: a pure `Reconciler` turns a `Snapshot` of the system plus the `DesiredState` into frame commands, with no Accessibility calls. The app is a thin shell that builds snapshots, executes commands and turns gestures into state changes.
 
 Pushing a tag like `v0.1.0` runs the Release workflow, which builds the zip and publishes a GitHub release.

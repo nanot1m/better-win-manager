@@ -1,3 +1,4 @@
+import BetterWMCore
 import Cocoa
 
 final class ActionPopup: NSPanel {
@@ -61,7 +62,7 @@ final class ActionPopup: NSPanel {
         view.enabled = Dictionary(uniqueKeysWithValues: ActionView.actions.map { ($0.dir, manager.canMoveFocused($0.dir)) })
         view.tiled = AXWindow.focused.map(manager.isTiled) ?? false
         view.desktopCount = Spaces.desktops().count
-        view.presets = manager.presetCandidates().map { LayoutPreset.presets(for: $0.2.count) } ?? []
+        view.presets = manager.presetCandidates().map { LayoutPreset.presets(for: $0.1.count) } ?? []
         view.currentDesktop = Spaces.currentDesktopIndex()
         view.needsDisplay = true
         let target = AXWindow.focused?.frame.toCocoa() ?? NSScreen.main?.visibleFrame ?? .zero
@@ -79,7 +80,7 @@ final class ActionPopup: NSPanel {
         let shift = e.modifierFlags.contains(.shift)
         let key = e.charactersIgnoringModifiers?.lowercased() ?? ""
         let code = e.keyCode
-        var dir: Layout.Move?
+        var dir: Move?
         switch (code, key) {
         case (123, _), (_, "h"): dir = shift ? .mergeLeft : .left
         case (124, _), (_, "l"): dir = shift ? .mergeRight : .right
@@ -125,7 +126,7 @@ final class ActionPopup: NSPanel {
 
 private final class ActionView: NSView {
     struct Action {
-        let dir: Layout.Move
+        let dir: Move
         let title: String
         let keys: String
         let col: Int, row: Int
@@ -140,7 +141,7 @@ private final class ActionView: NSView {
         Action(dir: .down, title: "Move Down", keys: "↓  J", col: 2, row: 2),
     ]
 
-    var enabled: [Layout.Move: Bool] = [:]
+    var enabled: [Move: Bool] = [:]
     var tiled = false
     var desktopCount = 0
     var currentDesktop: Int?

@@ -1,3 +1,4 @@
+import BetterWMCore
 import Cocoa
 
 final class ZoneOverlay: NSWindow {

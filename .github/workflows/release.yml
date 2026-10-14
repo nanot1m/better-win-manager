@@ -12,6 +12,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Test
+        run: make test
       - name: Build, bundle, ad-hoc sign, zip
         run: make zip VERSION="${GITHUB_REF_NAME#v}"
       - name: Publish GitHub release

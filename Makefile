@@ -4,10 +4,13 @@ BUILD    = .build/release
 BUNDLE   = dist/$(APP).app
 ZIP      = dist/$(APP)-$(VERSION).zip
 
-.PHONY: build bundle sign zip install clean
+.PHONY: build test bundle sign zip install clean
 
 build:
-	swift build -c release
+	swift build -c release --product BetterWM
+
+test:
+	swift run CoreTests
 
 bundle: build
 	rm -rf $(BUNDLE)

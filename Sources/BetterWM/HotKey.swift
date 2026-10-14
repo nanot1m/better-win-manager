@@ -1,4 +1,5 @@
 import Carbon
+import BetterWMCore
 import Cocoa
 
 /// Global hotkey via Carbon; works for background apps and needs no extra permission.
