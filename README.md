@@ -3,7 +3,7 @@
 Column-based tiling window manager for macOS. Tile windows by ⌥-dragging them into place; everything else stays a normal, freely movable window.
 
 - Columns across the screen, windows stacked within a column
-- One grid per desktop (Space) and per screen
+- One grid per desktop (Space) and per screen, or virtual workspaces on a single desktop
 - Drop zones highlighted while dragging, draggable gap handles to resize
 - Auto-tiling of new windows with several placement strategies
 - Instant desktop switching that skips the slide animation
@@ -62,6 +62,10 @@ On the first run the windows on the current desktop are tiled, ordered left to r
 | Esc | Close |
 
 Every popup action, plus retile, equalize, pause and desktop switching, can also be bound to a global hotkey in the config.
+
+### Virtual workspaces
+
+Set `workspaces = virtual` (Settings › General › Desktops) to emulate `virtualWorkspaces` desktops on a single macOS Space. Windows of inactive workspaces are parked just off the bottom-right corner of their screen, like AeroSpace does, so switching is instant and needs no Mission Control tricks. All desktop actions, the popup, hotkeys and the bar chips refer to virtual workspaces in this mode. Parked windows still appear in ⌘Tab and Mission Control.
 
 ### Status bar
 

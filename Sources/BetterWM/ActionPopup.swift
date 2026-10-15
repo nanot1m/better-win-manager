@@ -63,9 +63,9 @@ final class ActionPopup: NSPanel {
     private func refresh() {
         view.enabled = Dictionary(uniqueKeysWithValues: ActionView.actions.map { ($0.dir, manager.canMoveFocused($0.dir)) })
         view.tiled = AXWindow.focused.map(manager.isTiled) ?? false
-        view.desktopCount = Spaces.desktops().count
+        view.desktopCount = manager.desktopCount
         view.presets = manager.presetCandidates().map { LayoutPreset.presets(for: $0.1.count) } ?? []
-        view.currentDesktop = Spaces.currentDesktopIndex()
+        view.currentDesktop = manager.currentDesktop
         view.needsDisplay = true
         let target = AXWindow.focused?.frame.toCocoa() ?? NSScreen.main?.visibleFrame ?? .zero
         var origin = NSPoint(x: target.midX - frame.width / 2, y: target.midY - frame.height / 2)
@@ -111,7 +111,7 @@ final class ActionPopup: NSPanel {
             return true
         case (_, let k) where ("1"..."9").contains(k) && k.count == 1:
             let index = Int(k)! - 1
-            guard index < Spaces.desktops().count else { return true }
+            guard index < manager.desktopCount else { return true }
             if shift {
                 close()
                 onAction?("⇧\(k)", "Send to desktop \(index + 1)")
@@ -119,7 +119,7 @@ final class ActionPopup: NSPanel {
                 return true
             }
             onAction?(k, "Switch to desktop \(index + 1)")
-            Spaces.switchToDesktop(index)
+            manager.switchDesktop(index)
             // The switch is asynchronous; re-read the focused window once it has landed.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.regainKey() }
             return true

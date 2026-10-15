@@ -9,6 +9,8 @@ final class WindowManager {
     private var saved = SavedLayout()
     private var lastSaved = SavedLayout()
     private var saveWork: DispatchWorkItem?
+    private var virtualWS: VirtualWorkspaces?
+    var isVirtual: Bool { virtualWS != nil }
     /// Visible window IDs front to back from the last full tick; avoids re-enumerating on every gesture frame.
     private var zOrder: [WindowID] = []
     private var reconciler: Reconciler
@@ -23,12 +25,153 @@ final class WindowManager {
     /// Set while the user drags a window or a gap handle; reconciling mid-gesture would fight it.
     var interacting = false { didSet { focusRing.suspended = interacting } }
     var onFocusChange: (() -> Void)?
+    var onDesktopChange: (() -> Void)?
 
     var config: Config {
         didSet {
             reconciler.config = config
             focusRing.apply(config)
+            configureWorkspaces()
         }
+    }
+
+    /// Switches between native Spaces and virtual workspaces, moving windows and grids across so desktop N
+    /// becomes workspace N and back.
+    private func configureWorkspaces() {
+        switch config.workspaces {
+        case .native:
+            guard let v = virtualWS else { return }
+            migrateToNative(from: v)
+            virtualWS = nil
+            system.spaceOverride = nil
+            system.windowSpacesOverride = nil
+        case .virtual:
+            if let v = virtualWS { v.setCount(config.virtualWorkspaces); return }
+            let v = VirtualWorkspaces(count: config.virtualWorkspaces)
+            virtualWS = v
+            migrateToVirtual(v)
+            system.spaceOverride = { [unowned v] screen in
+                v.spaceID(workspace: v.active, screenIndex: NSScreen.screens.firstIndex(of: screen) ?? 0)
+            }
+            system.windowSpacesOverride = { [unowned v, unowned self] id in
+                let screenIndex = self.system.axWindow(id).flatMap { w in NSScreen.screens.firstIndex { $0.visibleFrame.toCocoa().contains(w.frame.center) } } ?? 0
+                return [v.spaceID(workspace: v.workspace(of: id), screenIndex: screenIndex)]
+            }
+        }
+        tick()
+        // Window moves between Spaces land asynchronously.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.tick() }
+    }
+
+    /// Native → virtual: every window on another macOS desktop comes to this one and joins the matching workspace.
+    private func migrateToVirtual(_ v: VirtualWorkspaces) {
+        let desktops = Spaces.desktops()
+        guard let currentIndex = Spaces.currentDesktopIndex() else { state = DesiredState(); return }
+        v.switchTo(min(currentIndex, v.count - 1))
+        let currentSpace = desktops[currentIndex]
+        var newState = DesiredState()
+        func screenIndex(_ f: CGRect) -> Int { NSScreen.screens.firstIndex { $0.visibleFrame.toCocoa().contains(f.center) } ?? 0 }
+        // Switching modes at runtime: desktop N becomes workspace N. At launch (no grids yet) the saved
+        // layout assigns workspaces as windows appear, so only gather the windows here.
+        let atLaunch = state.grids.isEmpty
+        for w in Spaces.allWindows() {
+            guard let id = id(w), let space = Spaces.spaces(of: id).first, let index = desktops.firstIndex(of: space) else { continue }
+            if !atLaunch { v.move(id, to: min(index, v.count - 1)) }
+            if space != currentSpace { Spaces.moveWindow(id, toSpace: currentSpace) { _ in } }
+        }
+        for (space, grid) in state.grids {
+            guard let index = desktops.firstIndex(of: space), let first = grid.windows.first,
+                  let f = system.axWindow(first)?.frame else { continue }
+            let target = v.spaceID(workspace: min(index, v.count - 1), screenIndex: screenIndex(f))
+            newState.grids[target] = grid
+            newState.seen[target] = Set(grid.windows)
+        }
+        // At launch there are no native grids yet; saved-layout matching then decides workspaces as windows appear.
+        if !state.grids.isEmpty { virtualRestoreDeadline = .distantPast }
+        state = newState
+    }
+
+    /// Virtual → native: unpark everything and send each window to the macOS desktop matching its workspace.
+    private func migrateToNative(from v: VirtualWorkspaces) {
+        let desktops = Spaces.desktops()
+        let current = Spaces.current(for: NSScreen.screens[0])
+        var newState = DesiredState()
+        let snap = system.snapshot(tracked: tracked)
+        v.unparkAll { self.system.execute([.setFrame($0, $1)]) }
+        for w in snap.windows {
+            let ws = v.workspace(of: w.id)
+            guard ws < desktops.count, desktops[ws] != current else { continue }
+            Spaces.moveWindow(w.id, toSpace: desktops[ws]) { _ in }
+        }
+        for (space, grid) in state.grids where space >= 1_000_000 {
+            let ws = Int((space - 1_000_000) / 100)
+            guard ws < desktops.count else { continue }
+            newState.grids[desktops[ws]] = grid
+            newState.seen[desktops[ws]] = Set(grid.windows)
+        }
+        state = newState
+    }
+
+    // MARK: Desktops facade (native Spaces or virtual workspaces)
+
+    var desktopCount: Int { virtualWS?.count ?? Spaces.desktops().count }
+    var currentDesktop: Int? { virtualWS?.active ?? Spaces.currentDesktopIndex() }
+
+    func switchDesktop(_ index: Int) {
+        if let v = virtualWS {
+            guard index != v.active, index >= 0, index < v.count else { return }
+            v.switchTo(index)
+            ignoreFocusSwitchUntil = Date().addingTimeInterval(0.8)
+            lastFocusedID = AXWindow.focused.flatMap(id)
+            tick()
+            focusTopWindow()
+            onDesktopChange?()
+        } else {
+            Spaces.switchToDesktop(index)
+        }
+    }
+
+    func switchDesktop(next: Bool) {
+        if let v = virtualWS {
+            switchDesktop(v.active + (next ? 1 : -1))
+        } else {
+            Spaces.swipe(toNext: next)
+        }
+    }
+
+    /// Activating a parked window (⌘Tab, Dock, a notification) switches to its workspace. Only a *change* of
+    /// focus counts: after switching to an empty workspace the old window stays focused and must not pull us back.
+    private var ignoreFocusSwitchUntil = Date.distantPast
+    private var lastFocusedID: WindowID?
+    private func followFocusedWindowsWorkspace() {
+        guard let v = virtualWS, let f = AXWindow.focused, let id = id(f) else { return }
+        guard id != lastFocusedID else { return }
+        lastFocusedID = id
+        guard Date() >= ignoreFocusSwitchUntil else { return }
+        let ws = v.workspace(of: id)
+        guard ws != v.active else { return }
+        print("Virtual: focused window belongs to workspace \(ws + 1); switching")
+        v.switchTo(ws)
+        tick()
+        onDesktopChange?()
+    }
+
+    private func focusTopWindow() {
+        guard let v = virtualWS else { return }
+        if let id = zOrder.first(where: { v.workspace(of: $0) == v.active }) { system.execute([.raise(id)]) }
+    }
+
+    /// Parks windows of inactive workspaces and restores returning floating ones; tiled ones follow their grid.
+    private func applyVirtualParking(_ snap: Snapshot) {
+        guard let v = virtualWS else { return }
+        let ids = snap.windows.map(\.id)
+        v.apply(windows: ids, isTiled: { self.state.isTiled($0) }, frame: { snap.window($0)?.frame },
+                setFrame: { self.system.execute([.setFrame($0, $1)]) }, parkOrigin: { f in
+                    // Bottom-right corner of the screen the window is on, leaving two points visible.
+                    let screen = NSScreen.screens.first { $0.frame.toCocoa().contains(f.center) } ?? NSScreen.screens[0]
+                    let r = screen.frame.toCocoa()
+                    return CGPoint(x: r.maxX - 2, y: r.maxY - 2)
+                })
     }
 
     var enabled: Bool {
@@ -43,6 +186,12 @@ final class WindowManager {
         overlay = ZoneOverlay(screen: NSScreen.screens[0])
         focusRing.isTiled = { [unowned self] w in self.isTiled(w) }
         focusRing.onReorder = { [unowned self] in self.stackHandles() }
+        if config.restoreLayouts, let data = try? Data(contentsOf: Config.statePath),
+           let layout = try? JSONDecoder().decode(SavedLayout.self, from: data) {
+            saved = layout
+            lastSaved = layout
+        }
+        configureWorkspaces()
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in self?.tick() }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
@@ -54,16 +203,19 @@ final class WindowManager {
                 self?.tick()
             }
         }
-        if config.restoreLayouts, let data = try? Data(contentsOf: Config.statePath),
-           let layout = try? JSONDecoder().decode(SavedLayout.self, from: data) {
-            saved = layout
-            lastSaved = layout
-        }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             self?.saveNow()
         }
+        // App activation (⌘Tab, Dock) is the common way to reach a parked window; AX focus events fire before
+        // the frontmost app updates, so re-check shortly after activation as well.
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                                                          object: nil, queue: .main) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self?.followFocusedWindowsWorkspace() }
+        }
         axObserver = WindowObserver(onNewWindow: { [weak self] _ in self?.tick() },
                                     onFocusChange: { [weak self] in
+                                        self?.followFocusedWindowsWorkspace()
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self?.followFocusedWindowsWorkspace() }
                                         self?.focusRing.update()
                                         self?.onFocusChange?()
                                     })
@@ -79,21 +231,54 @@ final class WindowManager {
     func tick() {
         guard !interacting, !switching else { return }
         for _ in 0..<3 {
-            let snap = system.snapshot(tracked: tracked)
+            var snap = system.snapshot(tracked: tracked)
             zOrder = snap.windows.map(\.id)
+            if assignNewVirtualWindows(snap) { snap = system.snapshot(tracked: tracked) }
             restoreIfFirstVisit(snap)
             let (next, commands) = reconciler.reconcile(state, snap)
             state = next
             scheduleSave(snap)
+            applyVirtualParking(snap)
             guard !commands.isEmpty else { break }
             system.execute(commands)
         }
         refreshChrome()
     }
 
+    /// Windows keep arriving for a while after launch (moves from other desktops land asynchronously), so saved
+    /// slots are matched against newly seen windows until this deadline instead of once.
+    private var virtualRestoreDeadline = Date().addingTimeInterval(20)
+
+    /// Gives every not-yet-assigned window a workspace: its saved slot if one matches, otherwise the active one.
+    /// Returns true if any window was placed from the saved layout, so the snapshot should be rebuilt.
+    private func assignNewVirtualWindows(_ snap: Snapshot) -> Bool {
+        guard let v = virtualWS else { return false }
+        var pool = snap.windows.filter { !v.isKnown($0.id) }
+        guard !pool.isEmpty else { return false }
+        var placed = false
+        if config.restoreLayouts, Date() < virtualRestoreDeadline {
+            for savedSpace in saved.spaces where savedSpace.id >= 1_000_000 {
+                let candidates = pool.filter { !reconciler.isIgnored($0) }
+                guard let grid = saved.restore(space: savedSpace.id, candidates: candidates) else { continue }
+                let ws = Int((savedSpace.id - 1_000_000) / 100)
+                for id in grid.windows { v.move(id, to: ws) }
+                pool.removeAll { grid.contains($0.id) }
+                // Merge into whatever that workspace already has rather than replacing it.
+                state.mutate(savedSpace.id) { existing in
+                    for col in grid.columns { existing.columns.append(col) }
+                    for (k, h) in grid.heightWeights { existing.heightWeights[k] = h }
+                }
+                state.seen[savedSpace.id, default: []].formUnion(grid.windows)
+                placed = true
+            }
+        }
+        for w in pool { v.adopt(w.id) }
+        return placed
+    }
+
     /// A desktop seen for the first time this run gets its saved grid back, with windows matched by app and title.
     private func restoreIfFirstVisit(_ snap: Snapshot) {
-        guard config.restoreLayouts else { return }
+        guard config.restoreLayouts, virtualWS == nil else { return }
         for screen in snap.screens where state.seen[screen.space] == nil && state.grid(for: screen.space).isEmpty {
             let here = snap.windows.filter { screen.area.contains($0.frame.center) && $0.spaces.contains(screen.space) && !reconciler.isIgnored($0) }
             if let grid = saved.restore(space: screen.space, candidates: here) { state.grids[screen.space] = grid }
@@ -284,12 +469,30 @@ final class WindowManager {
     // MARK: Desktops
 
     func sendFocusedWindow(toNext: Bool) {
-        guard let cur = Spaces.currentDesktopIndex() else { return }
+        guard let cur = currentDesktop else { return }
         sendFocusedWindow(toDesktop: cur + (toNext ? 1 : -1))
     }
 
     func sendFocusedWindow(toDesktop index: Int) {
         guard let w = AXWindow.focused else { return }
+        if let v = virtualWS {
+            guard let id = id(w), index >= 0, index < v.count, index != v.active else { return }
+            let wasTiled = isTiled(w)
+            untile(w)
+            v.move(id, to: index)
+            // The sent window is still focused for a moment; don't let that pull us into its workspace.
+            ignoreFocusSwitchUntil = Date().addingTimeInterval(0.8)
+            if wasTiled {
+                // Pre-place it in the target workspace's grid so it is tiled when that workspace shows.
+                let screenIndex = NSScreen.screens.firstIndex { $0.visibleFrame.toCocoa().contains(w.frame.center) } ?? 0
+                let space = v.spaceID(workspace: index, screenIndex: screenIndex)
+                state.mutate(space) { $0.apply(.newColumn(index: $0.columns.count), to: id) }
+                state.seen[space, default: []].insert(id)
+            }
+            tick()
+            focusTopWindow()
+            return
+        }
         let wasTiled = isTiled(w)
         if wasTiled {
             untile(w)

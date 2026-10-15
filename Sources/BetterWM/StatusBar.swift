@@ -10,6 +10,8 @@ final class StatusBar {
     private let events = WindowServerEvents()
     private var clock: Timer?
     var onSelectDesktop: ((Int) -> Void)?
+    var desktopCount: () -> Int = { Spaces.desktops().count }
+    var currentDesktop: () -> Int? = { Spaces.currentDesktopIndex() }
     /// Called whenever the bar is shown or hidden so the layout can reserve space.
     var onLayoutChange: (() -> Void)?
 
@@ -86,8 +88,8 @@ final class StatusBar {
         let formatter = DateFormatter()
         formatter.dateFormat = config.barClockFormat
         let model = BarView.Model(
-            desktops: Spaces.desktops().count,
-            current: Spaces.currentDesktopIndex(),
+            desktops: desktopCount(),
+            current: currentDesktop(),
             app: app,
             title: title,
             clock: formatter.string(from: Date()),

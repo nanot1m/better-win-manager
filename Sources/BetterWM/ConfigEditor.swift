@@ -37,6 +37,8 @@ final class ConfigWindow: NSObject {
     private var autoTileCheck: NSButton!
     private var tileOnStartCheck: NSButton!
     private var restoreCheck: NSButton!
+    private var workspacesPopup: NSPopUpButton!
+    private var virtualCountField: NSTextField!
     private var overlayCheck: NSButton!
     private var sliders: [(KeyPath<Config, CGFloat>, WritableKeyPath<Config, CGFloat>, NSSlider, NSTextField)] = []
     private var savedLabel: NSTextField!
@@ -189,6 +191,25 @@ final class ConfigWindow: NSObject {
             modifierButtons[key] = b
             mods.addArrangedSubview(b)
         }
+        workspacesPopup = NSPopUpButton()
+        for m in Config.WorkspaceMode.allCases {
+            workspacesPopup.addItem(withTitle: m.title)
+            workspacesPopup.lastItem?.representedObject = m.rawValue
+        }
+        workspacesPopup.target = self
+        workspacesPopup.action = #selector(workspaceModeChanged)
+        virtualCountField = NSTextField(string: "4")
+        virtualCountField.widthAnchor.constraint(equalToConstant: 48).isActive = true
+        virtualCountField.alignment = .right
+        let wsHint = NSTextField(wrappingLabelWithString: "Virtual workspaces live on one macOS desktop; windows of the other workspaces are parked just off the bottom-right corner, so switching is instant. They still show in ⌘Tab and Mission Control.")
+        wsHint.font = .systemFont(ofSize: 11)
+        wsHint.textColor = .secondaryLabelColor
+        wsHint.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
+        let workspaces = box("Desktops", rows: [
+            [label("Mode"), workspacesPopup],
+            [label("Virtual workspaces"), NSStackView(views: [virtualCountField, NSTextField(labelWithString: "1–9")])],
+            [NSView(), wsHint],
+        ])
         let tiling = box("Tiling", rows: [
             [label("New windows"), autoTileCheck],
             [label("On launch"), tileOnStartCheck],
@@ -227,7 +248,11 @@ final class ConfigWindow: NSObject {
             [label("Corners"), ringAutoRadius],
             [label("Fallback radius"), NSStackView(views: [ringRadius, ringRadiusLabel])],
         ])
-        return [layout, tiling, ring]
+        return [layout, tiling, workspaces, ring]
+    }
+
+    @objc private func workspaceModeChanged() {
+        virtualCountField.isEnabled = (workspacesPopup.selectedItem?.representedObject as? String) == Config.WorkspaceMode.virtual.rawValue
     }
 
     @objc private func autoRadiusChanged() {
@@ -501,6 +526,9 @@ final class ConfigWindow: NSObject {
         autoTileCheck.state = config.autoTile ? .on : .off
         tileOnStartCheck.state = config.tileExistingOnStart ? .on : .off
         restoreCheck.state = config.restoreLayouts ? .on : .off
+        workspacesPopup.selectItem(at: Config.WorkspaceMode.allCases.firstIndex(of: config.workspaces) ?? 0)
+        virtualCountField.stringValue = String(config.virtualWorkspaces)
+        workspaceModeChanged()
         overlayCheck.state = config.actionOverlay ? .on : .off
         strategyPopup.selectItem(at: Config.AutoTileStrategy.allCases.firstIndex(of: config.autoTileStrategy) ?? 0)
         let mods = config.dragModifiers.lowercased().split(separator: "+").map(String.init)
@@ -570,6 +598,10 @@ final class ConfigWindow: NSObject {
         config.autoTile = autoTileCheck.state == .on
         config.tileExistingOnStart = tileOnStartCheck.state == .on
         config.restoreLayouts = restoreCheck.state == .on
+        if let raw = workspacesPopup.selectedItem?.representedObject as? String, let m = Config.WorkspaceMode(rawValue: raw) {
+            config.workspaces = m
+        }
+        config.virtualWorkspaces = max(1, min(9, Int(virtualCountField.stringValue) ?? 4))
         config.actionOverlay = overlayCheck.state == .on
         if let raw = strategyPopup.selectedItem?.representedObject as? String, let st = Config.AutoTileStrategy(rawValue: raw) {
             config.autoTileStrategy = st

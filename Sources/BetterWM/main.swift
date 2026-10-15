@@ -38,7 +38,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar = StatusBar(config: config)
         manager.system.topInset = { [weak self] screen in self?.bar.inset(for: screen) ?? 0 }
         bar.onLayoutChange = { [weak self] in self?.manager.apply() }
-        bar.onSelectDesktop = { Spaces.switchToDesktop($0) }
+        bar.onSelectDesktop = { [weak self] in self?.manager.switchDesktop($0) }
+        bar.desktopCount = { [weak self] in self?.manager.desktopCount ?? 0 }
+        bar.currentDesktop = { [weak self] in self?.manager.currentDesktop }
+        manager.onDesktopChange = { [weak self] in self?.bar.focusChanged() }
         manager.onFocusChange = { [weak self] in self?.bar.focusChanged() }
         manager.apply()
         hud.enabled = config.actionOverlay
@@ -197,7 +200,7 @@ extension AppDelegate {
         return menu
     }
 
-    @objc func switchDesktop(_ sender: NSMenuItem) { Spaces.switchToDesktop(sender.tag) }
+    @objc func switchDesktop(_ sender: NSMenuItem) { manager.switchDesktop(sender.tag) }
     @objc func sendToDesktop(_ sender: NSMenuItem) { manager.sendFocusedWindow(toDesktop: sender.tag) }
     @objc func toggleFocused() { manager.toggleFocused() }
     @objc func showPopup() { popup.toggle() }
@@ -226,13 +229,13 @@ extension AppDelegate {
             "retile": { [weak self] in self?.manager.retileCurrentScreen() },
             "equalize": { [weak self] in self?.manager.equalize() },
             "pause": { [weak self] in self?.togglePause() },
-            "desktopNext": { Spaces.swipe(toNext: true) },
+            "desktopNext": { [weak self] in self?.manager.switchDesktop(next: true) },
             "sendToNextDesktop": { [weak self] in self?.manager.sendFocusedWindow(toNext: true) },
             "sendToPreviousDesktop": { [weak self] in self?.manager.sendFocusedWindow(toNext: false) },
-            "desktopPrevious": { Spaces.swipe(toNext: false) },
+            "desktopPrevious": { [weak self] in self?.manager.switchDesktop(next: false) },
         ]
         for i in 1...9 {
-            actions["desktop\(i)"] = { Spaces.switchToDesktop(i - 1) }
+            actions["desktop\(i)"] = { [weak self] in self?.manager.switchDesktop(i - 1) }
             actions["sendToDesktop\(i)"] = { [weak self] in self?.manager.sendFocusedWindow(toDesktop: i - 1) }
         }
         return actions
@@ -326,17 +329,17 @@ extension AppDelegate: NSMenuDelegate {
         guard menu.title == "Desktops" || menu.title == "SendTo" else { return }
         let sending = menu.title == "SendTo"
         menu.removeAllItems()
-        let current = Spaces.currentDesktopIndex()
+        let current = manager.currentDesktop
         if sending {
             let next = menu.addItem(withTitle: "Next Desktop", action: #selector(sendNext), keyEquivalent: "")
             next.target = self
-            next.isEnabled = current.map { $0 + 1 < Spaces.desktops().count } ?? false
+            next.isEnabled = current.map { $0 + 1 < manager.desktopCount } ?? false
             let prev = menu.addItem(withTitle: "Previous Desktop", action: #selector(sendPrevious), keyEquivalent: "")
             prev.target = self
             prev.isEnabled = current.map { $0 > 0 } ?? false
             menu.addItem(.separator())
         }
-        for i in Spaces.desktops().indices {
+        for i in 0..<manager.desktopCount {
             let item = menu.addItem(withTitle: "Desktop \(i + 1)", action: sending ? #selector(sendToDesktop(_:)) : #selector(switchDesktop(_:)), keyEquivalent: "")
             item.target = self
             item.tag = i

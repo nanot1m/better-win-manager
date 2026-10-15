@@ -57,7 +57,7 @@ final class DragController {
             // Trackpads emit a burst per gesture; one step per burst.
             if delta != 0, Date().timeIntervalSince(lastScrollSwitch) > 0.35 {
                 lastScrollSwitch = Date()
-                Spaces.swipe(toNext: delta < 0)
+                manager.switchDesktop(next: delta < 0)
             }
             return nil
         case .leftMouseDown:

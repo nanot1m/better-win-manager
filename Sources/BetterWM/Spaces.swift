@@ -188,6 +188,17 @@ enum Spaces {
         sendFocusedWindow(toDesktop: cur + (toNext ? 1 : -1), completion: completion)
     }
 
+    /// Every standard window of every regular app, on any Space (Accessibility enumeration; slower than the window list).
+    static func allWindows() -> [AXWindow] {
+        var out: [AXWindow] = []
+        for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular && app.processIdentifier != getpid() {
+            var v: CFTypeRef?
+            AXUIElementCopyAttributeValue(AXUIElementCreateApplication(app.processIdentifier), kAXWindowsAttribute as CFString, &v)
+            out += (v as? [AXUIElement] ?? []).map { AXWindow(element: $0, pid: app.processIdentifier) }.filter(\.isStandard)
+        }
+        return out
+    }
+
     /// Standard windows visible right now, i.e. on the active Spaces, front to back.
     /// Matched to Accessibility windows by window ID; frames are ambiguous when two windows overlap exactly.
     static func visibleWindows() -> [AXWindow] {

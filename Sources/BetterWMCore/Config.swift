@@ -10,6 +10,14 @@ public struct Config {
     public var tileExistingOnStart: Bool = true
     /// Remember each desktop's grid and put matching windows back into it on the next launch.
     public var restoreLayouts: Bool = true
+    /// "native" uses macOS Spaces; "virtual" emulates desktops on one Space by parking other workspaces' windows off-screen.
+    public var workspaces: WorkspaceMode = .native
+    public var virtualWorkspaces: Int = 4
+
+    public enum WorkspaceMode: String, CaseIterable {
+        case native, virtual
+        public var title: String { self == .native ? "macOS desktops (Spaces)" : "Virtual workspaces on one desktop" }
+    }
     public var autoTile: Bool = true
     public var autoTileStrategy: AutoTileStrategy = .rightmost
     public var focusRing: Bool = true
@@ -132,6 +140,10 @@ public struct Config {
         tileExistingOnStart = \(tileExistingOnStart)
         # Remember each desktop's grid (state.json next to this file) and restore matching windows on launch.
         restoreLayouts = \(restoreLayouts)
+        # "native": macOS desktops (Spaces). "virtual": N workspaces emulated on a single desktop by parking
+        # the other workspaces' windows just off the bottom-right corner; switching is instant.
+        workspaces = \(workspaces.rawValue)
+        virtualWorkspaces = \(virtualWorkspaces)
         # Tile windows automatically when they open or arrive on a desktop.
         autoTile = \(autoTile)
         # Where an auto-tiled window goes: rightmost, leftmost, position, nextToFocused, stackFocused, autoSplit, spiral.
@@ -244,6 +256,8 @@ public struct Config {
             case "outerGap": cfg.outerGap = Double(value).map { CGFloat($0) } ?? cfg.outerGap
             case "handleWidth": cfg.handleWidth = Double(value).map { CGFloat($0) } ?? cfg.handleWidth
             case "dragModifiers": cfg.dragModifiers = value
+            case "workspaces": cfg.workspaces = WorkspaceMode(rawValue: value.lowercased()) ?? cfg.workspaces
+            case "virtualWorkspaces": cfg.virtualWorkspaces = Int(value).map { max(1, min(9, $0)) } ?? cfg.virtualWorkspaces
             case "restoreLayouts": cfg.restoreLayouts = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "tileExistingOnStart": cfg.tileExistingOnStart = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "autoTile": cfg.autoTile = ["true", "yes", "1", "on"].contains(value.lowercased())

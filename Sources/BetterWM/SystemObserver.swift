@@ -6,6 +6,9 @@ final class SystemObserver {
     private var ax: [WindowID: AXWindow] = [:]
     /// Space to keep free at the top of each screen (the status bar), in points.
     var topInset: (NSScreen) -> CGFloat = { _ in 0 }
+    /// Virtual workspaces: overrides the Space a screen shows and the Spaces a window belongs to.
+    var spaceOverride: ((NSScreen) -> SpaceID)?
+    var windowSpacesOverride: ((WindowID) -> [SpaceID])?
 
     func axWindow(_ id: WindowID) -> AXWindow? {
         if let w = ax[id], w.isValid { return w }
@@ -20,7 +23,8 @@ final class SystemObserver {
     }
 
     func screens() -> [ScreenInfo] {
-        NSScreen.screens.map { s in
+        // A fullscreen app's Space is not a desktop; never tile there.
+        NSScreen.screens.filter { spaceOverride != nil || !Spaces.isFullscreen(Spaces.current(for: $0)) }.map { s in
             var area = s.visibleFrame.toCocoa()
             // The status bar is anchored to the screen's top edge; keep tiled windows below its bottom edge.
             let barBottom = s.frame.toCocoa().minY + topInset(s)
@@ -28,7 +32,7 @@ final class SystemObserver {
                 area.size.height -= barBottom - area.minY
                 area.origin.y = barBottom
             }
-            return ScreenInfo(space: Spaces.current(for: s), area: area)
+            return ScreenInfo(space: spaceOverride?(s) ?? Spaces.current(for: s), area: area)
         }
     }
 
@@ -59,7 +63,8 @@ final class SystemObserver {
     }
 
     private func info(_ id: WindowID, _ w: AXWindow) -> WindowInfo {
-        WindowInfo(id: id, pid: w.pid, bundleID: w.bundleID, frame: w.frame, spaces: Spaces.spaces(of: id), title: w.title)
+        WindowInfo(id: id, pid: w.pid, bundleID: w.bundleID, frame: w.frame,
+                   spaces: windowSpacesOverride?(id) ?? Spaces.spaces(of: id), title: w.title)
     }
 
     func execute(_ commands: [Command]) {
