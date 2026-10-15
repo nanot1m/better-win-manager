@@ -114,17 +114,69 @@ final class WindowManager {
 
     // MARK: Desktops facade (native Spaces or virtual workspaces)
 
+    /// Every standard window with the desktop it lives on, front-to-back within each desktop, current desktop first.
+    func windowsByDesktop() -> [(desktop: Int, windows: [AXWindow])] {
+        var byDesktop: [Int: [AXWindow]] = [:]
+        if let v = virtualWS {
+            for w in Spaces.visibleWindows() { if let id = id(w) { byDesktop[v.workspace(of: id), default: []].append(w) } }
+        } else {
+            let desktops = Spaces.desktops()
+            for w in Spaces.allWindows() {
+                guard let id = id(w), let space = Spaces.spaces(of: id).first, let d = desktops.firstIndex(of: space) else { continue }
+                byDesktop[d, default: []].append(w)
+            }
+        }
+        let current = currentDesktop ?? 0
+        // Reading order: left to right by column, top to bottom within it.
+        func sortKey(_ w: AXWindow) -> (CGFloat, CGFloat) {
+            let f = layoutFrame(of: w) ?? w.frame
+            return ((f.minX / 40).rounded(), f.minY)
+        }
+        return byDesktop.keys.sorted { a, b in a == current ? true : b == current ? false : a < b }.map { d in
+            (d, byDesktop[d]!.sorted { sortKey($0) < sortKey($1) })
+        }
+    }
+
+    /// Where a window sits on its own desktop: its grid slot if tiled, its remembered frame if parked, else as is.
+    private func layoutFrame(of w: AXWindow) -> CGRect? {
+        guard let id = id(w) else { return nil }
+        if let space = state.space(containing: id), let screen = system.screens().first {
+            return reconciler.geometry(state.grid(for: space), screen).frame(of: id)
+        }
+        return virtualWS?.parkedFrame(of: id)
+    }
+
+    /// Brings `w` to front, switching to its desktop first when needed.
+    func activate(_ w: AXWindow, onDesktop desktop: Int) {
+        if desktop != currentDesktop {
+            switchDesktop(desktop)
+            // Native Space switches animate; raise once the new desktop is showing.
+            DispatchQueue.main.asyncAfter(deadline: .now() + (isVirtual ? 0.05 : 0.5)) { w.raise() }
+        } else {
+            w.raise()
+        }
+    }
+
     var desktopCount: Int { virtualWS?.count ?? Spaces.desktops().count }
     var currentDesktop: Int? { virtualWS?.active ?? Spaces.currentDesktopIndex() }
 
     func switchDesktop(_ index: Int) {
         if let v = virtualWS {
-            guard index != v.active, index >= 0, index < v.count else { return }
+            guard index != v.active, index >= 0 else { return }
+            // Workspaces are created on demand: asking for 6 with 4 configured makes 5 and 6.
+            if index >= v.count { v.setCount(index + 1) }
+            // Hide the ring during the switch so it doesn't linger on the parked window.
+            focusRing.suspended = true
             v.switchTo(index)
             ignoreFocusSwitchUntil = Date().addingTimeInterval(0.8)
             lastFocusedID = AXWindow.focused.flatMap(id)
             tick()
             focusTopWindow()
+            v.trimEmptyTrailing(minimum: config.virtualWorkspaces)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                guard let self, !self.interacting else { return }
+                self.focusRing.suspended = false
+            }
             onDesktopChange?()
         } else {
             Spaces.switchToDesktop(index)
@@ -151,8 +203,13 @@ final class WindowManager {
         let ws = v.workspace(of: id)
         guard ws != v.active else { return }
         print("Virtual: focused window belongs to workspace \(ws + 1); switching")
+        focusRing.suspended = true
         v.switchTo(ws)
         tick()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self, !self.interacting else { return }
+            self.focusRing.suspended = false
+        }
         onDesktopChange?()
     }
 
@@ -432,16 +489,15 @@ final class WindowManager {
         apply()
     }
 
-    /// Cycles through tiled windows left to right, top to bottom, on the screen holding the focused window.
+    /// Cycles through every window on the current desktop, tiled or floating, in reading order
+    /// (left to right, top to bottom), starting from the focused one.
     func focusNext(reverse: Bool = false) {
+        guard let current = currentDesktop,
+              let group = windowsByDesktop().first(where: { $0.desktop == current }), !group.windows.isEmpty else { return }
+        let order = group.windows
         let focused = AXWindow.focused
-        let fid = focused.flatMap(id)
-        let space = fid.flatMap(state.space) ?? screen(at: focused?.frame.center ?? NSEvent.mouseLocation.toAX())?.space
-        guard let space, let geo = geometry(for: space) else { return }
-        let order = geo.windowFrames().map(\.0)
-        guard !order.isEmpty else { return }
-        let i = fid.flatMap(order.firstIndex) ?? (reverse ? 0 : order.count - 1)
-        system.execute([.raise(order[(i + (reverse ? -1 : 1) + order.count) % order.count])])
+        let i = focused.flatMap { f in order.firstIndex { $0 == f } } ?? (reverse ? 0 : order.count - 1)
+        order[(i + (reverse ? -1 : 1) + order.count) % order.count].raise()
     }
 
     // MARK: Presets
@@ -466,7 +522,6 @@ final class WindowManager {
         apply()
     }
 
-    // MARK: Desktops
 
     func sendFocusedWindow(toNext: Bool) {
         guard let cur = currentDesktop else { return }
@@ -476,7 +531,8 @@ final class WindowManager {
     func sendFocusedWindow(toDesktop index: Int) {
         guard let w = AXWindow.focused else { return }
         if let v = virtualWS {
-            guard let id = id(w), index >= 0, index < v.count, index != v.active else { return }
+            guard let id = id(w), index >= 0, index < 9, index != v.active else { return }
+            if index >= v.count { v.setCount(index + 1) }
             let wasTiled = isTiled(w)
             untile(w)
             v.move(id, to: index)

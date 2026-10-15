@@ -37,6 +37,8 @@ final class ConfigWindow: NSObject {
     private var autoTileCheck: NSButton!
     private var tileOnStartCheck: NSButton!
     private var restoreCheck: NSButton!
+    private var switcherThumbsCheck: NSButton!
+    private var switcherCheck: NSButton!
     private var workspacesPopup: NSPopUpButton!
     private var virtualCountField: NSTextField!
     private var overlayCheck: NSButton!
@@ -66,6 +68,7 @@ final class ConfigWindow: NSObject {
     private var barCpuCheck: NSButton!
     private var barMemoryCheck: NSButton!
     private var barDiskCheck: NSButton!
+    private var barInputCheck: NSButton!
     private var barCatSheets: NSTextView!
     private var barFahrenheit: NSButton!
     private var barLocationAuto: NSButton!
@@ -176,6 +179,8 @@ final class ConfigWindow: NSObject {
         autoTileCheck = NSButton(checkboxWithTitle: "Tile new windows automatically", target: nil, action: nil)
         tileOnStartCheck = NSButton(checkboxWithTitle: "Tile existing windows when a desktop is first seen", target: nil, action: nil)
         restoreCheck = NSButton(checkboxWithTitle: "Remember each desktop's layout and restore it on launch", target: nil, action: nil)
+        switcherCheck = NSButton(checkboxWithTitle: "Enable the ⌥Tab window switcher", target: self, action: #selector(switcherChanged))
+        switcherThumbsCheck = NSButton(checkboxWithTitle: "Show window previews (needs Screen Recording)", target: nil, action: nil)
         overlayCheck = NSButton(checkboxWithTitle: "Show pressed hotkey and action on screen (for demos)", target: nil, action: nil)
         strategyPopup = NSPopUpButton()
         for st in Config.AutoTileStrategy.allCases {
@@ -214,6 +219,8 @@ final class ConfigWindow: NSObject {
             [label("New windows"), autoTileCheck],
             [label("On launch"), tileOnStartCheck],
             [NSView(), restoreCheck],
+            [label("Switcher"), switcherCheck],
+            [NSView(), switcherThumbsCheck],
             [label("Placement"), strategyPopup],
             [label("Drag to tile with"), mods],
             [label("Action overlay"), overlayCheck],
@@ -249,6 +256,10 @@ final class ConfigWindow: NSObject {
             [label("Fallback radius"), NSStackView(views: [ringRadius, ringRadiusLabel])],
         ])
         return [layout, tiling, workspaces, ring]
+    }
+
+    @objc private func switcherChanged() {
+        switcherThumbsCheck.isEnabled = switcherCheck.state == .on
     }
 
     @objc private func workspaceModeChanged() {
@@ -328,6 +339,7 @@ final class ConfigWindow: NSObject {
         barCpuCheck = NSButton(checkboxWithTitle: "CPU", target: nil, action: nil)
         barMemoryCheck = NSButton(checkboxWithTitle: "Memory", target: nil, action: nil)
         barDiskCheck = NSButton(checkboxWithTitle: "Free disk", target: nil, action: nil)
+        barInputCheck = NSButton(checkboxWithTitle: "Keyboard layout", target: nil, action: nil)
         barCatSheets = NSTextView()
         barCatSheets.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         barCatSheets.isRichText = false
@@ -355,7 +367,7 @@ final class ConfigWindow: NSObject {
         let general = box("Status Bar", rows: [
             [label("Bar"), barCheck],
             [label("Show"), NSStackView(views: [barBatteryCheck, barBatteryPercentCheck, barWifiCheck, barCatCheck])],
-            [NSView(), NSStackView(views: [barCpuCheck, barMemoryCheck, barDiskCheck])],
+            [NSView(), NSStackView(views: [barCpuCheck, barMemoryCheck, barDiskCheck, barInputCheck])],
             [label("Cats"), sheetsScroll],
             [NSView(), sheetButtons],
             [NSView(), sheetHint],
@@ -526,6 +538,9 @@ final class ConfigWindow: NSObject {
         autoTileCheck.state = config.autoTile ? .on : .off
         tileOnStartCheck.state = config.tileExistingOnStart ? .on : .off
         restoreCheck.state = config.restoreLayouts ? .on : .off
+        switcherThumbsCheck.state = config.switcherThumbnails ? .on : .off
+        switcherCheck.state = config.switcher ? .on : .off
+        switcherChanged()
         workspacesPopup.selectItem(at: Config.WorkspaceMode.allCases.firstIndex(of: config.workspaces) ?? 0)
         virtualCountField.stringValue = String(config.virtualWorkspaces)
         workspaceModeChanged()
@@ -555,6 +570,7 @@ final class ConfigWindow: NSObject {
         barCpuCheck.state = config.barCpu ? .on : .off
         barMemoryCheck.state = config.barMemory ? .on : .off
         barDiskCheck.state = config.barDisk ? .on : .off
+        barInputCheck.state = config.barInputSource ? .on : .off
         barCatSheets.string = config.barCatSheets.joined(separator: "\n")
         barFahrenheit.state = config.barWeatherFahrenheit ? .on : .off
         let auto = config.barWeatherLocation.lowercased() == "auto"
@@ -598,6 +614,8 @@ final class ConfigWindow: NSObject {
         config.autoTile = autoTileCheck.state == .on
         config.tileExistingOnStart = tileOnStartCheck.state == .on
         config.restoreLayouts = restoreCheck.state == .on
+        config.switcherThumbnails = switcherThumbsCheck.state == .on
+        config.switcher = switcherCheck.state == .on
         if let raw = workspacesPopup.selectedItem?.representedObject as? String, let m = Config.WorkspaceMode(rawValue: raw) {
             config.workspaces = m
         }
@@ -629,6 +647,7 @@ final class ConfigWindow: NSObject {
         config.barCpu = barCpuCheck.state == .on
         config.barMemory = barMemoryCheck.state == .on
         config.barDisk = barDiskCheck.state == .on
+        config.barInputSource = barInputCheck.state == .on
         config.barCatSheets = barCatSheets.string.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         config.barWeatherFahrenheit = barFahrenheit.state == .on
         config.barWeatherLocation = barLocationAuto.state == .on ? "auto" : barLocationField.stringValue.trimmingCharacters(in: .whitespaces)

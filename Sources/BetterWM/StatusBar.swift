@@ -9,6 +9,7 @@ final class StatusBar {
     private let weather: WeatherService
     private let events = WindowServerEvents()
     private var clock: Timer?
+    private var inputSourceObserver: NSObjectProtocol?
     var onSelectDesktop: ((Int) -> Void)?
     var desktopCount: () -> Int = { Spaces.desktops().count }
     var currentDesktop: () -> Int? = { Spaces.currentDesktopIndex() }
@@ -27,6 +28,7 @@ final class StatusBar {
         }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in self?.rebuild() }
         clock = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in self?.refresh() }
+        inputSourceObserver = InputSource.observe { [weak self] in self?.refresh() }
         rebuild()
     }
 
@@ -102,7 +104,8 @@ final class StatusBar {
             showWifi: config.barWifi,
             cpu: config.barCpu ? SystemStatus.cpuLoad() : nil,
             memory: config.barMemory ? SystemStatus.memoryUsed() : nil,
-            disk: config.barDisk ? SystemStatus.diskFree() : nil
+            disk: config.barDisk ? SystemStatus.diskFree() : nil,
+            inputSource: config.barInputSource ? InputSource.current() : nil
         )
         windows.forEach { $0.view.render(model) }
     }
@@ -177,6 +180,7 @@ final class BarView: NSView {
         var cpu: Double?
         var memory: Double?
         var disk: Int64?
+        var inputSource: String?
     }
 
     var onSelectDesktop: ((Int) -> Void)?
@@ -199,6 +203,7 @@ final class BarView: NSView {
     private let memLabel = NSTextField(labelWithString: "")
     private let diskIcon = NSImageView()
     private let diskLabel = NSTextField(labelWithString: "")
+    private let inputLabel = NSTextField(labelWithString: "")
     private let wifiIcon = NSImageView()
     private let batteryIcon = NSImageView()
     private let batteryLabel = NSTextField(labelWithString: "")
@@ -224,7 +229,7 @@ final class BarView: NSView {
         wantsLayer = true
         layer?.masksToBounds = true
 
-        for l in [appLabel, titleLabel, weatherLabel, cpuLabel, memLabel, diskLabel, batteryLabel, clockLabel] {
+        for l in [appLabel, titleLabel, weatherLabel, cpuLabel, memLabel, diskLabel, inputLabel, batteryLabel, clockLabel] {
             l.font = .systemFont(ofSize: 12, weight: l === appLabel ? .semibold : .regular)
             l.textColor = .labelColor
             l.lineBreakMode = .byTruncatingTail
@@ -256,6 +261,13 @@ final class BarView: NSView {
             right.setCustomSpacing(3, after: icon)
             right.setCustomSpacing(12, after: label)
         }
+        inputLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        inputLabel.wantsLayer = true
+        inputLabel.layer?.cornerRadius = 4
+        inputLabel.alignment = .center
+        inputLabel.widthAnchor.constraint(equalToConstant: 26).isActive = true
+        right.addArrangedSubview(inputLabel)
+        right.setCustomSpacing(12, after: inputLabel)
         right.addArrangedSubview(wifiIcon)
         right.addArrangedSubview(batteryIcon)
         right.addArrangedSubview(batteryLabel)
@@ -303,7 +315,8 @@ final class BarView: NSView {
         layer?.cornerRadius = config.barRadius
         layer?.borderWidth = config.barBorderWidth
         layer?.borderColor = (NSColor(hex: config.barBorderColor) ?? .separatorColor).cgColor
-        for l in [appLabel, weatherLabel, cpuLabel, memLabel, diskLabel, batteryLabel, clockLabel] { l.textColor = textColor }
+        for l in [appLabel, weatherLabel, cpuLabel, memLabel, diskLabel, inputLabel, batteryLabel, clockLabel] { l.textColor = textColor }
+        inputLabel.layer?.backgroundColor = textColor.withAlphaComponent(0.12).cgColor
         titleLabel.textColor = textColor.withAlphaComponent(0.65)
         for icon in [weatherIcon, cpuIcon, memIcon, diskIcon, wifiIcon, batteryIcon] { icon.contentTintColor = textColor }
         cat.isHidden = !config.barCat
@@ -376,6 +389,8 @@ final class BarView: NSView {
         show(cpuIcon, cpuLabel, m.cpu.map { BarView.percent($0 * 100) })
         show(memIcon, memLabel, m.memory.map { BarView.percent($0 * 100) })
         show(diskIcon, diskLabel, m.disk.map(SystemStatus.formatBytes))
+        inputLabel.isHidden = m.inputSource == nil
+        inputLabel.stringValue = m.inputSource ?? ""
         wifiIcon.isHidden = !m.showWifi
         if m.showWifi {
             wifiIcon.image = m.wifi.map { NSImage(systemSymbolName: "wifi", variableValue: $0, accessibilityDescription: nil) }

@@ -25,12 +25,21 @@ final class VirtualWorkspaces {
     func workspace(of w: WindowID) -> Int { membership[w] ?? active }
     func isKnown(_ w: WindowID) -> Bool { membership[w] != nil }
     func isParked(_ w: WindowID) -> Bool { parked.contains(w) }
+    /// The real frame of a parked floating window, if remembered.
+    func parkedFrame(of w: WindowID) -> CGRect? { parkedFrames[w] }
 
     /// Unknown windows join the active workspace.
     func adopt(_ w: WindowID) { if membership[w] == nil { membership[w] = active } }
     func forget(_ w: WindowID) { membership[w] = nil; parkedFrames[w] = nil; parked.remove(w) }
     func move(_ w: WindowID, to ws: Int) { membership[w] = max(0, min(count - 1, ws)) }
     func switchTo(_ ws: Int) { active = max(0, min(count - 1, ws)) }
+
+    /// Drops trailing workspaces above the configured minimum once they hold no windows and aren't active.
+    func trimEmptyTrailing(minimum: Int) {
+        while count > max(1, minimum), count - 1 != active, !membership.values.contains(count - 1) {
+            count -= 1
+        }
+    }
 
     /// Restores every parked floating window's real frame and forgets the parking state.
     func unparkAll(setFrame: (WindowID, CGRect) -> Void) {

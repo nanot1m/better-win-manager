@@ -6,10 +6,14 @@ public struct Config {
     public var outerGap: CGFloat = 16
     public var handleWidth: CGFloat = 16
     public var dragModifiers: String = "alt"
-    public var hotkeys: [String: String] = ["popup": "alt+cmd+space"]
+    public var hotkeys: [String: String] = ["popup": "alt+cmd+space", "switcher": "alt+tab", "switcherBack": "alt+shift+tab"]
     public var tileExistingOnStart: Bool = true
     /// Remember each desktop's grid and put matching windows back into it on the next launch.
     public var restoreLayouts: Bool = true
+    /// Window switcher (⌥Tab). Off leaves the ⌥Tab hotkeys unregistered.
+    public var switcher: Bool = true
+    /// Show live window previews, or just app icons.
+    public var switcherThumbnails: Bool = true
     /// "native" uses macOS Spaces; "virtual" emulates desktops on one Space by parking other workspaces' windows off-screen.
     public var workspaces: WorkspaceMode = .native
     public var virtualWorkspaces: Int = 4
@@ -23,7 +27,7 @@ public struct Config {
     public var focusRing: Bool = true
     public var actionOverlay: Bool = false
     public var focusRingStyle: FocusRingStyle = .outline
-    public var focusRingFloating: Bool = false
+    public var focusRingFloating: Bool = true
     public var focusRingWidth: CGFloat = 3
     public var focusRingRadius: CGFloat = 10
     /// Measure each window's real corner radius once and match it; `focusRingRadius` is the fallback.
@@ -41,6 +45,7 @@ public struct Config {
     /// One cat per entry: a path to a "Pixel Cats 64x64" sheet (Last tick's layout) or "builtin". Empty = one built-in cat.
     public var barCatSheets: [String] = []
     public var barWifi: Bool = true
+    public var barInputSource: Bool = true
     public var barCpu: Bool = true
     public var barMemory: Bool = true
     public var barDisk: Bool = true
@@ -108,7 +113,8 @@ public struct Config {
     static var template: String { Config().serialized() }
 
     public static let actions: [(key: String, title: String)] = [
-        ("popup", "Window actions popup"), ("focusNext", "Focus next window"), ("focusPrevious", "Focus previous window"),
+        ("popup", "Window actions popup"), ("switcher", "Window switcher (⌥Tab)"), ("switcherBack", "Window switcher, backwards"),
+        ("focusNext", "Focus next window"), ("focusPrevious", "Focus previous window"),
         ("moveLeft", "Move left"), ("moveRight", "Move right"), ("moveUp", "Move up"), ("moveDown", "Move down"),
         ("mergeLeft", "Merge into left column"), ("mergeRight", "Merge into right column"),
         ("toggleTile", "Tile / untile focused window"), ("retile", "Retile current screen"),
@@ -140,6 +146,9 @@ public struct Config {
         tileExistingOnStart = \(tileExistingOnStart)
         # Remember each desktop's grid (state.json next to this file) and restore matching windows on launch.
         restoreLayouts = \(restoreLayouts)
+        # ⌥Tab window switcher grouped by desktop; previews need Screen Recording permission, otherwise icons only.
+        switcher = \(switcher)
+        switcherThumbnails = \(switcherThumbnails)
         # "native": macOS desktops (Spaces). "virtual": N workspaces emulated on a single desktop by parking
         # the other workspaces' windows just off the bottom-right corner; switching is instant.
         workspaces = \(workspaces.rawValue)
@@ -180,6 +189,7 @@ public struct Config {
         # (not bundled; download it yourself) or "builtin" for the hand-drawn cat. Two or more cats interact.
         barCatSheets = \(barCatSheets.joined(separator: ", "))
         barWifi = \(barWifi)
+        barInputSource = \(barInputSource)
         barCpu = \(barCpu)
         barMemory = \(barMemory)
         barDisk = \(barDisk)
@@ -258,6 +268,8 @@ public struct Config {
             case "dragModifiers": cfg.dragModifiers = value
             case "workspaces": cfg.workspaces = WorkspaceMode(rawValue: value.lowercased()) ?? cfg.workspaces
             case "virtualWorkspaces": cfg.virtualWorkspaces = Int(value).map { max(1, min(9, $0)) } ?? cfg.virtualWorkspaces
+            case "switcher": cfg.switcher = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "switcherThumbnails": cfg.switcherThumbnails = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "restoreLayouts": cfg.restoreLayouts = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "tileExistingOnStart": cfg.tileExistingOnStart = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "autoTile": cfg.autoTile = ["true", "yes", "1", "on"].contains(value.lowercased())
@@ -281,6 +293,7 @@ public struct Config {
             case "barCpu": cfg.barCpu = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barMemory": cfg.barMemory = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barDisk": cfg.barDisk = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "barInputSource": cfg.barInputSource = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barWifi": cfg.barWifi = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barWeather": cfg.barWeather = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barWeatherFahrenheit": cfg.barWeatherFahrenheit = ["true", "yes", "1", "on"].contains(value.lowercased())

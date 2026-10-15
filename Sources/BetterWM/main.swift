@@ -12,7 +12,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let hud = ActionHUD()
     var bar: StatusBar!
     var demo: DemoRunner?
+    var switcher: WindowSwitcher!
     var overlayItem: NSMenuItem?
+    var switcherItem: NSMenuItem?
     let configWindow = ConfigWindow()
 
     func applicationDidFinishLaunching(_ n: Notification) {
@@ -35,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let config = Config.load()
         manager = WindowManager(config: config)
         popup = ActionPopup(manager: manager)
+        switcher = WindowSwitcher(manager: manager)
         bar = StatusBar(config: config)
         manager.system.topInset = { [weak self] screen in self?.bar.inset(for: screen) ?? 0 }
         bar.onLayoutChange = { [weak self] in self?.manager.apply() }
@@ -94,6 +97,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             h.snapshot(hover: true, dragging: false, to: path)
             h.snapshot(hover: true, dragging: true, to: path.replacingOccurrences(of: ".png", with: "-drag.png"))
             print("handle snapshots written")
+        }
+        if let i = CommandLine.arguments.firstIndex(of: "--snapshot-switcher"), i + 1 < CommandLine.arguments.count {
+            let path = CommandLine.arguments[i + 1]
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [switcher] in switcher?.snapshot(to: path) }
         }
         if let i = CommandLine.arguments.firstIndex(of: "--snapshot-hud"), i + 1 < CommandLine.arguments.count {
             let path = CommandLine.arguments[i + 1]
@@ -176,6 +183,9 @@ extension AppDelegate {
         let pause = menu.addItem(withTitle: "Pause Tiling", action: #selector(togglePause), keyEquivalent: "p")
         pause.target = self
         pauseItem = pause
+        let switcherItem = menu.addItem(withTitle: "⌥Tab Window Switcher", action: #selector(toggleSwitcher), keyEquivalent: "")
+        switcherItem.target = self
+        self.switcherItem = switcherItem
         let overlay = menu.addItem(withTitle: "Show Action Overlay", action: #selector(toggleOverlay), keyEquivalent: "")
         overlay.target = self
         overlayItem = overlay
@@ -217,6 +227,8 @@ extension AppDelegate {
     func actionTable() -> [String: () -> Void] {
         var actions: [String: () -> Void] = [
             "popup": { [weak self] in self?.popup.toggle() },
+            "switcher": { [weak self] in self?.switcher.step(reverse: false) },
+            "switcherBack": { [weak self] in self?.switcher.step(reverse: true) },
             "focusNext": { [weak self] in self?.manager.focusNext() },
             "focusPrevious": { [weak self] in self?.manager.focusNext(reverse: true) },
             "moveLeft": { [weak self] in self?.manager.moveFocused(.left) },
@@ -252,9 +264,10 @@ extension AppDelegate {
         }
         for (index, (name, spec)) in config.hotkeys.sorted(by: { $0.key < $1.key }).enumerated() {
             guard let action = actions[name] else { print("Unknown hotkey action '\(name)'"); continue }
+            if name.hasPrefix("switcher"), !config.switcher { continue }
             let title = Config.actions.first { $0.key == name }?.title ?? name
             let wrapped = { [weak self] in
-                self?.hud.show(keys: spec, action: title)
+                if !name.hasPrefix("switcher") { self?.hud.show(keys: spec, action: title) }
                 action()
             }
             if let hk = HotKey(spec, id: UInt32(index + 1), action: wrapped) { hotKeys.append(hk) }
@@ -288,7 +301,13 @@ extension AppDelegate {
     func syncAutoTileItems() {
         autoTileItem?.state = manager.config.autoTile ? .on : .off
         overlayItem?.state = manager.config.actionOverlay ? .on : .off
+        switcherItem?.state = manager.config.switcher ? .on : .off
         hud.enabled = manager.config.actionOverlay
+    }
+    @objc func toggleSwitcher() {
+        manager.config.switcher.toggle()
+        registerHotKeys(manager.config)
+        syncAutoTileItems()
     }
     @objc func toggleOverlay() {
         manager.config.actionOverlay.toggle()
