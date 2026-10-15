@@ -38,6 +38,7 @@ final class WindowManager {
         focusRing = FocusRing(config: config)
         overlay = ZoneOverlay(screen: NSScreen.screens[0])
         focusRing.isTiled = { [unowned self] w in self.isTiled(w) }
+        focusRing.onReorder = { [unowned self] in self.stackHandles() }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in self?.tick() }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
@@ -90,6 +91,17 @@ final class WindowManager {
     private func refreshChrome() {
         refreshHandles()
         focusRing.update()
+        stackHandles()
+    }
+
+    /// Handles go right above the focus ring (or the frontmost tiled window), so the ring never covers the grip
+    /// while floating windows in front of the tiles still do.
+    private func stackHandles() {
+        let tiledIDs = Set(tracked)
+        let anchor = focusRing.windowNumber ?? zOrder.first { tiledIDs.contains($0) }.map(Int.init)
+        for h in handles where h.isVisible {
+            if let anchor { h.order(.above, relativeTo: anchor) } else { h.orderFrontRegardless() }
+        }
     }
 
     // MARK: Queries used by the UI
@@ -255,9 +267,6 @@ final class WindowManager {
         var needed: [(SpaceID, Handle, CGRect)] = []
         for (space, geo) in activeGeometries() { for (h, f) in geo.handleFrames() { needed.append((space, h, f)) } }
         while handles.count < needed.count { handles.append(HandleWindow()) }
-        // Sit just under the backmost tiled window: gaps are uncovered anyway, and floating windows stay on top.
-        let tiledIDs = Set(tracked)
-        let backmostTiled = zOrder.last { tiledIDs.contains($0) }
         for (idx, h) in handles.enumerated() {
             guard idx < needed.count else { h.orderOut(nil); continue }
             let (space, handle, f) = needed[idx]
@@ -276,7 +285,7 @@ final class WindowManager {
                 self?.interacting = false
                 self?.apply()
             }
-            if let b = backmostTiled { h.order(.below, relativeTo: Int(b)) } else { h.orderFrontRegardless() }
+            if !h.isVisible { h.orderFrontRegardless() }
         }
     }
 }

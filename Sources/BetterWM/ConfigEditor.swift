@@ -59,6 +59,7 @@ final class ConfigWindow: NSObject {
     private var barBatteryPercentCheck: NSButton!
     private var barWifiCheck: NSButton!
     private var barCatCheck: NSButton!
+    private var barCatSheetField: NSTextField!
     private var barFahrenheit: NSButton!
     private var barLocationAuto: NSButton!
     private var barLocationFixed: NSButton!
@@ -289,9 +290,18 @@ final class ConfigWindow: NSObject {
         barBatteryPercentCheck = NSButton(checkboxWithTitle: "with percentage", target: nil, action: nil)
         barWifiCheck = NSButton(checkboxWithTitle: "Wi-Fi signal", target: nil, action: nil)
         barCatCheck = NSButton(checkboxWithTitle: "Pixel cat", target: nil, action: nil)
+        barCatSheetField = NSTextField(string: "")
+        barCatSheetField.placeholderString = "path to sheet PNG; empty = built-in cat"
+        barCatSheetField.widthAnchor.constraint(equalToConstant: 260).isActive = true
+        let sheetHint = NSTextField(wrappingLabelWithString: "Optional sprite sheet in Last tick's \"Pixel Cats 64x64\" layout. Downloaded by you; not bundled with the app.")
+        sheetHint.font = .systemFont(ofSize: 11)
+        sheetHint.textColor = .secondaryLabelColor
+        sheetHint.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
         let general = box("Status Bar", rows: [
             [label("Bar"), barCheck],
             [label("Show"), NSStackView(views: [barBatteryCheck, barBatteryPercentCheck, barWifiCheck, barCatCheck])],
+            [label("Cat sprites"), barCatSheetField],
+            [NSView(), sheetHint],
             [label("Height"), NSStackView(views: [barHeightField, NSTextField(labelWithString: "pt")])],
             [label("Clock"), NSStackView(views: [barClockField, clockHint])],
             [NSView(), hint],
@@ -459,6 +469,7 @@ final class ConfigWindow: NSObject {
         barBatteryPercentCheck.state = config.barBatteryPercent ? .on : .off
         barWifiCheck.state = config.barWifi ? .on : .off
         barCatCheck.state = config.barCat ? .on : .off
+        barCatSheetField.stringValue = config.barCatSheet
         barFahrenheit.state = config.barWeatherFahrenheit ? .on : .off
         let auto = config.barWeatherLocation.lowercased() == "auto"
         barLocationAuto.state = auto ? .on : .off
@@ -524,6 +535,7 @@ final class ConfigWindow: NSObject {
         config.barBatteryPercent = barBatteryPercentCheck.state == .on
         config.barWifi = barWifiCheck.state == .on
         config.barCat = barCatCheck.state == .on
+        config.barCatSheet = barCatSheetField.stringValue.trimmingCharacters(in: .whitespaces)
         config.barWeatherFahrenheit = barFahrenheit.state == .on
         config.barWeatherLocation = barLocationAuto.state == .on ? "auto" : barLocationField.stringValue.trimmingCharacters(in: .whitespaces)
         config.barBackground = barBlur.state == .on ? "blur" : barBgColor.color.hexString

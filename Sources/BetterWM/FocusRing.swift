@@ -13,6 +13,10 @@ final class FocusRing {
     private var radiusCache: [CGWindowID: CGFloat] = [:]
     /// Floating windows get a ring only when `focusRingFloating` is set; skipping them keeps drags cheap.
     var isTiled: (AXWindow) -> Bool = { _ in true }
+    /// Fired after the ring window is (re)ordered so dependants like the gap handles can stack above it.
+    var onReorder: (() -> Void)?
+    var windowNumber: Int? { window.isVisible ? window.windowNumber : nil }
+
     /// While the user drags a window the ring hides instead of chasing every mouse event; it returns on drop.
     var suspended = false {
         didSet {
@@ -93,13 +97,10 @@ final class FocusRing {
         }
         CATransaction.commit()
         place(frame: WindowServerEvents.bounds(of: id) ?? w.frame)
-        if config.focusRingStyle == .underneath {
-            window.level = .normal
-            window.order(.below, relativeTo: Int(id))
-        } else {
-            window.level = .floating
-            window.orderFrontRegardless()
-        }
+        // Normal level either way: floating windows in front of the target must cover the ring too.
+        window.level = .normal
+        window.order(config.focusRingStyle == .underneath ? .below : .above, relativeTo: Int(id))
+        onReorder?()
     }
 
     private func radius(for id: CGWindowID) -> CGFloat {

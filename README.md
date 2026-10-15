@@ -65,7 +65,7 @@ Every popup action, plus retile, equalize, pause and desktop switching, can also
 
 ### Status bar
 
-Enable it in Settings › Bar or with `bar = true`. It sits at the top of each screen where the system menu bar lives, so set "Automatically hide and show the menu bar" to Always in System Settings › Control Center; the app offers to open that pane once. Tiled windows start below the bar. Desktop chips switch desktops on click. Weather comes from Open-Meteo using either Location Services or fixed `barWeatherLocation = lat,lon`.
+Enable it in Settings › Bar or with `bar = true`. A pixel cat wanders the free part of the bar (`barCat`); point `barCatSheet` at a sprite sheet in Last tick's free [Pixel Cats 64x64](https://last-tick.itch.io/animated-pixel-cats-64x64) layout for nicer art. That pack forbids redistribution, so it is never bundled; download it yourself. It sits at the top of each screen where the system menu bar lives, so set "Automatically hide and show the menu bar" to Always in System Settings › Control Center; the app offers to open that pane once. Tiled windows start below the bar. Desktop chips switch desktops on click. Weather comes from Open-Meteo using either Location Services or fixed `barWeatherLocation = lat,lon`.
 
 ### Menu bar
 

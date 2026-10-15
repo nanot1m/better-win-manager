@@ -276,6 +276,7 @@ final class BarView: NSView {
         for icon in [weatherIcon, wifiIcon, batteryIcon] { icon.contentTintColor = textColor }
         cat.color = textColor
         cat.isHidden = !config.barCat
+        cat.useSheet(path: config.barCatSheet, barHeight: config.barHeight)
         needsLayout = true
     }
 

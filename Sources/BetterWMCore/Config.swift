@@ -28,6 +28,8 @@ public struct Config {
     public var barBatteryPercent: Bool = true
     /// A pixel cat wandering the empty part of the bar.
     public var barCat: Bool = true
+    /// Optional path to a "Pixel Cats 64x64" style sprite sheet (Last tick's layout); empty uses the built-in cat.
+    public var barCatSheet: String = ""
     public var barWifi: Bool = true
     public var barWeatherFahrenheit: Bool = false
     /// "auto" uses Location Services; otherwise "lat,lon".
@@ -153,6 +155,8 @@ public struct Config {
         barBattery = \(barBattery)
         barBatteryPercent = \(barBatteryPercent)
         barCat = \(barCat)
+        # Path to a sprite sheet in Last tick's "Pixel Cats 64x64" layout (not bundled; download it yourself).
+        barCatSheet = \(barCatSheet)
         barWifi = \(barWifi)
         barWeatherFahrenheit = \(barWeatherFahrenheit)
         # "auto" asks Location Services; or a fixed "latitude,longitude" such as 52.52,13.40.
@@ -241,6 +245,7 @@ public struct Config {
             case "bar": cfg.bar = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barHeight": cfg.barHeight = Double(value).map { CGFloat($0) } ?? cfg.barHeight
             case "barClockFormat": cfg.barClockFormat = value
+            case "barCatSheet": cfg.barCatSheet = value
             case "barCat": cfg.barCat = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barBatteryPercent": cfg.barBatteryPercent = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barBattery": cfg.barBattery = ["true", "yes", "1", "on"].contains(value.lowercased())
