@@ -10,6 +10,9 @@ final class VirtualWorkspaces {
     /// Real frames of floating windows while parked, restored when their workspace returns.
     private var parkedFrames: [WindowID: CGRect] = [:]
     private var parked: Set<WindowID> = []
+    /// Last workspace each app had a window in, kept after the window is gone: an app that recreates its only
+    /// window (Unity on scene reload or Play mode) has no siblings to follow, but it still has a home.
+    private(set) var homeByPid: [pid_t: Int] = [:]
 
     func setCount(_ n: Int) {
         count = max(1, n)
@@ -50,6 +53,9 @@ final class VirtualWorkspaces {
 
     /// Workspaces holding windows of `ids` (an app's other windows), to keep a recreated window with its siblings.
     func workspaces(of ids: [WindowID]) -> Set<Int> { Set(ids.compactMap { membership[$0] }) }
+    func rememberHomes(_ windows: [WindowInfo]) {
+        for w in windows { if let ws = membership[w.id] { homeByPid[w.pid] = ws } }
+    }
     func forget(_ w: WindowID) { membership[w] = nil; parkedFrames[w] = nil; parked.remove(w) }
     func move(_ w: WindowID, to ws: Int) { membership[w] = max(0, min(count - 1, ws)) }
 

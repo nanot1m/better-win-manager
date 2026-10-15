@@ -203,6 +203,9 @@ final class WindowManager {
     /// focus counts: after switching to an empty workspace the old window stays focused and must not pull us back.
     private var ignoreFocusSwitchUntil = Date.distantPast
     private var lastFocusedID: WindowID?
+    /// Windows just placed on a background workspace; their app tends to focus them right away (Unity does),
+    /// and that focus change is the app's, not the user's, even if the user typed a moment ago.
+    private var adoptedInBackground: [WindowID: Date] = [:]
     private func followFocusedWindowsWorkspace() {
         guard isVirtual, let f = AXWindow.focused, let id = id(f), let v = virtualSet(ofWindow: id) else { return }
         guard id != lastFocusedID else { return }
@@ -214,6 +217,10 @@ final class WindowManager {
         // a long task must not yank the user to another workspace; its window is parked there, where it belongs.
         guard Date().timeIntervalSince(lastUserInput) < 2 else {
             Log.write("desktop", "ignoring self-activation of \(describe(f)) (workspace \(ws + 1), no recent input)")
+            return
+        }
+        if let t = adoptedInBackground[id], Date().timeIntervalSince(t) < 3 {
+            Log.write("desktop", "ignoring self-activation of \(describe(f)) (workspace \(ws + 1), window just appeared there)")
             return
         }
         Log.write("desktop", "focus follows \(describe(f)) to workspace \(ws + 1)")
@@ -344,6 +351,7 @@ final class WindowManager {
             var snap = system.snapshot(tracked: tracked)
             zOrder = snap.windows.map(\.id)
             if assignNewVirtualWindows(snap) { snap = system.snapshot(tracked: tracked) }
+            virtualSets?.values.forEach { $0.rememberHomes(snap.windows) }
             restoreIfFirstVisit(snap)
             restoreSavedModes(snap)
             let before = state
@@ -389,16 +397,22 @@ final class WindowManager {
             }
         }
         let frontPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        let recentInput = Date().timeIntervalSince(lastUserInput) < 2
         for w in pool {
             guard let v = virtualSet(ofWindow: w.id) else { continue }
             // A window appearing while its app is in the background (Unity recreating its editor window, a
-            // background app opening a document) stays with the app's other windows instead of landing on the
-            // active workspace and dragging the user there later.
+            // background app opening a document) stays with the app's other windows, or where its last window
+            // was, instead of landing on the active workspace and dragging the user there later. Only a window
+            // the user just asked the frontmost app for belongs on the active workspace.
             let siblings = snap.windows.filter { $0.pid == w.pid && $0.id != w.id && v.isKnown($0.id) }.map(\.id)
             let siblingSpaces = v.workspaces(of: siblings)
-            if w.pid != frontPid, siblingSpaces.count == 1, let ws = siblingSpaces.first, ws != v.active {
+            let home = siblingSpaces.count == 1 ? siblingSpaces.first : (siblings.isEmpty ? v.homeByPid[w.pid] : nil)
+            let deliberate = w.pid == frontPid && recentInput
+            if let ws = home, ws != v.active, !deliberate {
                 v.adopt(w.id, into: ws)
-                Log.write("adopt", "\(describe(w.id)) joins workspace \(ws + 1) with its app's windows (app not frontmost)")
+                adoptedInBackground[w.id] = Date()
+                let why = siblings.isEmpty ? "where its last window was" : "with its app's windows"
+                Log.write("adopt", "\(describe(w.id)) joins workspace \(ws + 1) \(why) (\(w.pid == frontPid ? "no recent input" : "app not frontmost"))")
             } else {
                 v.adopt(w.id)
                 Log.write("adopt", "\(describe(w.id)) joins active workspace \(v.active + 1)")

@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.5] - 2026-10-15
+
+### Fixed
+- Virtual workspaces: an app recreating its only window (Unity on scene reload or Play mode) had no sibling windows to follow, so the new window still landed on the active workspace. Each app's last workspace is now remembered and used instead; only a window the frontmost app opens right after user input joins the active workspace. A window placed on a background workspace this way no longer pulls focus (and the desktop) there when its app focuses it. Thanks again to @clbagrat for the follow-up.
+
 ## [0.11.4] - 2026-10-15
 
 ### Fixed
