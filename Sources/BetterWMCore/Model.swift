@@ -56,6 +56,13 @@ public enum Command: Equatable {
     case raise(WindowID)
 }
 
+/// How a screen's grid is laid out: side-by-side columns, or a cascade where every window gets (almost) the
+/// whole screen and each is shifted right a little so the ones behind can be peeked at and clicked.
+public enum LayoutMode: String, Codable, CaseIterable {
+    case columns, stacked
+    public var title: String { self == .columns ? "Columns" : "Stacked (cascade)" }
+}
+
 public enum DropZone: Equatable {
     case newColumn(index: Int)
     case stack(column: Int, index: Int)

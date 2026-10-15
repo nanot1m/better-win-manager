@@ -244,6 +244,45 @@ struct ReconcilerTests {
         expect(try! JSONDecoder().decode(SavedLayout.self, from: encoded) == v2, #function, #line)
     }
 
+    func testStackedModeGeometry() {
+        var c = config
+        c.stackOffset = 50
+        var g = Grid()
+        g.columns = [Column([1, 2]), Column([3])]
+        g.setMode(.stacked)
+        expect(g.columns.map(\.windows) == [[1], [2], [3]], #function, #line)
+        let geo = GridGeometry(grid: g, area: area, config: c)
+        let frames = geo.windowFrames()
+        expect(frames.map { $0.1.minX } == [0, 50, 100], #function, #line)
+        expect(frames.allSatisfy { $0.1.width == 1500 && $0.1.height == 1000 }, #function, #line)
+        expect(geo.handleFrames().isEmpty, #function, #line)
+        // Dropping onto the second strip puts the window second in the deck.
+        let (zone, _) = geo.zone(at: CGPoint(x: 60, y: 500), dragging: 3)!
+        expect(zone == .newColumn(index: 1), #function, #line)
+        g.apply(.stack(column: 0, index: 1), to: 3)
+        expect(g.columns.map(\.windows) == [[1], [3], [2]], #function, #line)
+    }
+
+    func testStackedDeckFollowsZOrder() {
+        var c = config
+        c.stackOffset = 50
+        let r = Reconciler(config: c)
+        var state = DesiredState()
+        var g = Grid()
+        g.setMode(.stacked)
+        g.columns = [Column([1]), Column([2]), Column([3])]
+        state.grids[space] = g
+        state.seen[space] = [1, 2, 3]
+        // Snapshot order is front to back: 2 is frontmost, then 3, then 1.
+        let snap = snapshot([win(2, area), win(3, area), win(1, area)])
+        let (next, commands) = r.reconcile(state, snap)
+        expect(next.grid(for: space).windows == [1, 3, 2], #function, #line)
+        let x = Dictionary(uniqueKeysWithValues: commands.compactMap { c -> (WindowID, CGFloat)? in
+            if case let .setFrame(w, f) = c { return (w, f.minX) } else { return nil }
+        })
+        expect(x[1] == 0 && x[3] == 50 && x[2] == 100, #function, #line)
+    }
+
     func testStrategiesPlaceRelativeToFocused() {
         var c = config
         c.autoTileStrategy = .nextToFocused
@@ -281,6 +320,8 @@ let tests: [(String, () -> Void)] = [
     ("restoreFallsBackToNearestFrame", t.testRestoreFallsBackToNearestFrame),
     ("edgeMoveCyclesWidth", t.testEdgeMoveCyclesWidth),
     ("configV1Migration", t.testConfigV1Migration),
+    ("stackedModeGeometry", t.testStackedModeGeometry),
+    ("stackedDeckFollowsZOrder", t.testStackedDeckFollowsZOrder),
     ("savedLayoutV1Migration", t.testSavedLayoutV1Migration),
 ]
 for (name, run) in tests {

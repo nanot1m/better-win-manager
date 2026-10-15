@@ -298,6 +298,7 @@ final class WindowManager {
         axObserver = WindowObserver(onNewWindow: { [weak self] _ in self?.tick() },
                                     onFocusChange: { [weak self] in
                                         self?.followFocusedWindowsWorkspace()
+                                        self?.refanStackedScreens()
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self?.followFocusedWindowsWorkspace() }
                                         self?.focusRing.update()
                                         self?.onFocusChange?()
@@ -501,6 +502,25 @@ final class WindowManager {
         state.seen[screen.space] = nil
         state.retileRequested.insert(screen.space)
         tick()
+    }
+
+    /// Stacked screens lay out by z-order, so a focus change must re-run the reconcile promptly.
+    private func refanStackedScreens() {
+        guard system.screens().contains(where: { state.grid(for: $0.space).mode == .stacked }) else { return }
+        tick()
+    }
+
+    /// Flips the layout mode of the screen holding the focused window (or the cursor).
+    func toggleStackedLayout() {
+        let anchor = AXWindow.focused?.frame.center ?? NSEvent.mouseLocation.toAX()
+        guard let screen = screen(at: anchor) else { return }
+        state.mutate(screen.space) { $0.setMode($0.mode == .stacked ? .columns : .stacked) }
+        apply()
+    }
+
+    func layoutMode(forScreenAt p: CGPoint) -> LayoutMode {
+        guard let screen = screen(at: p) else { return .columns }
+        return state.grid(for: screen.space).mode
     }
 
     func equalize() {

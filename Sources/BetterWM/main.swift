@@ -171,6 +171,7 @@ extension AppDelegate {
         sendMenu.autoenablesItems = false
         sendMenu.delegate = self
         menu.addItem(withTitle: "Send Focused Window to", action: nil, keyEquivalent: "").submenu = sendMenu
+        add("Toggle Stacked Layout on This Screen", #selector(toggleStack), "s")
         add("Retile Current Screen", #selector(retile), "r")
         add("Equalize Sizes", #selector(equalize), "e")
         menu.addItem(.separator())
@@ -239,6 +240,7 @@ extension AppDelegate {
             "mergeRight": { [weak self] in self?.manager.moveFocused(.mergeRight) },
             "toggleTile": { [weak self] in self?.manager.toggleFocused() },
             "retile": { [weak self] in self?.manager.retileCurrentScreen() },
+            "toggleStack": { [weak self] in self?.manager.toggleStackedLayout() },
             "equalize": { [weak self] in self?.manager.equalize() },
             "pause": { [weak self] in self?.togglePause() },
             "desktopNext": { [weak self] in self?.manager.switchDesktop(next: true) },
@@ -282,6 +284,7 @@ extension AppDelegate {
         if let dir = sender.representedObject as? Move { manager.moveFocused(dir) }
     }
     @objc func retile() { manager.retileCurrentScreen() }
+    @objc func toggleStack() { manager.toggleStackedLayout() }
     @objc func equalize() { manager.equalize() }
     @objc func reloadConfig() {
         manager.reloadConfig()

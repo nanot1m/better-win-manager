@@ -37,6 +37,8 @@ final class ConfigWindow: NSObject {
     private var autoTileCheck: NSButton!
     private var tileOnStartCheck: NSButton!
     private var restoreCheck: NSButton!
+    private var stackOffsetField: NSTextField!
+    private var stackNarrowField: NSTextField!
     private var switcherThumbsCheck: NSButton!
     private var switcherCheck: NSButton!
     private var workspacesPopup: NSPopUpButton!
@@ -217,6 +219,21 @@ final class ConfigWindow: NSObject {
             [label("Virtual workspaces"), NSStackView(views: [virtualCountField, NSTextField(labelWithString: "1–9")])],
             [NSView(), wsHint],
         ])
+        stackOffsetField = NSTextField(string: "48")
+        stackOffsetField.widthAnchor.constraint(equalToConstant: 56).isActive = true
+        stackOffsetField.alignment = .right
+        stackNarrowField = NSTextField(string: "0")
+        stackNarrowField.widthAnchor.constraint(equalToConstant: 64).isActive = true
+        stackNarrowField.alignment = .right
+        let stackHint = NSTextField(wrappingLabelWithString: "Stacked layout cascades windows so the ones behind stay visible; toggle it per screen with ⌃⌥S, the popup's S key or the menu.")
+        stackHint.font = .systemFont(ofSize: 11)
+        stackHint.textColor = .secondaryLabelColor
+        stackHint.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
+        let stacked = box("Stacked Layout", rows: [
+            [label("Cascade offset"), NSStackView(views: [stackOffsetField, NSTextField(labelWithString: "pt")])],
+            [label("Auto on screens narrower than"), NSStackView(views: [stackNarrowField, NSTextField(labelWithString: "pt (0 = never)")])],
+            [NSView(), stackHint],
+        ])
         let tiling = box("Tiling", rows: [
             [label("New windows"), autoTileCheck],
             [label("On launch"), tileOnStartCheck],
@@ -257,7 +274,7 @@ final class ConfigWindow: NSObject {
             [label("Corners"), ringAutoRadius],
             [label("Fallback radius"), NSStackView(views: [ringRadius, ringRadiusLabel])],
         ])
-        return [layout, tiling, workspaces, ring]
+        return [layout, tiling, stacked, workspaces, ring]
     }
 
     @objc private func switcherChanged() {
@@ -540,6 +557,8 @@ final class ConfigWindow: NSObject {
         autoTileCheck.state = config.autoTile ? .on : .off
         tileOnStartCheck.state = config.tileExistingOnStart ? .on : .off
         restoreCheck.state = config.restoreLayouts ? .on : .off
+        stackOffsetField.stringValue = String(Int(config.stackOffset))
+        stackNarrowField.stringValue = String(Int(config.stackScreensNarrowerThan))
         switcherThumbsCheck.state = config.switcherThumbnails ? .on : .off
         switcherCheck.state = config.switcher ? .on : .off
         switcherChanged()
@@ -618,6 +637,8 @@ final class ConfigWindow: NSObject {
         config.autoTile = autoTileCheck.state == .on
         config.tileExistingOnStart = tileOnStartCheck.state == .on
         config.restoreLayouts = restoreCheck.state == .on
+        config.stackOffset = CGFloat(Double(stackOffsetField.stringValue) ?? 48)
+        config.stackScreensNarrowerThan = CGFloat(Double(stackNarrowField.stringValue) ?? 0)
         config.switcherThumbnails = switcherThumbsCheck.state == .on
         config.switcher = switcherCheck.state == .on
         if let raw = workspacesPopup.selectedItem?.representedObject as? String, let m = Config.WorkspaceMode(rawValue: raw) {

@@ -20,7 +20,16 @@ public struct SavedLayout: Codable, Equatable {
     public struct Space: Codable, Equatable {
         public var id: SpaceID
         public var columns: [Column]
-        public init(id: SpaceID, columns: [Column]) { self.id = id; self.columns = columns }
+        public var mode: LayoutMode
+        public init(id: SpaceID, columns: [Column], mode: LayoutMode = .columns) { self.id = id; self.columns = columns; self.mode = mode }
+
+        enum CodingKeys: String, CodingKey { case id, columns, mode }
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(SpaceID.self, forKey: .id)
+            columns = try c.decode([Column].self, forKey: .columns)
+            mode = try c.decodeIfPresent(LayoutMode.self, forKey: .mode) ?? .columns
+        }
     }
     /// Bumped when the meaning of stored ids changes; `migrated(currentSpace:)` upgrades older files.
     public static let schemaVersion = 2
@@ -62,7 +71,7 @@ public struct SavedLayout: Codable, Equatable {
                 }
                 return windows.isEmpty ? nil : Column(weight: col.weight, windows: windows)
             }
-            if !columns.isEmpty { out.spaces.append(Space(id: space, columns: columns)) }
+            if !columns.isEmpty { out.spaces.append(Space(id: space, columns: columns, mode: grid.mode)) }
         }
         return out
     }
@@ -81,6 +90,7 @@ public struct SavedLayout: Codable, Equatable {
             return pool.remove(at: pick)
         }
         var grid = Grid()
+        grid.mode = saved.mode
         for col in saved.columns {
             var ids: [WindowID] = []
             for slot in col.windows {

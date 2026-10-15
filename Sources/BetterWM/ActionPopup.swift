@@ -95,6 +95,9 @@ final class ActionPopup: NSPanel {
         case (_, "t"):
             onAction?("T", "Tile / untile focused window")
             manager.toggleFocused()
+        case (_, "s"):
+            onAction?("S", "Toggle stacked layout")
+            manager.toggleStackedLayout()
         case (_, "n"), (_, "p"):
             close()
             onAction?(key.uppercased(), key == "n" ? "Send to next desktop" : "Send to previous desktop")
@@ -196,7 +199,7 @@ private final class ActionView: NSView {
         drawPresets(in: NSRect(x: 14, y: footerH + desktopsH, width: bounds.width - 28, height: presetsH))
         drawDesktops(in: NSRect(x: 14, y: footerH, width: bounds.width - 28, height: desktopsH))
 
-        draw("Tab / ⇧Tab  focus    T  tile / untile    N / P  send to next / prev desktop    Esc  close",
+        draw("Tab / ⇧Tab  focus    T  tile / untile    S  stacked layout    N / P  send to next / prev desktop    Esc  close",
              in: NSRect(x: 0, y: 8, width: bounds.width, height: footerH - 12), color: .secondaryLabelColor, size: 11, bold: false)
     }
 

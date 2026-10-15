@@ -14,6 +14,7 @@ public struct Column: Equatable {
 /// The desired arrangement of one desktop: columns of windows, plus the per-window sizing hints
 /// the geometry needs. A plain value; geometry and mutations are pure functions of it.
 public struct Grid: Equatable {
+    public var mode: LayoutMode = .columns
     public var columns: [Column] = []
     public var heightWeights: [WindowID: CGFloat] = [:]
     /// Sizes windows refused to shrink below; the layout distributes space around them.
@@ -45,7 +46,17 @@ public struct Grid: Equatable {
         columns.removeAll { $0.windows.isEmpty }
     }
 
-    public mutating func clear() { self = Grid() }
+    public mutating func clear() {
+        let mode = self.mode
+        self = Grid()
+        self.mode = mode
+    }
+
+    /// Stacked mode keeps one window per column (the deck order); switching to it flattens any stacks.
+    public mutating func setMode(_ m: LayoutMode) {
+        mode = m
+        if m == .stacked { columns = windows.map { Column([$0]) } }
+    }
 
     public mutating func equalize() {
         for i in columns.indices { columns[i].weight = 1 }
@@ -54,6 +65,8 @@ public struct Grid: Equatable {
     }
 
     public mutating func apply(_ zone: DropZone, to w: WindowID) {
+        // A cascade has no stacks: anything that would stack becomes a deck position just after the target.
+        if mode == .stacked, case let .stack(ci, _) = zone { apply(.newColumn(index: ci + 1), to: w); return }
         let origin = position(of: w)?.column
         let originWasAlone = origin.map { columns[$0].windows.count == 1 } ?? false
         if let o = origin, originWasAlone, case .stack(o, _) = zone { return }
@@ -119,6 +132,8 @@ public struct Grid: Equatable {
 
     public func canMove(_ w: WindowID, _ dir: Move) -> Bool {
         guard let (ci, wi) = position(of: w) else { return false }
+        // A stacked deck orders itself by z-order; manual moves would be undone immediately.
+        if mode == .stacked { return false }
         let alone = columns[ci].windows.count == 1
         switch dir {
         case .left: return !alone || ci > 0 || columns.count > 1
@@ -200,6 +215,7 @@ public struct GridGeometry {
     }
 
     public func windowFrames() -> [(WindowID, CGRect)] {
+        if grid.mode == .stacked { return stackedFrames() }
         var out: [(WindowID, CGRect)] = []
         for (c, cf) in zip(grid.columns, columnFrames()) {
             let usable = cf.height - config.gap * CGFloat(c.windows.count - 1)
@@ -214,6 +230,18 @@ public struct GridGeometry {
         return out
     }
 
+    /// Cascade: every window as large as the screen allows, shifted right by `stackOffset` per position.
+    private func stackedFrames() -> [(WindowID, CGRect)] {
+        let ws = grid.windows
+        guard !ws.isEmpty else { return [] }
+        let n = CGFloat(ws.count)
+        let offset = min(config.stackOffset, inner.width / max(1, n) / 2)
+        let width = inner.width - offset * (n - 1)
+        return ws.enumerated().map { i, w in
+            (w, CGRect(x: inner.minX + offset * CGFloat(i), y: inner.minY, width: width, height: inner.height))
+        }
+    }
+
     public func frame(of w: WindowID) -> CGRect? { windowFrames().first { $0.0 == w }?.1 }
 
     /// Column slot a window centered at x would occupy, by comparing against existing column centers.
@@ -222,6 +250,7 @@ public struct GridGeometry {
     }
 
     public func handleFrames() -> [(Handle, CGRect)] {
+        guard grid.mode == .columns else { return [] }
         var out: [(Handle, CGRect)] = []
         let cf = columnFrames()
         for i in cf.indices.dropLast() {
@@ -243,6 +272,7 @@ public struct GridGeometry {
     /// Each window is split by its diagonals: the nearest edge decides. Left/right create a column, top/bottom stack.
     public func zone(at p: CGPoint, dragging dragged: WindowID?) -> (DropZone, CGRect)? {
         guard inner.contains(p) else { return nil }
+        if grid.mode == .stacked { return stackedZone(at: p, dragging: dragged) }
         let cf = columnFrames()
         if cf.isEmpty { return (.newColumn(index: 0), inner) }
         let origin = dragged.flatMap { grid.position(of: $0)?.column }
@@ -273,6 +303,18 @@ public struct GridGeometry {
             return (.stack(column: ci, index: slot + 1), CGRect(x: slotRect.minX, y: slotRect.midY, width: slotRect.width, height: lh))
         }
         return nil
+    }
+
+    /// Stacked: the deck position under the cursor, by the visible left strips; dropping past them appends.
+    private func stackedZone(at p: CGPoint, dragging dragged: WindowID?) -> (DropZone, CGRect)? {
+        let others = grid.windows.filter { $0 != dragged }
+        guard !others.isEmpty else { return (.newColumn(index: 0), inner) }
+        let n = CGFloat(others.count)
+        let offset = min(config.stackOffset, inner.width / max(1, n + 1) / 2)
+        let index = min(others.count, Int((p.x - inner.minX) / max(1, offset)))
+        let width = inner.width - offset * n
+        let highlight = CGRect(x: inner.minX + offset * CGFloat(index), y: inner.minY, width: width, height: inner.height)
+        return (.newColumn(index: index), highlight)
     }
 
     /// Grid with the boundary between column i and i+1 moved to global x, keeping the pair's total width.

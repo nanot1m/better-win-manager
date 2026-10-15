@@ -18,7 +18,7 @@ public struct Config {
             "focusNext": "ctrl+]", "focusPrevious": "ctrl+[",
             "moveLeft": "ctrl+alt+left", "moveRight": "ctrl+alt+right", "moveUp": "ctrl+alt+up", "moveDown": "ctrl+alt+down",
             "mergeLeft": "ctrl+alt+shift+left", "mergeRight": "ctrl+alt+shift+right",
-            "toggleTile": "ctrl+alt+t", "retile": "ctrl+alt+r", "equalize": "ctrl+alt+e",
+            "toggleTile": "ctrl+alt+t", "toggleStack": "ctrl+alt+s", "retile": "ctrl+alt+r", "equalize": "ctrl+alt+e",
             "desktopNext": "ctrl+right", "desktopPrevious": "ctrl+left",
         ]
         for i in 1...9 {
@@ -28,6 +28,10 @@ public struct Config {
         return h
     }()
     public var tileExistingOnStart: Bool = true
+    /// Stacked mode: horizontal shift between cascaded windows, in points.
+    public var stackOffset: CGFloat = 48
+    /// Screens narrower than this start in stacked mode (0 = never). Handy for a laptop panel next to a big display.
+    public var stackScreensNarrowerThan: CGFloat = 0
     /// Remember each desktop's grid and put matching windows back into it on the next launch.
     public var restoreLayouts: Bool = true
     /// Window switcher (⌥Tab). Off leaves the ⌥Tab hotkeys unregistered.
@@ -137,7 +141,8 @@ public struct Config {
         ("focusNext", "Focus next window"), ("focusPrevious", "Focus previous window"),
         ("moveLeft", "Move left"), ("moveRight", "Move right"), ("moveUp", "Move up"), ("moveDown", "Move down"),
         ("mergeLeft", "Merge into left column"), ("mergeRight", "Merge into right column"),
-        ("toggleTile", "Tile / untile focused window"), ("retile", "Retile current screen"),
+        ("toggleTile", "Tile / untile focused window"), ("toggleStack", "Toggle stacked layout on this screen"),
+        ("retile", "Retile current screen"),
         ("equalize", "Equalize sizes"), ("pause", "Pause / resume tiling"),
         ("desktopNext", "Next desktop"), ("desktopPrevious", "Previous desktop"),
         ("sendToNextDesktop", "Send focused window to next desktop"),
@@ -176,6 +181,11 @@ public struct Config {
         virtualWorkspaces = \(virtualWorkspaces)
         # Tile windows automatically when they open or arrive on a desktop.
         autoTile = \(autoTile)
+        # Stacked layout (per screen, toggled with the toggleStack action): windows cascade with this horizontal
+        # shift so the ones behind stay visible; screens narrower than the threshold start stacked (0 = never).
+        stackOffset = \(num(stackOffset))
+        stackScreensNarrowerThan = \(num(stackScreensNarrowerThan))
+
         # Where an auto-tiled window goes: rightmost, leftmost, position, nextToFocused, stackFocused, autoSplit, spiral.
         #   nextToFocused  new column right after the focused window's column (i3 default)
         #   autoSplit      beside the focused window if it is wider than tall, below it otherwise (i3 autotiling)
@@ -298,6 +308,8 @@ public struct Config {
             case "switcher": cfg.switcher = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "switcherThumbnails": cfg.switcherThumbnails = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "restoreLayouts": cfg.restoreLayouts = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "stackOffset": cfg.stackOffset = Double(value).map { CGFloat($0) } ?? cfg.stackOffset
+            case "stackScreensNarrowerThan": cfg.stackScreensNarrowerThan = Double(value).map { CGFloat($0) } ?? cfg.stackScreensNarrowerThan
             case "tileExistingOnStart": cfg.tileExistingOnStart = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "autoTile": cfg.autoTile = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "autoTileStrategy": cfg.autoTileStrategy = AutoTileStrategy(rawValue: value) ?? cfg.autoTileStrategy

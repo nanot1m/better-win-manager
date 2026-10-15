@@ -63,6 +63,10 @@ On the first run the windows on the current desktop are tiled, ordered left to r
 
 Default global hotkeys: ⌥⌘Space popup, ⌥Tab switcher, ⌃] / ⌃[ focus next/previous, ⌃⌥ arrows move, ⌃⌥⇧ ←/→ merge, ⌃⌥T tile, ⌃⌥R retile, ⌃⌥E equalize, ⌃←/⌃→ and ⌃1–9 switch desktop, ⌃⌥1–9 send the window there. The ⌃-arrow and ⌃-digit ones collide with Mission Control's own shortcuts; disable those in System Settings › Keyboard › Keyboard Shortcuts › Mission Control. All bindings are editable in Settings › Hotkeys or the config.
 
+### Stacked layout
+
+Per screen, as an alternative to columns: every tiled window gets almost the whole screen and each is shifted right by `stackOffset` points, so the windows behind stay visible as strips you can peek at and click. The deck is fanned in z-order, back to front from left to right, so no window can hide completely behind another; focusing a window moves it to the right end. Toggle it for the current screen with ⌃⌥S, the popup's S key, or the menu. `stackScreensNarrowerThan` starts narrow screens in this mode automatically.
+
 ### Virtual workspaces
 
 By default (`workspaces = virtual`, Settings › General › Desktops) every macOS desktop gets its own independent set of `virtualWorkspaces` workspaces, with its own active workspace, window membership and grids; nothing crosses between macOS desktops. Windows of inactive workspaces are parked just off the bottom-right corner of their screen, like AeroSpace does, so switching is instant and needs no Mission Control tricks. All desktop actions, the popup, hotkeys, the ⌥Tab switcher and the bar chips refer to the current macOS desktop's workspaces. Set `workspaces = native` to tile per macOS desktop without virtual workspaces. Parked windows still appear in ⌘Tab and Mission Control.
