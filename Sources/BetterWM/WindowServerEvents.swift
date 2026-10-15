@@ -18,6 +18,11 @@ final class WindowServerEvents {
     private static let requestForWindows: (@convention(c) (Int32, UnsafePointer<UInt32>, Int32) -> Void)? = sym("SLSRequestNotificationsForWindows")
     private static let mainConnection: (@convention(c) () -> Int32)? = sym("SLSMainConnectionID")
     private static let windowBounds: (@convention(c) (Int32, CGWindowID, UnsafeMutablePointer<CGRect>) -> CGError)? = sym("SLSGetWindowBounds")
+    private static let queryWindows: (@convention(c) (Int32, CFArray, UInt32) -> CFTypeRef?)? = sym("SLSWindowQueryWindows")
+    private static let queryCopyWindows: (@convention(c) (CFTypeRef) -> CFTypeRef?)? = sym("SLSWindowQueryResultCopyWindows")
+    private static let iteratorCount: (@convention(c) (CFTypeRef) -> Int32)? = sym("SLSWindowIteratorGetCount")
+    private static let iteratorAdvance: (@convention(c) (CFTypeRef) -> Bool)? = sym("SLSWindowIteratorAdvance")
+    private static let iteratorCornerRadii: (@convention(c) (CFTypeRef) -> CFArray?)? = sym("SLSWindowIteratorGetCornerRadii")
 
     static var available: Bool { register != nil && mainConnection != nil }
 
@@ -39,8 +44,18 @@ final class WindowServerEvents {
     /// Move/resize events are only delivered for windows explicitly requested.
     func watch(_ ids: [CGWindowID]) {
         guard let cid = WindowServerEvents.mainConnection?(), !ids.isEmpty else { return }
-        var list = ids
-        list.withUnsafeBufferPointer { WindowServerEvents.requestForWindows?(cid, $0.baseAddress!, Int32($0.count)) }
+        ids.withUnsafeBufferPointer { WindowServerEvents.requestForWindows?(cid, $0.baseAddress!, Int32($0.count)) }
+    }
+
+    /// The window's own corner radius as WindowServer composites it; nil if the query is unavailable or empty.
+    static func cornerRadius(of id: CGWindowID) -> CGFloat? {
+        guard let cid = mainConnection?(), let query = queryWindows, let copy = queryCopyWindows,
+              let count = iteratorCount, let advance = iteratorAdvance, let radii = iteratorCornerRadii else { return nil }
+        guard let q = query(cid, [NSNumber(value: Int32(bitPattern: id))] as CFArray, 0),
+              let it = copy(q), count(it) > 0, advance(it),
+              let arr = radii(it) as? [NSNumber], let first = arr.first else { return nil }
+        let r = CGFloat(first.doubleValue)
+        return r > 0 ? r : nil
     }
 
     /// Top-left-origin frame straight from WindowServer; much cheaper than an Accessibility read.

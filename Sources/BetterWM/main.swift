@@ -122,12 +122,10 @@ extension AppDelegate {
         }
         let move = menu.addItem(withTitle: "Move Focused Window", action: nil, keyEquivalent: "")
         move.submenu = moveMenu
-        add("Send Focused Window to Next Desktop", #selector(sendNext))
-        add("Send Focused Window to Previous Desktop", #selector(sendPrevious))
         let sendMenu = NSMenu(title: "SendTo")
         sendMenu.autoenablesItems = false
         sendMenu.delegate = self
-        menu.addItem(withTitle: "Send Focused Window to Desktop", action: nil, keyEquivalent: "").submenu = sendMenu
+        menu.addItem(withTitle: "Send Focused Window to", action: nil, keyEquivalent: "").submenu = sendMenu
         add("Retile Current Screen", #selector(retile), "r")
         add("Equalize Sizes", #selector(equalize), "e")
         menu.addItem(.separator())
@@ -272,6 +270,15 @@ extension AppDelegate: NSMenuDelegate {
         let sending = menu.title == "SendTo"
         menu.removeAllItems()
         let current = Spaces.currentDesktopIndex()
+        if sending {
+            let next = menu.addItem(withTitle: "Next Desktop", action: #selector(sendNext), keyEquivalent: "")
+            next.target = self
+            next.isEnabled = current.map { $0 + 1 < Spaces.desktops().count } ?? false
+            let prev = menu.addItem(withTitle: "Previous Desktop", action: #selector(sendPrevious), keyEquivalent: "")
+            prev.target = self
+            prev.isEnabled = current.map { $0 > 0 } ?? false
+            menu.addItem(.separator())
+        }
         for i in Spaces.desktops().indices {
             let item = menu.addItem(withTitle: "Desktop \(i + 1)", action: sending ? #selector(sendToDesktop(_:)) : #selector(switchDesktop(_:)), keyEquivalent: "")
             item.target = self

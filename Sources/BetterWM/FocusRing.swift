@@ -9,7 +9,9 @@ final class FocusRing {
     private var timer: Timer?
     private let events = WindowServerEvents()
     private var current: CGWindowID?
-    /// Only tiled windows get a ring; floating ones are left alone, which also keeps drags cheap.
+    /// Corner radii rarely change for a window's lifetime, so one measurement per window ID is enough.
+    private var radiusCache: [CGWindowID: CGFloat] = [:]
+    /// Floating windows get a ring only when `focusRingFloating` is set; skipping them keeps drags cheap.
     var isTiled: (AXWindow) -> Bool = { _ in true }
 
     init(config: Config) {
@@ -32,6 +34,9 @@ final class FocusRing {
         events.onEvent = { [weak self] event, wid in
             guard let self else { return }
             switch event {
+            case .windowDestroy:
+                if let wid { self.radiusCache[wid] = nil }
+                self.update()
             case .windowMove, .windowResize:
                 // Cheap path: the focused window moved; just follow it without re-resolving focus.
                 if wid == self.current, let id = wid, let f = WindowServerEvents.bounds(of: id) { self.place(frame: f) } else { self.update() }
@@ -57,7 +62,7 @@ final class FocusRing {
     private var pad: CGFloat { config.focusRingStyle == .underneath ? config.focusRingWidth : config.focusRingWidth / 2 + 1 }
 
     func update() {
-        guard config.focusRing, let w = AXWindow.focused, isTiled(w), let id = w.windowID else {
+        guard config.focusRing, let w = AXWindow.focused, config.focusRingFloating || isTiled(w), let id = w.windowID else {
             current = nil
             window.orderOut(nil)
             return
@@ -69,7 +74,7 @@ final class FocusRing {
         let color = NSColor(hex: config.focusRingColor) ?? .controlAccentColor
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        layer.cornerRadius = config.focusRingRadius + pad
+        layer.cornerRadius = radius(for: id) + pad
         if config.focusRingStyle == .outline {
             layer.borderWidth = config.focusRingWidth
             layer.borderColor = color.cgColor
@@ -87,6 +92,14 @@ final class FocusRing {
             window.level = .floating
             window.orderFrontRegardless()
         }
+    }
+
+    private func radius(for id: CGWindowID) -> CGFloat {
+        guard config.focusRingAutoRadius else { return config.focusRingRadius }
+        if let r = radiusCache[id] { return r }
+        let r = WindowServerEvents.cornerRadius(of: id) ?? config.focusRingRadius
+        radiusCache[id] = r
+        return r
     }
 
     /// `frame` in AX (top-left origin) coordinates.

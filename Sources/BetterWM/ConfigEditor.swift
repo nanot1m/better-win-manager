@@ -49,6 +49,8 @@ final class ConfigWindow: NSObject {
     private var ringWidthLabel: NSTextField!
     private var ringRadius: NSSlider!
     private var ringRadiusLabel: NSTextField!
+    private var ringAutoRadius: NSButton!
+    private var ringFloating: NSButton!
 
     func show(config: Config, onSave: @escaping (Config) -> Void) {
         self.config = config
@@ -160,6 +162,7 @@ final class ConfigWindow: NSObject {
             [label("Action overlay"), overlayCheck],
         ])
         ringCheck = NSButton(checkboxWithTitle: "Highlight the focused window", target: nil, action: nil)
+        ringFloating = NSButton(checkboxWithTitle: "Also highlight floating (untiled) windows", target: nil, action: nil)
         ringStyle = NSPopUpButton()
         for st in Config.FocusRingStyle.allCases {
             ringStyle.addItem(withTitle: st.title)
@@ -178,14 +181,21 @@ final class ConfigWindow: NSObject {
         ringRadiusLabel = NSTextField(labelWithString: "10 pt")
         ringRadiusLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
         ringRadiusLabel.widthAnchor.constraint(equalToConstant: 48).isActive = true
+        ringAutoRadius = NSButton(checkboxWithTitle: "Match each window's own corners", target: self, action: #selector(autoRadiusChanged))
         let ring = box("Focus Ring", rows: [
             [label("Focused window"), ringCheck],
+            [NSView(), ringFloating],
             [label("Style"), ringStyle],
             [label("Color"), ringColor],
             [label("Thickness"), NSStackView(views: [ringWidth, ringWidthLabel])],
-            [label("Corner radius"), NSStackView(views: [ringRadius, ringRadiusLabel])],
+            [label("Corners"), ringAutoRadius],
+            [label("Fallback radius"), NSStackView(views: [ringRadius, ringRadiusLabel])],
         ])
         return [layout, tiling, ring]
+    }
+
+    @objc private func autoRadiusChanged() {
+        ringRadius.isEnabled = ringAutoRadius.state == .off
     }
 
     @objc private func ringSliderChanged(_ s: NSSlider) {
@@ -328,10 +338,13 @@ final class ConfigWindow: NSObject {
         for (k, b) in modifierButtons { b.state = mods.contains(k) ? .on : .off }
         for (k, r) in recorders { r.spec = config.hotkeys[k] }
         ringCheck.state = config.focusRing ? .on : .off
+        ringFloating.state = config.focusRingFloating ? .on : .off
         ringStyle.selectItem(at: Config.FocusRingStyle.allCases.firstIndex(of: config.focusRingStyle) ?? 0)
         ringColor.color = NSColor(hex: config.focusRingColor) ?? .controlAccentColor
         ringWidth.doubleValue = Double(config.focusRingWidth)
         ringRadius.doubleValue = Double(config.focusRingRadius)
+        ringAutoRadius.state = config.focusRingAutoRadius ? .on : .off
+        autoRadiusChanged()
         ringSliderChanged(ringWidth)
         ringSliderChanged(ringRadius)
         ignoreText.string = config.ignoreApps.joined(separator: "\n")
@@ -361,12 +374,14 @@ final class ConfigWindow: NSObject {
         if config.dragModifiers.isEmpty { config.dragModifiers = "alt" }
         config.hotkeys = recorders.compactMapValues(\.spec)
         config.focusRing = ringCheck.state == .on
+        config.focusRingFloating = ringFloating.state == .on
         if let raw = ringStyle.selectedItem?.representedObject as? String, let st = Config.FocusRingStyle(rawValue: raw) {
             config.focusRingStyle = st
         }
         config.focusRingColor = ringColor.color.hexString
         config.focusRingWidth = CGFloat(ringWidth.doubleValue.rounded())
         config.focusRingRadius = CGFloat(ringRadius.doubleValue.rounded())
+        config.focusRingAutoRadius = ringAutoRadius.state == .on
         config.ignoreApps = ignoreText.string.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         config.floatSmallWindows = floatSmallCheck.state == .on
         config.smallWindowWidth = CGFloat(Double(smallW.stringValue) ?? 500)

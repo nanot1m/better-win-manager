@@ -7,14 +7,17 @@ public struct Config {
     public var handleWidth: CGFloat = 16
     public var dragModifiers: String = "alt"
     public var hotkeys: [String: String] = ["popup": "alt+cmd+space"]
-    public var tileExistingOnStart: Bool = false
+    public var tileExistingOnStart: Bool = true
     public var autoTile: Bool = true
     public var autoTileStrategy: AutoTileStrategy = .rightmost
     public var focusRing: Bool = true
     public var actionOverlay: Bool = false
     public var focusRingStyle: FocusRingStyle = .outline
+    public var focusRingFloating: Bool = false
     public var focusRingWidth: CGFloat = 3
     public var focusRingRadius: CGFloat = 10
+    /// Measure each window's real corner radius once and match it; `focusRingRadius` is the fallback.
+    public var focusRingAutoRadius: Bool = true
     public var focusRingColor: String = "#4C8BF5"
     public var ignoreApps: [String] = Config.defaultIgnoreApps
     public var floatSmallWindows: Bool = true
@@ -90,7 +93,6 @@ public struct Config {
         handleWidth = \(num(handleWidth))
 
         # Tile the windows already open when a desktop is first seen (at launch or on first visit).
-        # Off by default so launching never rearranges anything; use Retile Current Screen on demand.
         tileExistingOnStart = \(tileExistingOnStart)
         # Tile windows automatically when they open or arrive on a desktop.
         autoTile = \(autoTile)
@@ -106,7 +108,11 @@ public struct Config {
         # Highlight the focused window. Style: outline (ring around it) or underneath (glow behind it).
         focusRing = \(focusRing)
         focusRingStyle = \(focusRingStyle.rawValue)
+        # Also ring floating (untiled) windows, not just tiled ones.
+        focusRingFloating = \(focusRingFloating)
         focusRingWidth = \(num(focusRingWidth))
+        # Match each window's own corner radius (measured once per window); the radius below is the fallback.
+        focusRingAutoRadius = \(focusRingAutoRadius)
         focusRingRadius = \(num(focusRingRadius))
         focusRingColor = \(focusRingColor)
 
@@ -160,8 +166,10 @@ public struct Config {
             case "autoTileStrategy": cfg.autoTileStrategy = AutoTileStrategy(rawValue: value) ?? cfg.autoTileStrategy
                 case "actionOverlay": cfg.actionOverlay = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRing": cfg.focusRing = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "focusRingFloating": cfg.focusRingFloating = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRingStyle": cfg.focusRingStyle = FocusRingStyle(rawValue: value) ?? cfg.focusRingStyle
             case "focusRingWidth": cfg.focusRingWidth = Double(value).map { CGFloat($0) } ?? cfg.focusRingWidth
+            case "focusRingAutoRadius": cfg.focusRingAutoRadius = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRingRadius": cfg.focusRingRadius = Double(value).map { CGFloat($0) } ?? cfg.focusRingRadius
             case "focusRingColor": cfg.focusRingColor = value
             case "ignoreApps": cfg.ignoreApps = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }

@@ -19,7 +19,6 @@ struct ReconcilerTests {
         c.gap = 0
         c.outerGap = 0
         c.floatSmallWindows = false
-        c.tileExistingOnStart = true
         return c
     }
 
