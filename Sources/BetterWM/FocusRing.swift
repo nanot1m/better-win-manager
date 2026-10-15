@@ -74,7 +74,8 @@ final class FocusRing {
     private var pad: CGFloat { config.focusRingStyle == .underneath ? config.focusRingWidth : config.focusRingWidth / 2 + 1 }
 
     func update() {
-        guard !suspended, config.focusRing, let w = AXWindow.focused, config.focusRingFloating || isTiled(w), let id = w.windowID else {
+        guard !suspended, config.focusRing, let w = AXWindow.focused, config.focusRingFloating || isTiled(w), let id = w.windowID,
+              !Spaces.spaces(of: id).contains(where: Spaces.isFullscreen) else {
             current = nil
             window.orderOut(nil)
             return

@@ -32,6 +32,17 @@ enum Spaces {
         return spaces.compactMap { ($0["type"] as? Int) == 0 ? ($0["id64"] as? SpaceID) : nil }
     }
 
+    /// True when the Space is not a user desktop, i.e. a fullscreen app or split view (type 4).
+    static func isFullscreen(_ space: SpaceID) -> Bool {
+        guard let cid = mainConnection?(), let arr = managedDisplaySpaces?(cid) as? [[String: Any]] else { return false }
+        for display in arr {
+            for sp in display["Spaces"] as? [[String: Any]] ?? [] where (sp["id64"] as? SpaceID) == space {
+                return (sp["type"] as? Int) != 0
+            }
+        }
+        return false
+    }
+
     private static func displayUUID(_ screen: NSScreen) -> String? {
         guard let num = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID,
               let uuid = CGDisplayCreateUUIDFromDisplayID(num)?.takeRetainedValue() else { return nil }

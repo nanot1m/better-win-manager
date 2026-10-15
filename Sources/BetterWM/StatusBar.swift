@@ -74,6 +74,11 @@ final class StatusBar {
 
     private func refresh() {
         guard config.bar else { return }
+        // A fullscreen app owns the whole screen; stay out of its way.
+        for w in windows {
+            let fullscreen = Spaces.isFullscreen(Spaces.current(for: w.targetScreen))
+            if fullscreen { w.orderOut(nil) } else if !w.isVisible { w.orderBack(nil) }
+        }
         let focused = AXWindow.focused
         let app = focused.flatMap { NSRunningApplication(processIdentifier: $0.pid)?.localizedName }
             ?? NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
@@ -124,9 +129,12 @@ final class StatusBar {
 
 final class BarWindow: NSPanel {
     let view: BarView
+    /// Kept explicitly: `NSWindow.screen` is nil while the bar is hidden.
+    let targetScreen: NSScreen
 
     init(frame: NSRect, screen: NSScreen) {
         view = BarView(screen: screen)
+        targetScreen = screen
         super.init(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
