@@ -11,6 +11,7 @@ final class ZoneOverlay: NSWindow {
         level = .screenSaver
         ignoresMouseEvents = true
         hasShadow = false
+        animationBehavior = .none
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         contentView = view
     }

@@ -107,7 +107,7 @@ Placement strategies:
 
 - Windows are read and moved through the Accessibility API; a CGEvent tap catches ⌥-drags and ⌥-scroll.
 - Desktop identity and ordering come from SkyLight private functions loaded with `dlsym`. Desktop switching posts the same Dock-swipe event sequence a three-finger trackpad swipe produces, which is why it is instant. Sending a window to another desktop uses SkyLight's bridged move operation via code vendored from [WhichSpace](https://github.com/gechr/WhichSpace) (MIT); the exported APIs for this stopped working with SIP enabled. All of these are undocumented and may need updating on new macOS releases.
-- The focus ring is a click-through overlay that follows Accessibility focus, move and resize notifications.
+- The focus ring is a layer-backed click-through overlay driven by WindowServer move/resize/front-change notifications (the SkyLight mechanism JankyBorders uses), with frames read via `SLSGetWindowBounds`; no polling beyond a slow safety net.
 - Windows that ignore a requested size are remembered as minimums and the layout distributes space around them.
 
 ## Development

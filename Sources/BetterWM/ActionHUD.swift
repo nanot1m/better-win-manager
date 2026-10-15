@@ -14,6 +14,7 @@ final class ActionHUD {
         window.backgroundColor = .clear
         window.level = .screenSaver
         window.ignoresMouseEvents = true
+        window.animationBehavior = .none
         window.hasShadow = true
         window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         let bg = NSVisualEffectView()

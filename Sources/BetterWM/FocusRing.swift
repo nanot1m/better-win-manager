@@ -1,11 +1,14 @@
 import BetterWMCore
 import Cocoa
+import QuartzCore
 
 final class FocusRing {
     private let window: NSWindow
-    private let view = RingView()
+    private let layer = CALayer()
     private var config: Config
     private var timer: Timer?
+    private let events = WindowServerEvents()
+    private var current: CGWindowID?
     /// Only tiled windows get a ring; floating ones are left alone, which also keeps drags cheap.
     var isTiled: (AXWindow) -> Bool = { _ in true }
 
@@ -16,17 +19,33 @@ final class FocusRing {
         window.backgroundColor = .clear
         window.hasShadow = false
         window.ignoresMouseEvents = true
+        window.animationBehavior = .none
         // Bound to the current desktop so it slides away with it during a switch instead of floating over the transition.
         window.collectionBehavior = [.moveToActiveSpace, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer = layer
+        layer.actions = ["bounds": NSNull(), "position": NSNull(), "borderColor": NSNull(), "backgroundColor": NSNull(),
+                         "cornerRadius": NSNull(), "borderWidth": NSNull(), "hidden": NSNull()]
         window.contentView = view
+
+        events.onEvent = { [weak self] event, wid in
+            guard let self else { return }
+            switch event {
+            case .windowMove, .windowResize:
+                // Cheap path: the focused window moved; just follow it without re-resolving focus.
+                if wid == self.current, let id = wid, let f = WindowServerEvents.bounds(of: id) { self.place(frame: f) } else { self.update() }
+            case .spaceChange:
+                self.window.orderOut(nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.update() }
+            default:
+                self.update()
+            }
+        }
         let nc = NSWorkspace.shared.notificationCenter
         nc.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in self?.update() }
-        nc.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.window.orderOut(nil)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { self?.update() }
-        }
-        // AX notifications are occasionally dropped; a slow poll keeps the ring honest.
-        timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.update() }
+        // Safety net only; WindowServer events do the real work.
+        timer = Timer.scheduledTimer(withTimeInterval: WindowServerEvents.available ? 1.0 : 0.1, repeats: true) { [weak self] _ in self?.update() }
         update()
     }
 
@@ -35,20 +54,33 @@ final class FocusRing {
         update()
     }
 
+    private var pad: CGFloat { config.focusRingStyle == .underneath ? config.focusRingWidth : config.focusRingWidth / 2 + 1 }
+
     func update() {
-        guard config.focusRing, let w = AXWindow.focused, isTiled(w), w.isValid else {
+        guard config.focusRing, let w = AXWindow.focused, isTiled(w), let id = w.windowID else {
+            current = nil
             window.orderOut(nil)
             return
         }
-        let pad = config.focusRingStyle == .underneath ? config.focusRingWidth : config.focusRingWidth / 2 + 1
-        let frame = w.frame.insetBy(dx: -pad, dy: -pad).toCocoa()
-        view.style = config.focusRingStyle
-        view.width = config.focusRingWidth
-        view.radius = config.focusRingRadius + pad
-        view.color = NSColor(hex: config.focusRingColor) ?? .controlAccentColor
-        window.setFrame(frame, display: true)
-        view.needsDisplay = true
-        if config.focusRingStyle == .underneath, let id = w.windowID {
+        if current != id {
+            current = id
+            events.watch([id])
+        }
+        let color = NSColor(hex: config.focusRingColor) ?? .controlAccentColor
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.cornerRadius = config.focusRingRadius + pad
+        if config.focusRingStyle == .outline {
+            layer.borderWidth = config.focusRingWidth
+            layer.borderColor = color.cgColor
+            layer.backgroundColor = nil
+        } else {
+            layer.borderWidth = 0
+            layer.backgroundColor = color.cgColor
+        }
+        CATransaction.commit()
+        place(frame: WindowServerEvents.bounds(of: id) ?? w.frame)
+        if config.focusRingStyle == .underneath {
             window.level = .normal
             window.order(.below, relativeTo: Int(id))
         } else {
@@ -56,25 +88,11 @@ final class FocusRing {
             window.orderFrontRegardless()
         }
     }
-}
 
-private final class RingView: NSView {
-    var style: Config.FocusRingStyle = .outline
-    var width: CGFloat = 3
-    var radius: CGFloat = 10
-    var color: NSColor = .controlAccentColor
-
-    override func draw(_ dirtyRect: NSRect) {
-        switch style {
-        case .outline:
-            let path = NSBezierPath(roundedRect: bounds.insetBy(dx: width / 2, dy: width / 2), xRadius: radius, yRadius: radius)
-            path.lineWidth = width
-            color.setStroke()
-            path.stroke()
-        case .underneath:
-            color.setFill()
-            NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
-        }
+    /// `frame` in AX (top-left origin) coordinates.
+    private func place(frame: CGRect) {
+        let target = frame.insetBy(dx: -pad, dy: -pad).toCocoa()
+        if window.frame != target { window.setFrame(target, display: false, animate: false) }
     }
 }
 

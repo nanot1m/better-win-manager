@@ -17,6 +17,7 @@ final class ActionPopup: NSPanel {
         level = .floating
         hasShadow = true
         isMovableByWindowBackground = false
+        animationBehavior = .none
         collectionBehavior = [.canJoinAllSpaces, .transient]
         contentView = view
         view.onKey = { [weak self] e in self?.handle(e) ?? false }
