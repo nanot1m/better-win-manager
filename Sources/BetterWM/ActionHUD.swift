@@ -37,15 +37,16 @@ final class ActionHUD {
         window.contentView = bg
     }
 
-    /// `keys` is a config spec like "alt+cmd+space" unless `preformatted`, in which case it is shown verbatim.
     func snapshot(to path: String) {
         guard let v = window.contentView, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { return }
         v.cacheDisplay(in: v.bounds, to: rep)
         try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
     }
 
-    func show(keys: String?, action: String, preformatted: Bool = false) {
-        guard enabled else { return }
+    /// `keys` is a config spec like "alt+cmd+space" unless `preformatted`, in which case it is shown verbatim.
+    /// `force` shows a one-off message even when the overlay is turned off (confirmations).
+    func show(keys: String?, action: String, preformatted: Bool = false, force: Bool = false) {
+        guard enabled || force else { return }
         let text = NSMutableAttributedString()
         if let keys {
             text.append(NSAttributedString(string: (preformatted ? keys : KeyRecorderView.pretty(keys)) + "   ", attributes: [

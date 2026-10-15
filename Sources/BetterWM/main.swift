@@ -337,8 +337,7 @@ extension AppDelegate {
         let report = Log.diagnostics(config: manager.config, stateJSON: state)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(report, forType: .string)
-        hud.enabled = true
-        hud.show(keys: nil, action: "Diagnostics copied to clipboard", preformatted: true)
+        hud.show(keys: nil, action: "Diagnostics copied to clipboard", preformatted: true, force: true)
         Log.write("app", "diagnostics report copied (\(report.count) chars)")
     }
     @objc func showSettings() {

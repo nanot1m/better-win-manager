@@ -19,6 +19,7 @@ final class DemoRunner {
     private let perform: (String) -> Bool
     private var steps: [[String]] = []
     private(set) var running = false
+    private var hudWasEnabled = false
 
     init(manager: WindowManager, popup: ActionPopup, hud: ActionHUD, perform: @escaping (String) -> Bool) {
         self.manager = manager
@@ -33,6 +34,8 @@ final class DemoRunner {
             .map { String($0.split(separator: "#", maxSplits: 1).first ?? "").trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
             .map { $0.split(separator: " ", maxSplits: 1).map(String.init) }
+        // Captions need the overlay; restore the user's setting when the demo ends or is stopped.
+        hudWasEnabled = hud.enabled
         hud.enabled = true
         running = true
         next()
@@ -43,6 +46,7 @@ final class DemoRunner {
         guard running else { return }
         steps = []
         running = false
+        hud.enabled = hudWasEnabled
         popup.close()
         manager.overlay.hide()
         manager.interacting = false
@@ -52,7 +56,7 @@ final class DemoRunner {
 
     private func next() {
         guard running else { return }
-        guard !steps.isEmpty else { running = false; print("Demo: done"); return }
+        guard !steps.isEmpty else { running = false; hud.enabled = hudWasEnabled; print("Demo: done"); return }
         let step = steps.removeFirst()
         let cmd = step[0].lowercased(), arg = step.count > 1 ? step[1] : ""
         var delay = 0.8

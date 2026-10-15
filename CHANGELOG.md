@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.4] - 2026-10-15
+
+### Fixed
+- Copy Diagnostics Report (and the demo runner) left the action overlay switched on; confirmations now flash without changing the setting.
+
 ## [0.11.3] - 2026-10-15
 
 ### Fixed
@@ -214,6 +219,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 - Instant desktop switching via a synthetic Dock swipe; ⌥-scroll to switch.
 - Ad-hoc signed app bundle and GitHub release workflow.
 
+[0.11.4]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.11.4
 [0.11.3]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.11.3
 [0.11.2]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.11.2
 [0.11.1]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.11.1
