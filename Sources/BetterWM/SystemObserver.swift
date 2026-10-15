@@ -4,6 +4,8 @@ import Cocoa
 /// Builds `Snapshot`s from the window list and Accessibility, and resolves window IDs back to AX handles.
 final class SystemObserver {
     private var ax: [WindowID: AXWindow] = [:]
+    /// Last good info per window: a hung app's windows keep their place in the model instead of being dropped.
+    private var lastInfo: [WindowID: WindowInfo] = [:]
     /// Space to keep free at the top of each screen (the status bar), in points.
     var topInset: (NSScreen) -> CGFloat = { _ in 0 }
     /// Virtual workspaces: overrides the Space a screen shows and the Spaces a window belongs to.
@@ -47,9 +49,14 @@ final class SystemObserver {
             infos.append(info(id, w))
         }
         for id in tracked where !seen.contains(id) {
+            if let w = ax[id], AXResponsiveness.isUnresponsive(w.pid), let cached = lastInfo[id] {
+                infos.append(cached)
+                continue
+            }
             guard let w = axWindow(id), w.isStandard else { continue }
             infos.append(info(id, w))
         }
+        for i in infos { lastInfo[i.id] = i }
         return Snapshot(screens: screens(), windows: infos, focused: AXWindow.focused.flatMap { self.id(of: $0) })
     }
 

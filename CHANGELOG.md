@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.1] - 2026-10-15
+
+### Fixed
+- A hung app no longer freezes BetterWM. Accessibility calls are synchronous with a default timeout of about 6 s; every element now uses a 300 ms timeout, an app that times out is skipped for 5 s (logged), and its windows keep their place in the layout meanwhile. Thanks to @clbagrat for the report.
+
 ## [0.11.0] - 2026-10-15
 
 ### Added
@@ -194,6 +199,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 - Instant desktop switching via a synthetic Dock swipe; ⌥-scroll to switch.
 - Ad-hoc signed app bundle and GitHub release workflow.
 
+[0.11.1]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.11.1
 [0.11.0]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.11.0
 [0.10.0]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.10.0
 [0.9.2]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.9.2

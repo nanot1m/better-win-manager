@@ -42,7 +42,7 @@ final class WindowObserver {
             }
         }
         guard AXObserverCreate(pid, cb, &obs) == .success, let obs else { return }
-        let appEl = AXUIElementCreateApplication(pid)
+        let appEl = AXResponsiveness.application(pid)
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         AXObserverAddNotification(obs, appEl, kAXWindowCreatedNotification as CFString, refcon)
         for n in [kAXFocusedWindowChangedNotification, kAXWindowMovedNotification, kAXWindowResizedNotification,

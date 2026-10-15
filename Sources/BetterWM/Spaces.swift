@@ -192,9 +192,12 @@ enum Spaces {
     static func allWindows() -> [AXWindow] {
         var out: [AXWindow] = []
         for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular && app.processIdentifier != getpid() {
+            let pid = app.processIdentifier
+            guard !AXResponsiveness.isUnresponsive(pid) else { continue }
             var v: CFTypeRef?
-            AXUIElementCopyAttributeValue(AXUIElementCreateApplication(app.processIdentifier), kAXWindowsAttribute as CFString, &v)
-            out += (v as? [AXUIElement] ?? []).map { AXWindow(element: $0, pid: app.processIdentifier) }.filter(\.isStandard)
+            let err = AXUIElementCopyAttributeValue(AXResponsiveness.application(pid), kAXWindowsAttribute as CFString, &v)
+            if err != .success { AXResponsiveness.noteFailure(pid, err); continue }
+            out += (v as? [AXUIElement] ?? []).map { AXWindow(element: $0, pid: pid) }.filter(\.isStandard)
         }
         return out
     }
@@ -213,8 +216,10 @@ enum Spaces {
                   let b = info[kCGWindowBounds as String] as? [String: CGFloat] else { continue }
             let bounds = CGRect(x: b["X"] ?? 0, y: b["Y"] ?? 0, width: b["Width"] ?? 0, height: b["Height"] ?? 0)
             if axByPid[pid] == nil {
+                guard !AXResponsiveness.isUnresponsive(pid) else { axByPid[pid] = []; continue }
                 var v: CFTypeRef?
-                AXUIElementCopyAttributeValue(AXUIElementCreateApplication(pid), kAXWindowsAttribute as CFString, &v)
+                let err = AXUIElementCopyAttributeValue(AXResponsiveness.application(pid), kAXWindowsAttribute as CFString, &v)
+                if err != .success { AXResponsiveness.noteFailure(pid, err) }
                 axByPid[pid] = (v as? [AXUIElement] ?? []).map { AXWindow(element: $0, pid: pid) }
                     .filter(\.isStandard).map { ($0.windowID, $0.frame, $0) }
             }
