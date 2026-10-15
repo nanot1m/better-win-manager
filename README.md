@@ -147,6 +147,10 @@ The layout logic lives in the `BetterWMCore` library: a pure `Reconciler` turns 
 
 Pushing a tag like `v0.1.0` runs the Release workflow, which builds the zip and publishes a GitHub release.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md); release notes on GitHub are taken from it.
+
 ## License
 
 MIT. The SkyLight bridge in `Sources/SkyLightBridge` is vendored from [WhichSpace](https://github.com/gechr/WhichSpace), also MIT; see its license file there.
