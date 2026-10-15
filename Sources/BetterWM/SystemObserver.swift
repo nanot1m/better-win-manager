@@ -59,7 +59,7 @@ final class SystemObserver {
     }
 
     private func info(_ id: WindowID, _ w: AXWindow) -> WindowInfo {
-        WindowInfo(id: id, pid: w.pid, bundleID: w.bundleID, frame: w.frame, spaces: Spaces.spaces(of: id))
+        WindowInfo(id: id, pid: w.pid, bundleID: w.bundleID, frame: w.frame, spaces: Spaces.spaces(of: id), title: w.title)
     }
 
     func execute(_ commands: [Command]) {

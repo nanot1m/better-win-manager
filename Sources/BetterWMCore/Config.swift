@@ -8,6 +8,8 @@ public struct Config {
     public var dragModifiers: String = "alt"
     public var hotkeys: [String: String] = ["popup": "alt+cmd+space"]
     public var tileExistingOnStart: Bool = true
+    /// Remember each desktop's grid and put matching windows back into it on the next launch.
+    public var restoreLayouts: Bool = true
     public var autoTile: Bool = true
     public var autoTileStrategy: AutoTileStrategy = .rightmost
     public var focusRing: Bool = true
@@ -28,8 +30,8 @@ public struct Config {
     public var barBatteryPercent: Bool = true
     /// A pixel cat wandering the empty part of the bar.
     public var barCat: Bool = true
-    /// Optional path to a "Pixel Cats 64x64" style sprite sheet (Last tick's layout); empty uses the built-in cat.
-    public var barCatSheet: String = ""
+    /// One cat per entry: a path to a "Pixel Cats 64x64" sheet (Last tick's layout) or "builtin". Empty = one built-in cat.
+    public var barCatSheets: [String] = []
     public var barWifi: Bool = true
     public var barCpu: Bool = true
     public var barMemory: Bool = true
@@ -92,6 +94,8 @@ public struct Config {
 
     public static let path = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".config/betterwm/config.conf")
+    public static let statePath = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".config/betterwm/state.json")
 
     static var template: String { Config().serialized() }
 
@@ -126,6 +130,8 @@ public struct Config {
 
         # Tile the windows already open when a desktop is first seen (at launch or on first visit).
         tileExistingOnStart = \(tileExistingOnStart)
+        # Remember each desktop's grid (state.json next to this file) and restore matching windows on launch.
+        restoreLayouts = \(restoreLayouts)
         # Tile windows automatically when they open or arrive on a desktop.
         autoTile = \(autoTile)
         # Where an auto-tiled window goes: rightmost, leftmost, position, nextToFocused, stackFocused, autoSplit, spiral.
@@ -158,8 +164,9 @@ public struct Config {
         barBattery = \(barBattery)
         barBatteryPercent = \(barBatteryPercent)
         barCat = \(barCat)
-        # Path to a sprite sheet in Last tick's "Pixel Cats 64x64" layout (not bundled; download it yourself).
-        barCatSheet = \(barCatSheet)
+        # One cat per entry, comma separated: a path to a sheet in Last tick's "Pixel Cats 64x64" layout
+        # (not bundled; download it yourself) or "builtin" for the hand-drawn cat. Two or more cats interact.
+        barCatSheets = \(barCatSheets.joined(separator: ", "))
         barWifi = \(barWifi)
         barCpu = \(barCpu)
         barMemory = \(barMemory)
@@ -237,6 +244,7 @@ public struct Config {
             case "outerGap": cfg.outerGap = Double(value).map { CGFloat($0) } ?? cfg.outerGap
             case "handleWidth": cfg.handleWidth = Double(value).map { CGFloat($0) } ?? cfg.handleWidth
             case "dragModifiers": cfg.dragModifiers = value
+            case "restoreLayouts": cfg.restoreLayouts = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "tileExistingOnStart": cfg.tileExistingOnStart = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "autoTile": cfg.autoTile = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "autoTileStrategy": cfg.autoTileStrategy = AutoTileStrategy(rawValue: value) ?? cfg.autoTileStrategy
@@ -251,7 +259,8 @@ public struct Config {
             case "bar": cfg.bar = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barHeight": cfg.barHeight = Double(value).map { CGFloat($0) } ?? cfg.barHeight
             case "barClockFormat": cfg.barClockFormat = value
-            case "barCatSheet": cfg.barCatSheet = value
+            case "barCatSheet": if !value.isEmpty { cfg.barCatSheets = [value] }
+            case "barCatSheets": cfg.barCatSheets = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             case "barCat": cfg.barCat = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barBatteryPercent": cfg.barBatteryPercent = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barBattery": cfg.barBattery = ["true", "yes", "1", "on"].contains(value.lowercased())

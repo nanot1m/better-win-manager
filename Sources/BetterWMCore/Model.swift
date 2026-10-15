@@ -11,13 +11,15 @@ public struct WindowInfo: Equatable {
     public var bundleID: String?
     public var frame: CGRect
     public var spaces: [SpaceID]
+    public var title: String
 
-    public init(id: WindowID, pid: pid_t, bundleID: String?, frame: CGRect, spaces: [SpaceID]) {
+    public init(id: WindowID, pid: pid_t, bundleID: String?, frame: CGRect, spaces: [SpaceID], title: String = "") {
         self.id = id
         self.pid = pid
         self.bundleID = bundleID
         self.frame = frame
         self.spaces = spaces
+        self.title = title
     }
 }
 

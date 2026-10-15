@@ -36,6 +36,7 @@ final class ConfigWindow: NSObject {
     private var strategyPopup: NSPopUpButton!
     private var autoTileCheck: NSButton!
     private var tileOnStartCheck: NSButton!
+    private var restoreCheck: NSButton!
     private var overlayCheck: NSButton!
     private var sliders: [(KeyPath<Config, CGFloat>, WritableKeyPath<Config, CGFloat>, NSSlider, NSTextField)] = []
     private var savedLabel: NSTextField!
@@ -63,7 +64,7 @@ final class ConfigWindow: NSObject {
     private var barCpuCheck: NSButton!
     private var barMemoryCheck: NSButton!
     private var barDiskCheck: NSButton!
-    private var barCatSheetField: NSTextField!
+    private var barCatSheets: NSTextView!
     private var barFahrenheit: NSButton!
     private var barLocationAuto: NSButton!
     private var barLocationFixed: NSButton!
@@ -172,6 +173,7 @@ final class ConfigWindow: NSObject {
 
         autoTileCheck = NSButton(checkboxWithTitle: "Tile new windows automatically", target: nil, action: nil)
         tileOnStartCheck = NSButton(checkboxWithTitle: "Tile existing windows when a desktop is first seen", target: nil, action: nil)
+        restoreCheck = NSButton(checkboxWithTitle: "Remember each desktop's layout and restore it on launch", target: nil, action: nil)
         overlayCheck = NSButton(checkboxWithTitle: "Show pressed hotkey and action on screen (for demos)", target: nil, action: nil)
         strategyPopup = NSPopUpButton()
         for st in Config.AutoTileStrategy.allCases {
@@ -190,6 +192,7 @@ final class ConfigWindow: NSObject {
         let tiling = box("Tiling", rows: [
             [label("New windows"), autoTileCheck],
             [label("On launch"), tileOnStartCheck],
+            [NSView(), restoreCheck],
             [label("Placement"), strategyPopup],
             [label("Drag to tile with"), mods],
             [label("Action overlay"), overlayCheck],
@@ -300,23 +303,36 @@ final class ConfigWindow: NSObject {
         barCpuCheck = NSButton(checkboxWithTitle: "CPU", target: nil, action: nil)
         barMemoryCheck = NSButton(checkboxWithTitle: "Memory", target: nil, action: nil)
         barDiskCheck = NSButton(checkboxWithTitle: "Free disk", target: nil, action: nil)
-        barCatSheetField = NSTextField(string: "")
-        barCatSheetField.placeholderString = "path to sheet PNG; empty = built-in cat"
-        barCatSheetField.widthAnchor.constraint(equalToConstant: 220).isActive = true
-        let sheetHint = NSTextField(wrappingLabelWithString: "Optional sprite sheet in Last tick's \"Pixel Cats 64x64\" layout, e.g. \"cat 2 (64x64).png\" from the pack. Downloaded by you; not bundled with the app.")
-        sheetHint.font = .systemFont(ofSize: 11)
-        sheetHint.textColor = .secondaryLabelColor
-        sheetHint.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
-        let chooseSheet = NSButton(title: "Choose…", target: self, action: #selector(chooseCatSheet))
+        barCatSheets = NSTextView()
+        barCatSheets.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        barCatSheets.isRichText = false
+        barCatSheets.isAutomaticQuoteSubstitutionEnabled = false
+        barCatSheets.textContainerInset = NSSize(width: 6, height: 4)
+        barCatSheets.autoresizingMask = [.width]
+        let sheetsScroll = NSScrollView()
+        sheetsScroll.documentView = barCatSheets
+        sheetsScroll.hasVerticalScroller = true
+        sheetsScroll.borderType = .bezelBorder
+        sheetsScroll.translatesAutoresizingMaskIntoConstraints = false
+        sheetsScroll.heightAnchor.constraint(equalToConstant: 64).isActive = true
+        sheetsScroll.widthAnchor.constraint(equalToConstant: 300).isActive = true
+        let addSheet = NSButton(title: "Add…", target: self, action: #selector(chooseCatSheet))
+        let addBuiltin = NSButton(title: "Add built-in", target: self, action: #selector(addBuiltinCat))
         let sheetLink = NSButton(title: "Get the free pack on itch.io", target: self, action: #selector(openCatPack))
         sheetLink.bezelStyle = .inline
         sheetLink.font = .systemFont(ofSize: 11)
         sheetLink.contentTintColor = .linkColor
+        let sheetButtons = NSStackView(views: [addSheet, addBuiltin, sheetLink])
+        let sheetHint = NSTextField(wrappingLabelWithString: "One cat per line: a sprite sheet in Last tick's \"Pixel Cats 64x64\" layout (e.g. \"cat 2 (64x64).png\"), or \"builtin\". Two or more cats play together. Sheets are downloaded by you, not bundled.")
+        sheetHint.font = .systemFont(ofSize: 11)
+        sheetHint.textColor = .secondaryLabelColor
+        sheetHint.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
         let general = box("Status Bar", rows: [
             [label("Bar"), barCheck],
             [label("Show"), NSStackView(views: [barBatteryCheck, barBatteryPercentCheck, barWifiCheck, barCatCheck])],
             [NSView(), NSStackView(views: [barCpuCheck, barMemoryCheck, barDiskCheck])],
-            [label("Cat sprites"), NSStackView(views: [barCatSheetField, chooseSheet, sheetLink])],
+            [label("Cats"), sheetsScroll],
+            [NSView(), sheetButtons],
             [NSView(), sheetHint],
             [label("Height"), NSStackView(views: [barHeightField, NSTextField(labelWithString: "pt")])],
             [label("Clock"), NSStackView(views: [barClockField, clockHint])],
@@ -376,12 +392,18 @@ final class ConfigWindow: NSObject {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.png]
         panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.message = "Choose a sprite sheet PNG from the Pixel Cats 64x64 pack"
-        if !barCatSheetField.stringValue.isEmpty {
-            panel.directoryURL = URL(fileURLWithPath: (barCatSheetField.stringValue as NSString).expandingTildeInPath).deletingLastPathComponent()
-        }
-        if panel.runModal() == .OK, let url = panel.url { barCatSheetField.stringValue = url.path }
+        panel.allowsMultipleSelection = true
+        panel.message = "Choose sprite sheet PNGs from the Pixel Cats 64x64 pack"
+        guard panel.runModal() == .OK else { return }
+        appendCatEntries(panel.urls.map(\.path))
+    }
+
+    @objc private func addBuiltinCat() { appendCatEntries(["builtin"]) }
+
+    private func appendCatEntries(_ entries: [String]) {
+        var lines = barCatSheets.string.split(whereSeparator: \.isNewline).map(String.init)
+        lines.append(contentsOf: entries)
+        barCatSheets.string = lines.joined(separator: "\n")
     }
 
     @objc private func openCatPack() {
@@ -478,6 +500,7 @@ final class ConfigWindow: NSObject {
         }
         autoTileCheck.state = config.autoTile ? .on : .off
         tileOnStartCheck.state = config.tileExistingOnStart ? .on : .off
+        restoreCheck.state = config.restoreLayouts ? .on : .off
         overlayCheck.state = config.actionOverlay ? .on : .off
         strategyPopup.selectItem(at: Config.AutoTileStrategy.allCases.firstIndex(of: config.autoTileStrategy) ?? 0)
         let mods = config.dragModifiers.lowercased().split(separator: "+").map(String.init)
@@ -504,7 +527,7 @@ final class ConfigWindow: NSObject {
         barCpuCheck.state = config.barCpu ? .on : .off
         barMemoryCheck.state = config.barMemory ? .on : .off
         barDiskCheck.state = config.barDisk ? .on : .off
-        barCatSheetField.stringValue = config.barCatSheet
+        barCatSheets.string = config.barCatSheets.joined(separator: "\n")
         barFahrenheit.state = config.barWeatherFahrenheit ? .on : .off
         let auto = config.barWeatherLocation.lowercased() == "auto"
         barLocationAuto.state = auto ? .on : .off
@@ -546,6 +569,7 @@ final class ConfigWindow: NSObject {
         for (_, kp, slider, _) in sliders { config[keyPath: kp] = CGFloat(slider.doubleValue.rounded()) }
         config.autoTile = autoTileCheck.state == .on
         config.tileExistingOnStart = tileOnStartCheck.state == .on
+        config.restoreLayouts = restoreCheck.state == .on
         config.actionOverlay = overlayCheck.state == .on
         if let raw = strategyPopup.selectedItem?.representedObject as? String, let st = Config.AutoTileStrategy(rawValue: raw) {
             config.autoTileStrategy = st
@@ -573,7 +597,7 @@ final class ConfigWindow: NSObject {
         config.barCpu = barCpuCheck.state == .on
         config.barMemory = barMemoryCheck.state == .on
         config.barDisk = barDiskCheck.state == .on
-        config.barCatSheet = barCatSheetField.stringValue.trimmingCharacters(in: .whitespaces)
+        config.barCatSheets = barCatSheets.string.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         config.barWeatherFahrenheit = barFahrenheit.state == .on
         config.barWeatherLocation = barLocationAuto.state == .on ? "auto" : barLocationField.stringValue.trimmingCharacters(in: .whitespaces)
         config.barBackground = barBlur.state == .on ? "blur" : barBgColor.color.hexString

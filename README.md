@@ -34,7 +34,7 @@ make install        # builds, bundles, ad-hoc signs, copies to /Applications
 
 Or run the bare binary during development with `swift build && .build/debug/BetterWM`. Requires macOS 13+ and Swift 5.9+; Command Line Tools are enough, no Xcode needed.
 
-On the first run the windows on the current desktop are tiled, ordered left to right. Set `tileExistingOnStart = false` in the config to keep launch from rearranging anything.
+On the first run the windows on the current desktop are tiled, ordered left to right. Set `tileExistingOnStart = false` in the config to keep launch from rearranging anything. Each desktop's grid is saved to `~/.config/betterwm/state.json` and restored on the next launch by matching windows to their old slots by app and title (`restoreLayouts`).
 
 ## Usage
 
@@ -65,7 +65,7 @@ Every popup action, plus retile, equalize, pause and desktop switching, can also
 
 ### Status bar
 
-Enable it in Settings › Bar or with `bar = true`. A pixel cat wanders the free part of the bar (`barCat`); point `barCatSheet` at a sprite sheet in Last tick's free [Pixel Cats 64x64](https://last-tick.itch.io/animated-pixel-cats-64x64) layout for nicer art. That pack forbids redistribution, so it is never bundled; download it yourself. It sits at the top of each screen where the system menu bar lives, so set "Automatically hide and show the menu bar" to Always in System Settings › Control Center; the app offers to open that pane once. Tiled windows start below the bar. Desktop chips switch desktops on click. Weather comes from Open-Meteo using either Location Services or fixed `barWeatherLocation = lat,lon`.
+Enable it in Settings › Bar or with `bar = true`. Pixel cats wander the free part of the bar (`barCat`); list sprite sheets in Last tick's free [Pixel Cats 64x64](https://last-tick.itch.io/animated-pixel-cats-64x64) layout in `barCatSheets`, one cat each, and two or more cats will chase, sit, groom and nap together. That pack forbids redistribution, so it is never bundled; download it yourself. It sits at the top of each screen where the system menu bar lives, so set "Automatically hide and show the menu bar" to Always in System Settings › Control Center; the app offers to open that pane once. Tiled windows start below the bar. Desktop chips switch desktops on click. Weather comes from Open-Meteo using either Location Services or fixed `barWeatherLocation = lat,lon`.
 
 ### Menu bar
 

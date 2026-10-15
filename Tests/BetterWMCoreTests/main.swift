@@ -157,6 +157,48 @@ struct ReconcilerTests {
         expect(c.focusRingWidth == 3, #function, #line)
     }
 
+    func testSavedLayoutRoundTripAndMatching() {
+        var state = DesiredState()
+        state.grids[space] = {
+            var g = Grid()
+            g.columns = [Column([1], weight: 2), Column([2, 3], weight: 1)]
+            g.heightWeights[2] = 3
+            return g
+        }()
+        let before = snapshot([
+            WindowInfo(id: 1, pid: 1, bundleID: "com.a", frame: CGRect(x: 0, y: 0, width: 1000, height: 1000), spaces: [space], title: "A main"),
+            WindowInfo(id: 2, pid: 2, bundleID: "com.b", frame: CGRect(x: 1000, y: 0, width: 600, height: 500), spaces: [space], title: "B one"),
+            WindowInfo(id: 3, pid: 2, bundleID: "com.b", frame: CGRect(x: 1000, y: 500, width: 600, height: 500), spaces: [space], title: "B two"),
+        ])
+        let saved = SavedLayout.capture(state, before)
+        let data = try! JSONEncoder().encode(saved)
+        let decoded = try! JSONDecoder().decode(SavedLayout.self, from: data)
+        expect(decoded == saved, #function, #line)
+
+        // After relaunch: new IDs, B's windows reopened with swapped titles, A gone, plus an unrelated window.
+        let after = [
+            WindowInfo(id: 20, pid: 5, bundleID: "com.b", frame: CGRect(x: 1000, y: 500, width: 600, height: 500), spaces: [space], title: "B two"),
+            WindowInfo(id: 21, pid: 5, bundleID: "com.b", frame: CGRect(x: 1000, y: 0, width: 600, height: 500), spaces: [space], title: "B one"),
+            WindowInfo(id: 30, pid: 6, bundleID: "com.c", frame: .zero, spaces: [space], title: "C"),
+        ]
+        let grid = decoded.restore(space: space, candidates: after)!
+        expect(grid.columns.map(\.windows) == [[21, 20]], #function, #line)
+        expect(grid.columns[0].weight == 1, #function, #line)
+        expect(grid.heightWeights[21] == 3, #function, #line)
+        expect(decoded.restore(space: 99, candidates: after) == nil, #function, #line)
+    }
+
+    func testRestoreFallsBackToNearestFrame() {
+        let saved = SavedLayout(spaces: [.init(id: space, columns: [
+            .init(weight: 1, windows: [.init(bundleID: "com.b", title: "old title", frame: CGRect(x: 800, y: 0, width: 800, height: 1000), heightWeight: 1)]),
+        ])])
+        let candidates = [
+            WindowInfo(id: 1, pid: 1, bundleID: "com.b", frame: CGRect(x: 0, y: 0, width: 800, height: 1000), spaces: [space], title: "x"),
+            WindowInfo(id: 2, pid: 1, bundleID: "com.b", frame: CGRect(x: 790, y: 0, width: 800, height: 1000), spaces: [space], title: "y"),
+        ]
+        expect(saved.restore(space: space, candidates: candidates)?.windows == [2], #function, #line)
+    }
+
     func testStrategiesPlaceRelativeToFocused() {
         var c = config
         c.autoTileStrategy = .nextToFocused
@@ -190,6 +232,8 @@ let tests: [(String, () -> Void)] = [
     ("displacedDetection", t.testDisplacedDetection),
     ("strategiesPlaceRelativeToFocused", t.testStrategiesPlaceRelativeToFocused),
     ("hexColoursSurviveCommentStripping", t.testHexColoursSurviveCommentStripping),
+    ("savedLayoutRoundTripAndMatching", t.testSavedLayoutRoundTripAndMatching),
+    ("restoreFallsBackToNearestFrame", t.testRestoreFallsBackToNearestFrame),
 ]
 for (name, run) in tests {
     let before = failures

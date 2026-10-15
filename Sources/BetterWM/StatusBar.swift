@@ -296,9 +296,8 @@ final class BarView: NSView {
         for l in [appLabel, weatherLabel, cpuLabel, memLabel, diskLabel, batteryLabel, clockLabel] { l.textColor = textColor }
         titleLabel.textColor = textColor.withAlphaComponent(0.65)
         for icon in [weatherIcon, cpuIcon, memIcon, diskIcon, wifiIcon, batteryIcon] { icon.contentTintColor = textColor }
-        cat.color = textColor
         cat.isHidden = !config.barCat
-        cat.useSheet(path: config.barCatSheet, barHeight: config.barHeight)
+        cat.configure(sheets: config.barCatSheets, color: textColor, barHeight: config.barHeight)
         needsLayout = true
     }
 

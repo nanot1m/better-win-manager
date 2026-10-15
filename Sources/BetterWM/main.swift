@@ -69,7 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var c = manager.config
             c.bar = true
             c.barWeatherLocation = "52.52,13.40"
-            if let sheet = ProcessInfo.processInfo.environment["BWM_CAT_SHEET"] { c.barCatSheet = sheet }
+            if let sheets = ProcessInfo.processInfo.environment["BWM_CAT_SHEETS"] { c.barCatSheets = sheets.split(separator: ";").map(String.init) }
             UserDefaults.standard.set(true, forKey: "barMenuBarHintShown")
             bar.apply(c)
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [bar] in

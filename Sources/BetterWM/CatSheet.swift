@@ -4,10 +4,10 @@ import Cocoa
 /// (14 columns of 64x64 cells, one animation per row). The art is never bundled; only the path is configured.
 struct CatSheet {
     struct Row { let index: Int; let frames: Int }
-    /// Rows for side-view animations, ordered by on-screen facing (right, then left). The pack's
-    /// "right"/"left" labels mean movement direction for walk/run but facing for the idle rows.
+    /// Rows for side-view animations, ordered by on-screen facing (right, then left). Only the walk
+    /// rows are labelled the other way round in the pack.
     static let walk = (Row(index: 5, frames: 6), Row(index: 4, frames: 6))
-    static let run = (Row(index: 11, frames: 5), Row(index: 10, frames: 5))
+    static let run = (Row(index: 10, frames: 5), Row(index: 11, frames: 5))
     static let sit = (Row(index: 22, frames: 5), Row(index: 21, frames: 5))
     static let groom = (Row(index: 41, frames: 11), Row(index: 39, frames: 11))
     static let lie = (Row(index: 28, frames: 3), Row(index: 27, frames: 3))

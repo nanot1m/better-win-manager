@@ -5,6 +5,10 @@ import Cocoa
 /// and translates UI gestures into state mutations.
 final class WindowManager {
     private(set) var state = DesiredState()
+    /// Grids from the previous run, applied to each desktop the first time it is seen.
+    private var saved = SavedLayout()
+    private var lastSaved = SavedLayout()
+    private var saveWork: DispatchWorkItem?
     /// Visible window IDs front to back from the last full tick; avoids re-enumerating on every gesture frame.
     private var zOrder: [WindowID] = []
     private var reconciler: Reconciler
@@ -50,6 +54,14 @@ final class WindowManager {
                 self?.tick()
             }
         }
+        if config.restoreLayouts, let data = try? Data(contentsOf: Config.statePath),
+           let layout = try? JSONDecoder().decode(SavedLayout.self, from: data) {
+            saved = layout
+            lastSaved = layout
+        }
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.saveNow()
+        }
         axObserver = WindowObserver(onNewWindow: { [weak self] _ in self?.tick() },
                                     onFocusChange: { [weak self] in
                                         self?.focusRing.update()
@@ -69,12 +81,54 @@ final class WindowManager {
         for _ in 0..<3 {
             let snap = system.snapshot(tracked: tracked)
             zOrder = snap.windows.map(\.id)
+            restoreIfFirstVisit(snap)
             let (next, commands) = reconciler.reconcile(state, snap)
             state = next
+            scheduleSave(snap)
             guard !commands.isEmpty else { break }
             system.execute(commands)
         }
         refreshChrome()
+    }
+
+    /// A desktop seen for the first time this run gets its saved grid back, with windows matched by app and title.
+    private func restoreIfFirstVisit(_ snap: Snapshot) {
+        guard config.restoreLayouts else { return }
+        for screen in snap.screens where state.seen[screen.space] == nil && state.grid(for: screen.space).isEmpty {
+            let here = snap.windows.filter { screen.area.contains($0.frame.center) && $0.spaces.contains(screen.space) && !reconciler.isIgnored($0) }
+            if let grid = saved.restore(space: screen.space, candidates: here) { state.grids[screen.space] = grid }
+        }
+    }
+
+    // MARK: Persistence
+
+    private var pendingSnapshot: Snapshot?
+
+    /// Throttled, not debounced: the reconcile ticks every second, so a debounce would never fire.
+    private func scheduleSave(_ snap: Snapshot) {
+        guard config.restoreLayouts else { return }
+        pendingSnapshot = snap
+        guard saveWork == nil else { return }
+        let work = DispatchWorkItem { [weak self] in self?.saveNow() }
+        saveWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
+    }
+
+    private func saveNow() {
+        saveWork = nil
+        guard config.restoreLayouts, let snap = pendingSnapshot else { return }
+        var layout = SavedLayout.capture(state, snap)
+        // Desktops not active right now keep what was saved for them before.
+        let activeSpaces = Set(snap.screens.map(\.space))
+        let captured = Set(layout.spaces.map(\.id))
+        layout.spaces += lastSaved.spaces.filter { !activeSpaces.contains($0.id) && !captured.contains($0.id) }
+        layout.spaces.sort { $0.id < $1.id }
+        guard layout != lastSaved else { return }
+        lastSaved = layout
+        let enc = JSONEncoder()
+        enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try? FileManager.default.createDirectory(at: Config.statePath.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? enc.encode(layout).write(to: Config.statePath, options: .atomic)
     }
 
     /// Push the current desired state to the screen without re-reconciling; used during gestures and after edits.
@@ -83,6 +137,7 @@ final class WindowManager {
         let cmds = reconciler.commands(for: state, snap)
         for case let .setFrame(w, f) in cmds { state.requested[w] = f }
         system.execute(cmds)
+        if let full = pendingSnapshot { scheduleSave(full) }
         refreshChrome()
     }
 
