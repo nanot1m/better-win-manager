@@ -73,6 +73,14 @@ final class FocusRing {
 
     private var pad: CGFloat { config.focusRingStyle == .underneath ? config.focusRingWidth : config.focusRingWidth / 2 + 1 }
 
+    /// Shows the ring for a window we are about to focus, at the frame it will have, without waiting for the
+    /// focus notification. Used when switching workspaces so ring and windows appear in the same frame.
+    func show(windowID id: CGWindowID, frame: CGRect) {
+        suspended = false
+        guard config.focusRing else { return }
+        present(id: id, frame: frame)
+    }
+
     func update() {
         guard !suspended, config.focusRing, let w = AXWindow.focused, config.focusRingFloating || isTiled(w), let id = w.windowID,
               !Spaces.spaces(of: id).contains(where: Spaces.isFullscreen) else {
@@ -80,6 +88,10 @@ final class FocusRing {
             window.orderOut(nil)
             return
         }
+        present(id: id, frame: WindowServerEvents.bounds(of: id) ?? w.frame)
+    }
+
+    private func present(id: CGWindowID, frame: CGRect) {
         if current != id {
             current = id
             events.watch([id])
@@ -97,7 +109,7 @@ final class FocusRing {
             layer.backgroundColor = color.cgColor
         }
         CATransaction.commit()
-        place(frame: WindowServerEvents.bounds(of: id) ?? w.frame)
+        place(frame: frame)
         // Normal level either way: floating windows in front of the target must cover the ring too.
         window.level = .normal
         window.order(config.focusRingStyle == .underneath ? .below : .above, relativeTo: Int(id))
@@ -112,10 +124,22 @@ final class FocusRing {
         return r
     }
 
-    /// `frame` in AX (top-left origin) coordinates.
+    /// `frame` in AX (top-left origin) coordinates. Pure moves go straight to WindowServer; resizes need AppKit.
     private func place(frame: CGRect) {
-        let target = frame.insetBy(dx: -pad, dy: -pad).toCocoa()
-        if window.frame != target { window.setFrame(target, display: false, animate: false) }
+        let padded = frame.insetBy(dx: -pad, dy: -pad)
+        let target = padded.toCocoa()
+        guard window.frame != target else { return }
+        if window.frame.size == target.size, window.isVisible,
+           WindowServerEvents.move(CGWindowID(window.windowNumber), to: padded.origin) {
+            return
+        }
+        window.setFrame(target, display: false, animate: false)
+    }
+
+    /// Called by the layout right as it moves the focused window, so the ring lands with the window, not after it.
+    func anticipate(windowID: CGWindowID, frame: CGRect) {
+        guard !suspended, config.focusRing, current == windowID, window.isVisible else { return }
+        place(frame: frame)
     }
 }
 

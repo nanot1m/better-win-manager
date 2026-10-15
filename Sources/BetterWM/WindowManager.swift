@@ -177,12 +177,8 @@ final class WindowManager {
             ignoreFocusSwitchUntil = Date().addingTimeInterval(0.8)
             lastFocusedID = AXWindow.focused.flatMap(id)
             tick()
-            focusTopWindow()
+            revealRingAndFocusTop()
             v.trimEmptyTrailing(minimum: config.virtualWorkspaces)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-                guard let self, !self.interacting else { return }
-                self.focusRing.suspended = false
-            }
             onDesktopChange?()
         } else {
             Spaces.switchToDesktop(index)
@@ -212,16 +208,35 @@ final class WindowManager {
         focusRing.suspended = true
         v.switchTo(ws)
         tick()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            guard let self, !self.interacting else { return }
-            self.focusRing.suspended = false
-        }
+        // The window that triggered this is the one to ring; it is already focused.
+        if let frame = targetFrame(of: id) ?? system.axWindow(id)?.frame { focusRing.show(windowID: id, frame: frame) } else { focusRing.suspended = false }
         onDesktopChange?()
     }
 
     private func focusTopWindow() {
         guard let v = virtualWS else { return }
         if let id = zOrder.first(where: { virtualSet(ofWindow: $0) === v && v.workspace(of: $0) == v.active }) { system.execute([.raise(id)]) }
+    }
+
+    /// Where a tiled window sits (or will sit) in its grid, in AX coordinates.
+    private func targetFrame(of id: WindowID) -> CGRect? {
+        guard let space = state.space(containing: id), let screen = system.screens().first(where: { $0.space == space }) else { return nil }
+        return reconciler.geometry(state.grid(for: space), screen).frame(of: id)
+    }
+
+    /// After a workspace switch: show the ring on the window we are about to raise, in the same pass, then raise it.
+    private func revealRingAndFocusTop() {
+        guard let v = virtualWS,
+              let id = zOrder.first(where: { virtualSet(ofWindow: $0) === v && v.workspace(of: $0) == v.active }) else {
+            focusRing.suspended = false
+            return
+        }
+        if state.isTiled(id) || config.focusRingFloating, let frame = targetFrame(of: id) ?? system.axWindow(id)?.frame {
+            focusRing.show(windowID: id, frame: frame)
+        } else {
+            focusRing.suspended = false
+        }
+        system.execute([.raise(id)])
     }
 
     /// Parks windows of inactive workspaces and restores returning floating ones; tiled ones follow their grid.
@@ -308,6 +323,7 @@ final class WindowManager {
             scheduleSave(snap)
             applyVirtualParking(snap)
             guard !commands.isEmpty else { break }
+            anticipateRing(commands, snap.focused)
             system.execute(commands)
         }
         refreshChrome()
@@ -390,12 +406,19 @@ final class WindowManager {
         let snap = system.lightSnapshot(tracked: tracked)
         let cmds = reconciler.commands(for: state, snap)
         for case let .setFrame(w, f) in cmds { state.requested[w] = f }
+        anticipateRing(cmds, snap.focused)
         system.execute(cmds)
         if let full = pendingSnapshot { scheduleSave(full) }
         refreshChrome()
     }
 
     func relayout() { apply() }
+
+    /// Puts the ring where the focused window is about to be, before the app has even applied the move.
+    private func anticipateRing(_ commands: [Command], _ focused: WindowID?) {
+        guard let focused else { return }
+        for case let .setFrame(w, f) in commands where w == focused { focusRing.anticipate(windowID: focused, frame: f) }
+    }
 
     private func refreshChrome() {
         refreshHandles()

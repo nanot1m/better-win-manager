@@ -18,6 +18,7 @@ final class WindowServerEvents {
     private static let requestForWindows: (@convention(c) (Int32, UnsafePointer<UInt32>, Int32) -> Void)? = sym("SLSRequestNotificationsForWindows")
     private static let mainConnection: (@convention(c) () -> Int32)? = sym("SLSMainConnectionID")
     private static let windowBounds: (@convention(c) (Int32, CGWindowID, UnsafeMutablePointer<CGRect>) -> CGError)? = sym("SLSGetWindowBounds")
+    private static let moveWindow: (@convention(c) (Int32, CGWindowID, UnsafePointer<CGPoint>) -> CGError)? = sym("SLSMoveWindow")
     private static let queryWindows: (@convention(c) (Int32, CFArray, UInt32) -> CFTypeRef?)? = sym("SLSWindowQueryWindows")
     private static let queryCopyWindows: (@convention(c) (CFTypeRef) -> CFTypeRef?)? = sym("SLSWindowQueryResultCopyWindows")
     private static let iteratorCount: (@convention(c) (CFTypeRef) -> Int32)? = sym("SLSWindowIteratorGetCount")
@@ -57,6 +58,14 @@ final class WindowServerEvents {
               let arr = radii(it) as? [NSNumber], let first = arr.first else { return nil }
         let r = CGFloat(first.doubleValue)
         return r > 0 ? r : nil
+    }
+
+    /// Moves one of our own windows straight in WindowServer (top-left-origin point), bypassing AppKit's frame pipeline.
+    @discardableResult
+    static func move(_ id: CGWindowID, to origin: CGPoint) -> Bool {
+        guard let cid = mainConnection?(), let f = moveWindow else { return false }
+        var p = origin
+        return f(cid, id, &p) == .success
     }
 
     /// Top-left-origin frame straight from WindowServer; much cheaper than an Accessibility read.
