@@ -43,6 +43,7 @@ final class DragController {
         }
         let p = event.location
         let alt = event.flags.contains(HotKey.eventFlags(manager.config.dragModifiers))
+        if type == .keyDown || type == .leftMouseDown { manager.lastUserInput = Date() }
         switch type {
         case .keyDown:
             // Feed an active hotkey recorder before macOS gets a chance to treat the press as a system shortcut.

@@ -11,6 +11,8 @@ final class WindowManager {
     private var saveWork: DispatchWorkItem?
     /// Virtual mode: one independent workspace set per macOS desktop (nil in native mode).
     private let wsEvents = WindowServerEvents()
+    /// Last key press or click seen by the event tap; distinguishes user focus changes from app self-activation.
+    var lastUserInput = Date.distantPast
     private var virtualSets: [SpaceID: VirtualWorkspaces]?
     var isVirtual: Bool { virtualSets != nil }
 
@@ -208,6 +210,12 @@ final class WindowManager {
         guard Date() >= ignoreFocusSwitchUntil else { return }
         let ws = v.workspace(of: id)
         guard ws != v.active else { return }
+        // Only follow focus the user caused (⌘Tab, Dock, a click). An app activating itself after a build or
+        // a long task must not yank the user to another workspace; its window is parked there, where it belongs.
+        guard Date().timeIntervalSince(lastUserInput) < 2 else {
+            Log.write("desktop", "ignoring self-activation of \(describe(f)) (workspace \(ws + 1), no recent input)")
+            return
+        }
         Log.write("desktop", "focus follows \(describe(f)) to workspace \(ws + 1)")
         focusRing.suspended = true
         v.switchTo(ws)
@@ -222,9 +230,19 @@ final class WindowManager {
         if let id = zOrder.first(where: { virtualSet(ofWindow: $0) === v && v.workspace(of: $0) == v.active }) { system.execute([.raise(id)]) }
     }
 
-    /// Where a tiled window sits (or will sit) in its grid, in AX coordinates.
+    /// Where a tiled window sits (or will sit) in its grid, in AX coordinates. Works for inactive virtual
+    /// workspaces too, by using the area of the screen the workspace belongs to.
     private func targetFrame(of id: WindowID) -> CGRect? {
-        guard let space = state.space(containing: id), let screen = system.screens().first(where: { $0.space == space }) else { return nil }
+        guard let space = state.space(containing: id) else { return nil }
+        let screens = system.screens()
+        let screen: ScreenInfo
+        if let s = screens.first(where: { $0.space == space }) {
+            screen = s
+        } else if let d = VirtualWorkspaces.decode(space), d.screenIndex < screens.count {
+            screen = ScreenInfo(space: space, area: screens[d.screenIndex].area)
+        } else {
+            return nil
+        }
         return reconciler.geometry(state.grid(for: space), screen).frame(of: id)
     }
 
@@ -370,7 +388,22 @@ final class WindowManager {
                 placed = true
             }
         }
-        for w in pool { virtualSet(ofWindow: w.id)?.adopt(w.id) }
+        let frontPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        for w in pool {
+            guard let v = virtualSet(ofWindow: w.id) else { continue }
+            // A window appearing while its app is in the background (Unity recreating its editor window, a
+            // background app opening a document) stays with the app's other windows instead of landing on the
+            // active workspace and dragging the user there later.
+            let siblings = snap.windows.filter { $0.pid == w.pid && $0.id != w.id && v.isKnown($0.id) }.map(\.id)
+            let siblingSpaces = v.workspaces(of: siblings)
+            if w.pid != frontPid, siblingSpaces.count == 1, let ws = siblingSpaces.first, ws != v.active {
+                v.adopt(w.id, into: ws)
+                Log.write("adopt", "\(describe(w.id)) joins workspace \(ws + 1) with its app's windows (app not frontmost)")
+            } else {
+                v.adopt(w.id)
+                Log.write("adopt", "\(describe(w.id)) joins active workspace \(v.active + 1)")
+            }
+        }
         return placed
     }
 
@@ -409,7 +442,16 @@ final class WindowManager {
 
     private func saveNow() {
         saveWork = nil
-        guard config.restoreLayouts, let snap = pendingSnapshot else { return }
+        guard config.restoreLayouts, var snap = pendingSnapshot else { return }
+        // Parked windows sit in the screen corner; save the slot they belong to instead of that position.
+        if virtualSets != nil {
+            snap.windows = snap.windows.map { w in
+                guard let v = virtualSet(ofWindow: w.id), v.isParked(w.id) else { return w }
+                var fixed = w
+                if let slot = targetFrame(of: w.id) { fixed.frame = slot } else if let real = v.parkedFrame(of: w.id) { fixed.frame = real }
+                return fixed
+            }
+        }
         var layout = SavedLayout.capture(state, snap)
         // Desktops not active right now keep what was saved for them before.
         let activeSpaces = Set(snap.screens.map(\.space))

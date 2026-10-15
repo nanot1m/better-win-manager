@@ -4,6 +4,13 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.3] - 2026-10-15
+
+### Fixed
+- Virtual workspaces: a window opened by an app that isn't frontmost (Unity recreating its editor window, a background app opening a document) now joins the workspace holding the app's other windows instead of the active one, so it no longer appears on your desktop out of nowhere.
+- Focus-following switches workspaces only after user input (⌘Tab, Dock, a click); an app activating itself after a build no longer yanks you to its workspace.
+- Saved layouts record parked windows at their real slot rather than the off-screen parking position. Thanks to @clbagrat for the report.
+
 ## [0.11.2] - 2026-10-15
 
 ### Added
@@ -207,6 +214,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 - Instant desktop switching via a synthetic Dock swipe; ⌥-scroll to switch.
 - Ad-hoc signed app bundle and GitHub release workflow.
 
+[0.11.3]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.11.3
 [0.11.2]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.11.2
 [0.11.1]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.11.1
 [0.11.0]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.11.0

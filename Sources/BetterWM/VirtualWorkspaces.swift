@@ -45,8 +45,11 @@ final class VirtualWorkspaces {
     /// The real frame of a parked floating window, if remembered.
     func parkedFrame(of w: WindowID) -> CGRect? { parkedFrames[w] }
 
-    /// Unknown windows join the active workspace.
-    func adopt(_ w: WindowID) { if membership[w] == nil { membership[w] = active } }
+    /// Unknown windows join the active workspace unless told otherwise.
+    func adopt(_ w: WindowID, into ws: Int? = nil) { if membership[w] == nil { membership[w] = ws ?? active } }
+
+    /// Workspaces holding windows of `ids` (an app's other windows), to keep a recreated window with its siblings.
+    func workspaces(of ids: [WindowID]) -> Set<Int> { Set(ids.compactMap { membership[$0] }) }
     func forget(_ w: WindowID) { membership[w] = nil; parkedFrames[w] = nil; parked.remove(w) }
     func move(_ w: WindowID, to ws: Int) { membership[w] = max(0, min(count - 1, ws)) }
 
