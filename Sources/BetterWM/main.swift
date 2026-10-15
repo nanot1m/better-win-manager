@@ -213,6 +213,7 @@ extension AppDelegate {
         add("Settings…", #selector(showSettings), ",")
         add("Open Config File", #selector(openConfig))
         add("Reload Config", #selector(reloadConfig))
+        add("Re-measure Window Corners", #selector(refreshRing))
         add("Open Log File", #selector(openLog))
         add("Copy Diagnostics Report", #selector(copyDiagnostics))
         menu.addItem(.separator())
@@ -251,6 +252,7 @@ extension AppDelegate {
             "toggleTile": { [weak self] in self?.manager.toggleFocused() },
             "retile": { [weak self] in self?.manager.retileCurrentScreen() },
             "toggleStack": { [weak self] in self?.manager.toggleStackedLayout() },
+            "refreshRing": { [weak self] in self?.manager.focusRing.remeasureCorners() },
             "equalize": { [weak self] in self?.manager.equalize() },
             "pause": { [weak self] in self?.togglePause() },
             "desktopNext": { [weak self] in self?.manager.switchDesktop(next: true) },
@@ -329,6 +331,7 @@ extension AppDelegate {
     }
     @objc func openConfig() { NSWorkspace.shared.open(Config.path) }
     @objc func openLog() { NSWorkspace.shared.open(Log.path) }
+    @objc func refreshRing() { manager.focusRing.remeasureCorners() }
     @objc func copyDiagnostics() {
         let state = try? String(contentsOf: Config.statePath, encoding: .utf8)
         let report = Log.diagnostics(config: manager.config, stateJSON: state)

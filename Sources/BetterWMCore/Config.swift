@@ -145,7 +145,7 @@ public struct Config {
         ("mergeLeft", "Merge into left column"), ("mergeRight", "Merge into right column"),
         ("toggleTile", "Tile / untile focused window"), ("toggleStack", "Toggle stacked layout on this screen"),
         ("retile", "Retile current screen"),
-        ("equalize", "Equalize sizes"), ("pause", "Pause / resume tiling"),
+        ("equalize", "Equalize sizes"), ("pause", "Pause / resume tiling"), ("refreshRing", "Re-measure window corners for the focus ring"),
         ("desktopNext", "Next desktop"), ("desktopPrevious", "Previous desktop"),
         ("sendToNextDesktop", "Send focused window to next desktop"),
         ("sendToPreviousDesktop", "Send focused window to previous desktop"),

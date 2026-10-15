@@ -4,6 +4,14 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.2] - 2026-10-15
+
+### Added
+- **Re-measure Window Corners** (menu, `refreshRing` action) recalculates every focus-ring corner radius; radii are also re-measured automatically when a window is resized.
+
+### Fixed
+- Retile Current Screen keeps the screen's stacked layout mode.
+
 ## [0.11.1] - 2026-10-15
 
 ### Fixed
@@ -199,6 +207,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 - Instant desktop switching via a synthetic Dock swipe; ⌥-scroll to switch.
 - Ad-hoc signed app bundle and GitHub release workflow.
 
+[0.11.2]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.11.2
 [0.11.1]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.11.1
 [0.11.0]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.11.0
 [0.10.0]: https://github.com/nanot1m/better-win-manager/releases/tag/v0.10.0

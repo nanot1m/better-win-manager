@@ -546,7 +546,10 @@ final class WindowManager {
 
     func retileCurrentScreen() {
         guard let screen = screen(at: NSEvent.mouseLocation.toAX()) else { return }
-        state.grids[screen.space] = Grid()
+        // Start the grid afresh but keep the screen's layout mode.
+        var fresh = Grid()
+        fresh.mode = state.grid(for: screen.space).mode
+        state.grids[screen.space] = fresh
         state.seen[screen.space] = nil
         state.retileRequested.insert(screen.space)
         tick()

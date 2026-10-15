@@ -56,7 +56,12 @@ final class FocusRing {
             case .windowDestroy:
                 if let wid { self.radiusCache[wid] = nil }
                 self.update()
-            case .windowMove, .windowResize:
+            case .windowResize:
+                // Apps change corner style with size (e.g. entering split view); measure again.
+                if let wid { self.radiusCache[wid] = nil }
+                guard !self.suspended else { return }
+                if wid == self.current { self.update() }
+            case .windowMove:
                 guard !self.suspended else { return }
                 // Cheap path: the focused window moved; just follow it without re-resolving focus.
                 if wid == self.current, let id = wid, let f = WindowServerEvents.bounds(of: id) { self.place(frame: f) } else { self.update() }
@@ -77,6 +82,17 @@ final class FocusRing {
     func apply(_ config: Config) {
         self.config = config
         update()
+    }
+
+    /// Forget every measured corner radius and redraw; for when a window changed style without a resize.
+    func remeasureCorners() {
+        radiusCache.removeAll()
+        if let id = current, let f = WindowServerEvents.bounds(of: id) {
+            current = nil   // force a full present() so the radius is applied
+            present(id: id, frame: f)
+        } else {
+            update()
+        }
     }
 
     private var pad: CGFloat { config.focusRingStyle == .underneath ? config.focusRingWidth : config.focusRingWidth / 2 + 1 }
