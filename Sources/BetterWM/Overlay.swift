@@ -52,7 +52,8 @@ final class HandleWindow: NSWindow {
         super.init(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
-        level = .floating
+        // Normal level: floating windows must cover the handles, which only need to show in the gaps between tiles.
+        level = .normal
         hasShadow = false
         acceptsMouseMovedEvents = true
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]

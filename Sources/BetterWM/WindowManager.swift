@@ -5,6 +5,8 @@ import Cocoa
 /// and translates UI gestures into state mutations.
 final class WindowManager {
     private(set) var state = DesiredState()
+    /// Visible window IDs front to back from the last full tick; avoids re-enumerating on every gesture frame.
+    private var zOrder: [WindowID] = []
     private var reconciler: Reconciler
     let system = SystemObserver()
     let overlay: ZoneOverlay
@@ -65,6 +67,7 @@ final class WindowManager {
         guard !interacting, !switching else { return }
         for _ in 0..<3 {
             let snap = system.snapshot(tracked: tracked)
+            zOrder = snap.windows.map(\.id)
             let (next, commands) = reconciler.reconcile(state, snap)
             state = next
             guard !commands.isEmpty else { break }
@@ -252,6 +255,9 @@ final class WindowManager {
         var needed: [(SpaceID, Handle, CGRect)] = []
         for (space, geo) in activeGeometries() { for (h, f) in geo.handleFrames() { needed.append((space, h, f)) } }
         while handles.count < needed.count { handles.append(HandleWindow()) }
+        // Sit just under the backmost tiled window: gaps are uncovered anyway, and floating windows stay on top.
+        let tiledIDs = Set(tracked)
+        let backmostTiled = zOrder.last { tiledIDs.contains($0) }
         for (idx, h) in handles.enumerated() {
             guard idx < needed.count else { h.orderOut(nil); continue }
             let (space, handle, f) = needed[idx]
@@ -270,7 +276,7 @@ final class WindowManager {
                 self?.interacting = false
                 self?.apply()
             }
-            h.orderFrontRegardless()
+            if let b = backmostTiled { h.order(.below, relativeTo: Int(b)) } else { h.orderFrontRegardless() }
         }
     }
 }
