@@ -89,12 +89,40 @@ public struct Grid: Equatable {
         for w in rest { columns.append(Column([w])) }
     }
 
+    /// Width fractions a column at the screen edge cycles through when moved into the edge again.
+    public static let edgeFractions: [CGFloat] = [1.0 / 3, 1.0 / 4, 2.0 / 3, 1.0 / 2]
+
+    /// Column `ci`'s share of the total width under the current weights.
+    public func fraction(ofColumn ci: Int) -> CGFloat {
+        let total = columns.reduce(0) { $0 + $1.weight }
+        return total > 0 ? columns[ci].weight / total : 0
+    }
+
+    /// Re-weights so column `ci` takes `fraction` of the width; the others keep their relative sizes.
+    public mutating func setFraction(_ fraction: CGFloat, ofColumn ci: Int) {
+        guard columns.count > 1, fraction > 0, fraction < 1 else { return }
+        let others = columns.indices.filter { $0 != ci }.reduce(CGFloat(0)) { $0 + columns[$1].weight }
+        columns[ci].weight = fraction * others / (1 - fraction)
+    }
+
+    /// Next fraction after the current one, so repeated presses cycle 1/3 → 1/4 → 2/3 → 1/2 → 1/3.
+    public mutating func cycleEdgeWidth(ofColumn ci: Int) {
+        let current = fraction(ofColumn: ci)
+        let next: CGFloat
+        if let i = Grid.edgeFractions.firstIndex(where: { abs($0 - current) < 0.02 }) {
+            next = Grid.edgeFractions[(i + 1) % Grid.edgeFractions.count]
+        } else {
+            next = Grid.edgeFractions[0]
+        }
+        setFraction(next, ofColumn: ci)
+    }
+
     public func canMove(_ w: WindowID, _ dir: Move) -> Bool {
         guard let (ci, wi) = position(of: w) else { return false }
         let alone = columns[ci].windows.count == 1
         switch dir {
-        case .left: return !alone || ci > 0
-        case .right: return !alone || ci + 1 < columns.count
+        case .left: return !alone || ci > 0 || columns.count > 1
+        case .right: return !alone || ci + 1 < columns.count || columns.count > 1
         case .mergeLeft: return ci > 0
         case .mergeRight: return ci + 1 < columns.count
         case .up: return wi > 0
@@ -106,9 +134,12 @@ public struct Grid: Equatable {
         guard let (ci, wi) = position(of: w) else { return }
         let alone = columns[ci].windows.count == 1
         switch dir {
-        case .left where alone: if ci > 0 { columns.swapAt(ci, ci - 1) }
+        // At the edge already: cycle the column's width instead of moving.
+        case .left where alone && ci == 0: cycleEdgeWidth(ofColumn: ci)
+        case .right where alone && ci + 1 == columns.count: cycleEdgeWidth(ofColumn: ci)
+        case .left where alone: columns.swapAt(ci, ci - 1)
         case .left: apply(.newColumn(index: ci), to: w)
-        case .right where alone: if ci + 1 < columns.count { columns.swapAt(ci, ci + 1) }
+        case .right where alone: columns.swapAt(ci, ci + 1)
         case .right: apply(.newColumn(index: ci + 1), to: w)
         case .mergeLeft: if ci > 0 { apply(.stack(column: ci - 1, index: columns[ci - 1].windows.count), to: w) }
         case .mergeRight: if ci + 1 < columns.count { apply(.stack(column: ci + 1, index: columns[ci + 1].windows.count), to: w) }

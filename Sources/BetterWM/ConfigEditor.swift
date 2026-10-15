@@ -117,7 +117,9 @@ final class ConfigWindow: NSObject {
         savedLabel.isHidden = true
         let save = NSButton(title: "Save & Apply", target: self, action: #selector(save))
         save.keyEquivalent = "\r"
-        let footer = NSStackView(views: [path, NSView(), savedLabel, save])
+        let importButton = NSButton(title: "Import…", target: self, action: #selector(importConfig))
+        let exportButton = NSButton(title: "Export…", target: self, action: #selector(exportConfig))
+        let footer = NSStackView(views: [path, NSView(), importButton, exportButton, savedLabel, save])
         footer.edgeInsets = NSEdgeInsets(top: 4, left: 4, bottom: 0, right: 4)
 
         let root = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 580))
@@ -609,7 +611,9 @@ final class ConfigWindow: NSObject {
         ignoreText.string = ids.joined(separator: "\n")
     }
 
-    @objc private func save() {
+    /// Reads every control back into a Config without touching disk.
+    private func collect() -> Config {
+        var config = self.config
         for (_, kp, slider, _) in sliders { config[keyPath: kp] = CGFloat(slider.doubleValue.rounded()) }
         config.autoTile = autoTileCheck.state == .on
         config.tileExistingOnStart = tileOnStartCheck.state == .on
@@ -664,6 +668,30 @@ final class ConfigWindow: NSObject {
         config.floatSmallWindows = floatSmallCheck.state == .on
         config.smallWindowWidth = CGFloat(Double(smallW.stringValue) ?? 500)
         config.smallWindowHeight = CGFloat(Double(smallH.stringValue) ?? 400)
+        return config
+    }
+
+    @objc private func exportConfig() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "betterwm.conf"
+        panel.allowedContentTypes = [.plainText]
+        panel.message = "Export the current settings (as shown, including unsaved edits)"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? collect().serialized().write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    @objc private func importConfig() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Import a BetterWM settings file; press Save & Apply afterwards to keep it"
+        guard panel.runModal() == .OK, let url = panel.url, let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+        config = Config.parse(text)
+        populate()
+    }
+
+    @objc private func save() {
+        config = collect()
         config.save()
         onSave?(config)
         savedLabel.isHidden = false

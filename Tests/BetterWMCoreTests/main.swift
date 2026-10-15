@@ -132,7 +132,7 @@ struct ReconcilerTests {
         var g = Grid()
         g.apply(preset: LayoutPreset(name: "", columns: [.init(weight: 1, count: 1), .init(weight: 1, count: 2)]), windows: [1, 2, 3])
         expect(g.canMove(1, .mergeRight), #function, 135)
-        expect(!(g.canMove(1, .left)), #function, 136)
+        expect(g.canMove(1, .left), #function, 136)  // at the edge: cycles width instead
         g.move(1, .mergeRight)
         expect(g.columns.map(\.windows) == [[2, 3, 1]], #function, 138)
         g.move(1, .up)
@@ -199,6 +199,23 @@ struct ReconcilerTests {
         expect(saved.restore(space: space, candidates: candidates)?.windows == [2], #function, #line)
     }
 
+    func testEdgeMoveCyclesWidth() {
+        var g = Grid()
+        g.columns = [Column([1]), Column([2])]
+        expect(g.canMove(2, .right), #function, #line)
+        g.move(2, .right)
+        expect(abs(g.fraction(ofColumn: 1) - 1.0 / 3) < 0.001, #function, #line)
+        g.move(2, .right)
+        expect(abs(g.fraction(ofColumn: 1) - 1.0 / 4) < 0.001, #function, #line)
+        g.move(2, .right)
+        expect(abs(g.fraction(ofColumn: 1) - 2.0 / 3) < 0.001, #function, #line)
+        g.move(2, .right)
+        expect(abs(g.fraction(ofColumn: 1) - 1.0 / 2) < 0.001, #function, #line)
+        g.move(1, .left)
+        expect(abs(g.fraction(ofColumn: 0) - 1.0 / 3) < 0.001, #function, #line)
+        expect(g.columns.map(\.windows) == [[1], [2]], #function, #line)
+    }
+
     func testStrategiesPlaceRelativeToFocused() {
         var c = config
         c.autoTileStrategy = .nextToFocused
@@ -234,6 +251,7 @@ let tests: [(String, () -> Void)] = [
     ("hexColoursSurviveCommentStripping", t.testHexColoursSurviveCommentStripping),
     ("savedLayoutRoundTripAndMatching", t.testSavedLayoutRoundTripAndMatching),
     ("restoreFallsBackToNearestFrame", t.testRestoreFallsBackToNearestFrame),
+    ("edgeMoveCyclesWidth", t.testEdgeMoveCyclesWidth),
 ]
 for (name, run) in tests {
     let before = failures
