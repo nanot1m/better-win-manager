@@ -13,6 +13,9 @@ final class WindowManager {
     private let wsEvents = WindowServerEvents()
     /// Last key press or click seen by the event tap; distinguishes user focus changes from app self-activation.
     var lastUserInput = Date.distantPast
+    /// Last input that could have activated another app; consumed by one focus-follow so apps fighting over
+    /// focus (Unity after a compile versus the app the user was in) cannot ping-pong the desktop.
+    var lastFocusInput = Date.distantPast
     private var virtualSets: [SpaceID: VirtualWorkspaces]?
     var isVirtual: Bool { virtualSets != nil }
 
@@ -215,10 +218,11 @@ final class WindowManager {
         guard ws != v.active else { return }
         // Only follow focus the user caused (⌘Tab, Dock, a click). An app activating itself after a build or
         // a long task must not yank the user to another workspace; its window is parked there, where it belongs.
-        guard Date().timeIntervalSince(lastUserInput) < 2 else {
-            Log.write("desktop", "ignoring self-activation of \(describe(f)) (workspace \(ws + 1), no recent input)")
+        guard Date().timeIntervalSince(lastFocusInput) < 2 else {
+            Log.write("desktop", "ignoring self-activation of \(describe(f)) (workspace \(ws + 1), no click or ⌘ input)")
             return
         }
+        lastFocusInput = .distantPast
         if let t = adoptedInBackground[id], Date().timeIntervalSince(t) < 3 {
             Log.write("desktop", "ignoring self-activation of \(describe(f)) (workspace \(ws + 1), window just appeared there)")
             return

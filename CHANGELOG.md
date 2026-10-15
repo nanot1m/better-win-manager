@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.6] - 2026-10-15
+
+### Fixed
+- Virtual workspaces: the desktop flipped back and forth when two apps fought over focus (Unity grabbing it after a compile while you typed in another app). Focus is now followed only after input that can bring an app forward (a click, a ⌘ combo such as ⌘Tab, or Return), and each such input allows a single follow. Diagnosed from @clbagrat's recording.
+
 ## [0.11.5] - 2026-10-15
 
 ### Fixed

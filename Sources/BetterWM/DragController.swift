@@ -43,7 +43,13 @@ final class DragController {
         }
         let p = event.location
         let alt = event.flags.contains(HotKey.eventFlags(manager.config.dragModifiers))
-        if type == .keyDown || type == .leftMouseDown { manager.lastUserInput = Date() }
+        if type == .keyDown || type == .leftMouseDown {
+            manager.lastUserInput = Date()
+            // Only input that can bring another app forward: a click (Dock, window, notification), a ⌘ combo
+            // (⌘Tab, ⌘`), or Return (Spotlight, Launchpad). Typing in the current app never switches apps.
+            let key = event.getIntegerValueField(.keyboardEventKeycode)
+            if type == .leftMouseDown || event.flags.contains(.maskCommand) || key == 36 || key == 76 { manager.lastFocusInput = Date() }
+        }
         switch type {
         case .keyDown:
             // Feed an active hotkey recorder before macOS gets a chance to treat the press as a system shortcut.
