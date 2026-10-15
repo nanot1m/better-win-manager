@@ -88,7 +88,10 @@ final class StatusBar {
             clock: formatter.string(from: Date()),
             weather: weather.reading.map { r in
                 (String(format: "%.0f°", r.temperature), r.symbol)
-            }
+            },
+            battery: config.barBattery ? SystemStatus.battery() : nil,
+            wifi: config.barWifi ? SystemStatus.wifiStrength() : nil,
+            showWifi: config.barWifi
         )
         windows.forEach { $0.view.render(model) }
     }
@@ -140,6 +143,11 @@ final class BarWindow: NSPanel {
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
+/// A non-key panel swallows the first click unless the control accepts it.
+private final class ChipButton: NSButton {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 final class BarView: NSView {
     struct Model {
         var desktops: Int
@@ -148,6 +156,9 @@ final class BarView: NSView {
         var title: String
         var clock: String
         var weather: (String, String)?
+        var battery: SystemStatus.Battery?
+        var wifi: Double?
+        var showWifi: Bool
     }
 
     var onSelectDesktop: ((Int) -> Void)?
@@ -164,6 +175,9 @@ final class BarView: NSView {
     private let titleLabel = NSTextField(labelWithString: "")
     private let weatherIcon = NSImageView()
     private let weatherLabel = NSTextField(labelWithString: "")
+    private let wifiIcon = NSImageView()
+    private let batteryIcon = NSImageView()
+    private let batteryLabel = NSTextField(labelWithString: "")
     private let clockLabel = NSTextField(labelWithString: "")
     private var chips: [NSButton] = []
     private var leftLeading: NSLayoutConstraint!
@@ -185,7 +199,7 @@ final class BarView: NSView {
         wantsLayer = true
         layer?.masksToBounds = true
 
-        for l in [appLabel, titleLabel, weatherLabel, clockLabel] {
+        for l in [appLabel, titleLabel, weatherLabel, batteryLabel, clockLabel] {
             l.font = .systemFont(ofSize: 12, weight: l === appLabel ? .semibold : .regular)
             l.textColor = .labelColor
             l.lineBreakMode = .byTruncatingTail
@@ -193,9 +207,11 @@ final class BarView: NSView {
         }
         titleLabel.textColor = .secondaryLabelColor
         clockLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-        weatherIcon.imageScaling = .scaleProportionallyDown
-        weatherIcon.contentTintColor = .labelColor
-        weatherIcon.widthAnchor.constraint(equalToConstant: 16).isActive = true
+        for icon in [weatherIcon, wifiIcon, batteryIcon] {
+            icon.imageScaling = .scaleProportionallyDown
+            icon.contentTintColor = .labelColor
+            icon.widthAnchor.constraint(equalToConstant: icon === batteryIcon ? 22 : 16).isActive = true
+        }
 
         left.orientation = .horizontal
         left.spacing = 10
@@ -205,7 +221,13 @@ final class BarView: NSView {
         right.alignment = .centerY
         right.addArrangedSubview(weatherIcon)
         right.addArrangedSubview(weatherLabel)
+        right.addArrangedSubview(wifiIcon)
+        right.addArrangedSubview(batteryIcon)
+        right.addArrangedSubview(batteryLabel)
+        right.setCustomSpacing(4, after: batteryIcon)
         right.addArrangedSubview(clockLabel)
+        right.setCustomSpacing(14, after: weatherLabel)
+        right.setCustomSpacing(14, after: batteryLabel)
         for v in [left, right] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         appLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
@@ -240,9 +262,9 @@ final class BarView: NSView {
         layer?.cornerRadius = config.barRadius
         layer?.borderWidth = config.barBorderWidth
         layer?.borderColor = (NSColor(hex: config.barBorderColor) ?? .separatorColor).cgColor
-        for l in [appLabel, weatherLabel, clockLabel] { l.textColor = textColor }
+        for l in [appLabel, weatherLabel, batteryLabel, clockLabel] { l.textColor = textColor }
         titleLabel.textColor = textColor.withAlphaComponent(0.65)
-        weatherIcon.contentTintColor = textColor
+        for icon in [weatherIcon, wifiIcon, batteryIcon] { icon.contentTintColor = textColor }
         needsLayout = true
     }
 
@@ -260,7 +282,7 @@ final class BarView: NSView {
 
     func render(_ m: Model) {
         while chips.count < m.desktops {
-            let b = NSButton(title: "", target: self, action: #selector(chipPressed(_:)))
+            let b = ChipButton(title: "", target: self, action: #selector(chipPressed(_:)))
             b.isBordered = false
             b.font = .systemFont(ofSize: 11, weight: .semibold)
             b.wantsLayer = true
@@ -297,6 +319,21 @@ final class BarView: NSView {
         } else {
             weatherIcon.isHidden = true
             weatherLabel.isHidden = true
+        }
+        wifiIcon.isHidden = !m.showWifi
+        if m.showWifi {
+            wifiIcon.image = m.wifi.map { NSImage(systemSymbolName: "wifi", variableValue: $0, accessibilityDescription: nil) }
+                ?? NSImage(systemSymbolName: "wifi.slash", accessibilityDescription: nil)
+        }
+        if let b = m.battery {
+            batteryIcon.isHidden = false
+            batteryLabel.isHidden = false
+            batteryIcon.image = NSImage(systemSymbolName: b.symbol, accessibilityDescription: nil)
+            batteryLabel.stringValue = "\(b.percent)%"
+            batteryIcon.contentTintColor = b.percent <= 15 && !b.charging ? .systemRed : textColor
+        } else {
+            batteryIcon.isHidden = true
+            batteryLabel.isHidden = true
         }
         clockLabel.stringValue = m.clock
     }

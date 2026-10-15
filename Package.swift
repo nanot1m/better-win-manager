@@ -11,7 +11,7 @@ let package = Package(
             name: "BetterWM",
             dependencies: ["SkyLightBridge", "BetterWMCore"],
             path: "Sources/BetterWM",
-            linkerSettings: [.linkedFramework("Cocoa"), .linkedFramework("ApplicationServices"), .linkedFramework("CoreLocation")]
+            linkerSettings: [.linkedFramework("Cocoa"), .linkedFramework("ApplicationServices"), .linkedFramework("CoreLocation"), .linkedFramework("CoreWLAN"), .linkedFramework("IOKit")]
         ),
         .executableTarget(name: "CoreTests", dependencies: ["BetterWMCore"], path: "Tests/BetterWMCoreTests"),
     ]

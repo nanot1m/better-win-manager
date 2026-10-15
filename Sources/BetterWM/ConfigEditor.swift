@@ -55,6 +55,8 @@ final class ConfigWindow: NSObject {
     private var barHeightField: NSTextField!
     private var barClockField: NSTextField!
     private var barWeatherCheck: NSButton!
+    private var barBatteryCheck: NSButton!
+    private var barWifiCheck: NSButton!
     private var barFahrenheit: NSButton!
     private var barLocationAuto: NSButton!
     private var barLocationFixed: NSButton!
@@ -281,8 +283,11 @@ final class ConfigWindow: NSObject {
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .secondaryLabelColor
         hint.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
+        barBatteryCheck = NSButton(checkboxWithTitle: "Battery", target: nil, action: nil)
+        barWifiCheck = NSButton(checkboxWithTitle: "Wi-Fi signal", target: nil, action: nil)
         let general = box("Status Bar", rows: [
             [label("Bar"), barCheck],
+            [label("Show"), NSStackView(views: [barBatteryCheck, barWifiCheck])],
             [label("Height"), NSStackView(views: [barHeightField, NSTextField(labelWithString: "pt")])],
             [label("Clock"), NSStackView(views: [barClockField, clockHint])],
             [NSView(), hint],
@@ -446,6 +451,8 @@ final class ConfigWindow: NSObject {
         barHeightField.stringValue = String(Int(config.barHeight))
         barClockField.stringValue = config.barClockFormat
         barWeatherCheck.state = config.barWeather ? .on : .off
+        barBatteryCheck.state = config.barBattery ? .on : .off
+        barWifiCheck.state = config.barWifi ? .on : .off
         barFahrenheit.state = config.barWeatherFahrenheit ? .on : .off
         let auto = config.barWeatherLocation.lowercased() == "auto"
         barLocationAuto.state = auto ? .on : .off
@@ -507,6 +514,8 @@ final class ConfigWindow: NSObject {
         config.barHeight = CGFloat(Double(barHeightField.stringValue) ?? 28)
         config.barClockFormat = barClockField.stringValue.isEmpty ? "EEE d MMM  HH:mm" : barClockField.stringValue
         config.barWeather = barWeatherCheck.state == .on
+        config.barBattery = barBatteryCheck.state == .on
+        config.barWifi = barWifiCheck.state == .on
         config.barWeatherFahrenheit = barFahrenheit.state == .on
         config.barWeatherLocation = barLocationAuto.state == .on ? "auto" : barLocationField.stringValue.trimmingCharacters(in: .whitespaces)
         config.barBackground = barBlur.state == .on ? "blur" : barBgColor.color.hexString
