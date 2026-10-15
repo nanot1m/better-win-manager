@@ -8,7 +8,25 @@ public struct Config {
     public var outerGap: CGFloat = 16
     public var handleWidth: CGFloat = 16
     public var dragModifiers: String = "alt"
-    public var hotkeys: [String: String] = ["popup": "alt+cmd+space", "switcher": "alt+tab", "switcherBack": "alt+shift+tab"]
+    public var hotkeys: [String: String] = Config.defaultHotkeys
+
+    /// ⌃-arrows and ⌃-digits collide with Mission Control's shortcuts; disable those in System Settings ›
+    /// Keyboard › Keyboard Shortcuts › Mission Control, or the registrations fail (and say so in the log).
+    public static let defaultHotkeys: [String: String] = {
+        var h: [String: String] = [
+            "popup": "alt+cmd+space", "switcher": "alt+tab", "switcherBack": "alt+shift+tab",
+            "focusNext": "ctrl+]", "focusPrevious": "ctrl+[",
+            "moveLeft": "ctrl+alt+left", "moveRight": "ctrl+alt+right", "moveUp": "ctrl+alt+up", "moveDown": "ctrl+alt+down",
+            "mergeLeft": "ctrl+alt+shift+left", "mergeRight": "ctrl+alt+shift+right",
+            "toggleTile": "ctrl+alt+t", "retile": "ctrl+alt+r", "equalize": "ctrl+alt+e",
+            "desktopNext": "ctrl+right", "desktopPrevious": "ctrl+left",
+        ]
+        for i in 1...9 {
+            h["desktop\(i)"] = "ctrl+\(i)"
+            h["sendToDesktop\(i)"] = "ctrl+alt+\(i)"
+        }
+        return h
+    }()
     public var tileExistingOnStart: Bool = true
     /// Remember each desktop's grid and put matching windows back into it on the next launch.
     public var restoreLayouts: Bool = true
@@ -224,6 +242,8 @@ public struct Config {
 
         # Global hotkeys: hotkey.<action> = <modifiers>+<key>. Comment a line to unbind.
         # Keys: letters, digits, space, return, tab, escape, left, right, up, down, punctuation.
+        # ⌃-arrows and ⌃-digits are also Mission Control shortcuts; disable those in System Settings ›
+        # Keyboard › Keyboard Shortcuts › Mission Control or these registrations fail.
 
         """
         for a in Config.actions {

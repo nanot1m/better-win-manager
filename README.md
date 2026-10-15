@@ -61,7 +61,7 @@ On the first run the windows on the current desktop are tiled, ordered left to r
 | 1–9 | Switch to that desktop |
 | Esc | Close |
 
-Every popup action, plus retile, equalize, pause and desktop switching, can also be bound to a global hotkey in the config.
+Default global hotkeys: ⌥⌘Space popup, ⌥Tab switcher, ⌃] / ⌃[ focus next/previous, ⌃⌥ arrows move, ⌃⌥⇧ ←/→ merge, ⌃⌥T tile, ⌃⌥R retile, ⌃⌥E equalize, ⌃←/⌃→ and ⌃1–9 switch desktop, ⌃⌥1–9 send the window there. The ⌃-arrow and ⌃-digit ones collide with Mission Control's own shortcuts; disable those in System Settings › Keyboard › Keyboard Shortcuts › Mission Control. All bindings are editable in Settings › Hotkeys or the config.
 
 ### Virtual workspaces
 

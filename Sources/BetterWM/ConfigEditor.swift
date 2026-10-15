@@ -468,7 +468,7 @@ final class ConfigWindow: NSObject {
         grid.column(at: 0).width = 220
         for i in 0..<grid.numberOfRows { grid.row(at: i).yPlacement = .center }
 
-        let hint = NSTextField(wrappingLabelWithString: "Click a field and press a key combination. Delete or Escape clears it.\nSystem shortcuts such as ⌃← / ⌃→ (Mission Control) never reach apps; disable them in System Settings › Keyboard › Keyboard Shortcuts to bind them here.")
+        let hint = NSTextField(wrappingLabelWithString: "Click a field and press a key combination. Delete clears it, Escape keeps the current one.\nSystem shortcuts such as ⌃← / ⌃→ (Mission Control) never reach apps; disable them in System Settings › Keyboard › Keyboard Shortcuts to bind them here.")
         hint.alignment = .center
         hint.widthAnchor.constraint(lessThanOrEqualToConstant: 480).isActive = true
         hint.font = .systemFont(ofSize: 11)
@@ -714,12 +714,12 @@ final class KeyRecorderView: NSView {
     /// Called from the event tap with a CGEvent key press. Returns true if consumed.
     func record(keyCode: Int64, flags: CGEventFlags) -> Bool {
         guard recording else { return false }
-        if keyCode == 53 || keyCode == 51 {
-            spec = nil
-        } else if let s = HotKey.spec(keyCode: UInt32(keyCode), flags: flags) {
+        switch keyCode {
+        case 53: break                                   // Escape: keep the old binding
+        case 51: spec = nil                               // Delete: unbind
+        default:
+            guard let s = HotKey.spec(keyCode: UInt32(keyCode), flags: flags) else { return false }
             spec = s
-        } else {
-            return false
         }
         window?.makeFirstResponder(nil)
         return true
@@ -732,12 +732,12 @@ final class KeyRecorderView: NSView {
     override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self) }
 
     override func keyDown(with e: NSEvent) {
-        if e.keyCode == 53 || e.keyCode == 51 {
-            spec = nil
-        } else if let s = HotKey.spec(from: e) {
+        switch e.keyCode {
+        case 53: break
+        case 51: spec = nil
+        default:
+            guard let s = HotKey.spec(from: e) else { return }
             spec = s
-        } else {
-            return
         }
         window?.makeFirstResponder(nil)
     }

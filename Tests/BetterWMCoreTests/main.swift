@@ -226,6 +226,7 @@ struct ReconcilerTests {
         let v2 = "version = 2\nhotkey.popup = alt+cmd+space\n"
         expect(Config.parse(v2).hotkeys["switcher"] == nil, #function, #line)
         expect(Config.parse(Config().serialized()).hotkeys == Config().hotkeys, #function, #line)
+        expect(Config().hotkeys["desktop3"] == "ctrl+3" && Config().hotkeys["sendToDesktop9"] == "ctrl+alt+9", #function, #line)
     }
 
     func testSavedLayoutV1Migration() {
