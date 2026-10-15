@@ -17,7 +17,7 @@ final class WindowManager {
     /// Set while a Space switch is in flight; the window list mixes both desktops during the slide.
     private var switching = false
     /// Set while the user drags a window or a gap handle; reconciling mid-gesture would fight it.
-    var interacting = false
+    var interacting = false { didSet { focusRing.suspended = interacting } }
     var onFocusChange: (() -> Void)?
 
     var config: Config {

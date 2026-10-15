@@ -31,10 +31,11 @@ final class WindowServerEvents {
     init() {
         let ctx = Unmanaged.passUnretained(self).toOpaque()
         for e in [Event.windowMove, .windowResize, .windowReorder, .windowDestroy, .spaceChange, .frontChange] {
-            WindowServerEvents.register?({ event, data, _, context in
+            WindowServerEvents.register?({ event, data, length, context in
                 guard let context, let e = Event(rawValue: event) else { return }
                 let me = Unmanaged<WindowServerEvents>.fromOpaque(context).takeUnretainedValue()
-                let wid = data?.load(as: UInt32.self)
+                // Payloads are packed; the pointer is not necessarily 4-byte aligned.
+                let wid: UInt32? = (data != nil && length >= 4) ? data!.loadUnaligned(as: UInt32.self) : nil
                 let isWindowEvent = [Event.windowMove, .windowResize, .windowReorder, .windowDestroy].contains(e)
                 me.onEvent?(e, isWindowEvent ? wid : nil)
             }, e.rawValue, ctx)

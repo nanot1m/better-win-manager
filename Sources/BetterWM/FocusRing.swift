@@ -13,6 +13,13 @@ final class FocusRing {
     private var radiusCache: [CGWindowID: CGFloat] = [:]
     /// Floating windows get a ring only when `focusRingFloating` is set; skipping them keeps drags cheap.
     var isTiled: (AXWindow) -> Bool = { _ in true }
+    /// While the user drags a window the ring hides instead of chasing every mouse event; it returns on drop.
+    var suspended = false {
+        didSet {
+            guard suspended != oldValue else { return }
+            if suspended { window.orderOut(nil) } else { update() }
+        }
+    }
 
     init(config: Config) {
         self.config = config
@@ -38,6 +45,7 @@ final class FocusRing {
                 if let wid { self.radiusCache[wid] = nil }
                 self.update()
             case .windowMove, .windowResize:
+                guard !self.suspended else { return }
                 // Cheap path: the focused window moved; just follow it without re-resolving focus.
                 if wid == self.current, let id = wid, let f = WindowServerEvents.bounds(of: id) { self.place(frame: f) } else { self.update() }
             case .spaceChange:
@@ -62,7 +70,7 @@ final class FocusRing {
     private var pad: CGFloat { config.focusRingStyle == .underneath ? config.focusRingWidth : config.focusRingWidth / 2 + 1 }
 
     func update() {
-        guard config.focusRing, let w = AXWindow.focused, config.focusRingFloating || isTiled(w), let id = w.windowID else {
+        guard !suspended, config.focusRing, let w = AXWindow.focused, config.focusRingFloating || isTiled(w), let id = w.windowID else {
             current = nil
             window.orderOut(nil)
             return

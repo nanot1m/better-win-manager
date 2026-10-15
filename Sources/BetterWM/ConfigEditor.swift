@@ -64,6 +64,8 @@ final class ConfigWindow: NSObject {
     private var barTextAuto: NSButton!
     private var barTextColorWell: NSColorWell!
     private var barBorderColorWell: NSColorWell!
+    private var barActiveAccent: NSButton!
+    private var barActiveColorWell: NSColorWell!
     private var barBorderWidthField: NSTextField!
     private var barRadiusField: NSTextField!
     private var barPaddingField: NSTextField!
@@ -309,6 +311,8 @@ final class ConfigWindow: NSObject {
         barTextAuto = NSButton(checkboxWithTitle: "System text colour", target: self, action: #selector(barAppearanceChanged))
         barTextColorWell = well()
         barBorderColorWell = well()
+        barActiveAccent = NSButton(checkboxWithTitle: "System accent colour", target: self, action: #selector(barAppearanceChanged))
+        barActiveColorWell = well()
         barBorderWidthField = num("0")
         barRadiusField = num("0")
         barPaddingField = num("12")
@@ -317,6 +321,7 @@ final class ConfigWindow: NSObject {
         let appearance = box("Bar Appearance", rows: [
             [label("Background"), NSStackView(views: [barBlur, barBgColor])],
             [label("Text"), NSStackView(views: [barTextAuto, barTextColorWell])],
+            [label("Active desktop"), NSStackView(views: [barActiveAccent, barActiveColorWell])],
             [label("Border"), NSStackView(views: [barBorderColorWell, barBorderWidthField, NSTextField(labelWithString: "pt")])],
             [label("Corner radius"), NSStackView(views: [barRadiusField, NSTextField(labelWithString: "pt")])],
             [label("Padding"), NSStackView(views: [barPaddingField, NSTextField(labelWithString: "pt inside")])],
@@ -329,6 +334,7 @@ final class ConfigWindow: NSObject {
     @objc private func barAppearanceChanged() {
         barBgColor.isEnabled = barBlur.state == .off
         barTextColorWell.isEnabled = barTextAuto.state == .off
+        barActiveColorWell.isEnabled = barActiveAccent.state == .off
     }
 
     @objc private func locationModeChanged() {
@@ -453,6 +459,9 @@ final class ConfigWindow: NSObject {
         barTextAuto.state = autoText ? .on : .off
         barTextColorWell.color = autoText ? .labelColor : (NSColor(hex: config.barTextColor) ?? .labelColor)
         barBorderColorWell.color = NSColor(hex: config.barBorderColor) ?? .separatorColor
+        let accent = config.barActiveColor.lowercased() == "accent"
+        barActiveAccent.state = accent ? .on : .off
+        barActiveColorWell.color = accent ? .controlAccentColor : (NSColor(hex: config.barActiveColor) ?? .controlAccentColor)
         barBorderWidthField.stringValue = String(Int(config.barBorderWidth))
         barRadiusField.stringValue = String(Int(config.barRadius))
         barPaddingField.stringValue = String(Int(config.barPadding))
@@ -503,6 +512,7 @@ final class ConfigWindow: NSObject {
         config.barBackground = barBlur.state == .on ? "blur" : barBgColor.color.hexString
         config.barTextColor = barTextAuto.state == .on ? "auto" : barTextColorWell.color.hexString
         config.barBorderColor = barBorderColorWell.color.hexString
+        config.barActiveColor = barActiveAccent.state == .on ? "accent" : barActiveColorWell.color.hexString
         config.barBorderWidth = CGFloat(Double(barBorderWidthField.stringValue) ?? 0)
         config.barRadius = CGFloat(Double(barRadiusField.stringValue) ?? 0)
         config.barPadding = CGFloat(Double(barPaddingField.stringValue) ?? 12)

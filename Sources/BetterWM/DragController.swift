@@ -64,7 +64,6 @@ final class DragController {
             dragStart = p
             guard manager.enabled, let w = AXWindow.at(point: p) else { return Unmanaged.passUnretained(event) }
             dragged = w
-            manager.interacting = true
             dragStart = p
             originalFrame = w.frame
             currentZone = nil
@@ -79,6 +78,8 @@ final class DragController {
                 originalFrame = w.frame
             }
             guard let w = dragged else { return Unmanaged.passUnretained(event) }
+            // A plain click never gets here; only a real drag suspends reconciling and the focus ring.
+            manager.interacting = true
             if intercepting {
                 let dx = p.x - dragStart.x, dy = p.y - dragStart.y
                 w.frame = CGRect(origin: CGPoint(x: originalFrame.minX + dx, y: originalFrame.minY + dy), size: originalFrame.size)

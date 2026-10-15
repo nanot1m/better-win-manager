@@ -63,32 +63,65 @@ final class HandleWindow: NSWindow {
     }
 
     override var canBecomeKey: Bool { false }
+
+    /// Dev aid: renders the handle in a given state to PNG.
+    func snapshot(hover: Bool, dragging: Bool, to path: String) {
+        let v = contentView as! HandleView
+        v.preview(hover: hover, dragging: dragging)
+        guard let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { return }
+        v.cacheDisplay(in: v.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+    }
 }
 
 private final class HandleView: NSView {
     var onDrag: ((CGPoint) -> Void)?
     var onDragEnd: (() -> Void)?
     var isVertical = true
-    private var hover = false
+    private var hover = false { didSet { needsDisplay = true } }
+    private var dragging = false { didSet { needsDisplay = true } }
     private var cursor: NSCursor { isVertical ? .resizeLeftRight : .resizeUpDown }
+
+    func preview(hover: Bool, dragging: Bool) { self.hover = hover; self.dragging = dragging }
 
     override func updateTrackingAreas() {
         trackingAreas.forEach(removeTrackingArea)
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect], owner: self))
     }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func mouseEntered(with e: NSEvent) { hover = true; needsDisplay = true; cursor.set() }
+    override func mouseEntered(with e: NSEvent) { hover = true; cursor.set() }
     // Non-key floating windows lose cursor push/pop state, so re-assert on every move.
     override func mouseMoved(with e: NSEvent) { cursor.set() }
-    override func mouseExited(with e: NSEvent) { hover = false; needsDisplay = true; NSCursor.arrow.set() }
-    override func mouseDown(with e: NSEvent) { hover = true; needsDisplay = true; cursor.set() }
+    override func mouseExited(with e: NSEvent) { hover = false; if !dragging { NSCursor.arrow.set() } }
+    override func mouseDown(with e: NSEvent) { dragging = true; cursor.set() }
     override func mouseDragged(with e: NSEvent) { cursor.set(); onDrag?(NSEvent.mouseLocation.toAX()) }
-    override func mouseUp(with e: NSEvent) { onDragEnd?() }
+    override func mouseUp(with e: NSEvent) {
+        dragging = false
+        if !hover { NSCursor.arrow.set() }
+        onDragEnd?()
+    }
+
+    /// A short grip pill centred in the gap, like a trackpad divider: visible on hover, solid while dragging.
     override func draw(_ dirtyRect: NSRect) {
-        guard hover else { return }
-        NSColor.controlAccentColor.withAlphaComponent(0.6).setFill()
-        let inset = isVertical ? CGSize(width: 1, height: 0) : CGSize(width: 0, height: 1)
-        NSBezierPath(roundedRect: bounds.insetBy(dx: inset.width, dy: inset.height), xRadius: 3, yRadius: 3).fill()
+        guard hover || dragging else { return }
+        let thickness: CGFloat = dragging ? 5 : 4
+        let length = min(56, (isVertical ? bounds.height : bounds.width) * 0.4)
+        let pill = isVertical
+            ? NSRect(x: bounds.midX - thickness / 2, y: bounds.midY - length / 2, width: thickness, height: length)
+            : NSRect(x: bounds.midX - length / 2, y: bounds.midY - thickness / 2, width: length, height: thickness)
+        let path = NSBezierPath(roundedRect: pill, xRadius: thickness / 2, yRadius: thickness / 2)
+        NSColor.black.withAlphaComponent(0.25).setFill()
+        NSBezierPath(roundedRect: pill.insetBy(dx: -1, dy: -1), xRadius: thickness / 2 + 1, yRadius: thickness / 2 + 1).fill()
+        (dragging ? NSColor.controlAccentColor : NSColor.controlAccentColor.withAlphaComponent(0.75)).setFill()
+        path.fill()
+        if dragging {
+            // Faint full-length guide so the boundary being moved is obvious.
+            let guide = isVertical
+                ? NSRect(x: bounds.midX - 0.5, y: 0, width: 1, height: bounds.height)
+                : NSRect(x: 0, y: bounds.midY - 0.5, width: bounds.width, height: 1)
+            NSColor.controlAccentColor.withAlphaComponent(0.35).setFill()
+            guide.fill()
+        }
     }
 }
 

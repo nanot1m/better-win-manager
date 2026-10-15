@@ -65,7 +65,7 @@ final class StatusBar {
             w.view.apply(config, avoidNotch: atScreenTop(screen))
             w.view.onSelectDesktop = { [weak self] i in self?.onSelectDesktop?(i) }
             windows.append(w)
-            w.orderFrontRegardless()
+            w.orderBack(nil)
         }
         refresh()
         onLayoutChange?()
@@ -124,14 +124,17 @@ final class BarWindow: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
-        // Just below the system menu bar, so when it slides in it covers the bar rather than the other way round.
-        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) - 1)
+        // Behind all app windows: tiled ones start below the bar anyway, floating ones may cover it.
+        level = .normal
         animationBehavior = .none
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         contentView = view
     }
 
     override var canBecomeKey: Bool { false }
+
+    // Clicking a desktop chip must not pull the bar in front of the windows.
+    override func mouseDown(with event: NSEvent) { super.mouseDown(with: event); orderBack(nil) }
 
     // AppKit pushes windows below the menu-bar level out of the menu bar area; the bar must be allowed to sit there.
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
@@ -153,6 +156,7 @@ final class BarView: NSView {
     private let solid = NSView()
     private var avoidNotch = false
     private var textColor: NSColor = .labelColor
+    private var activeColor: NSColor = .controlAccentColor
     private var padding: CGFloat = 12
     private let left = NSStackView()
     private let right = NSStackView()
@@ -228,6 +232,7 @@ final class BarView: NSView {
         leftLeading.constant = padding
         rightTrailing.constant = -padding
         textColor = config.barTextColor.lowercased() == "auto" ? .labelColor : (NSColor(hex: config.barTextColor) ?? .labelColor)
+        activeColor = config.barActiveColor.lowercased() == "accent" ? .controlAccentColor : (NSColor(hex: config.barActiveColor) ?? .controlAccentColor)
         let blur = config.barBackground.lowercased() == "blur"
         background.isHidden = !blur
         solid.isHidden = blur
@@ -270,10 +275,10 @@ final class BarView: NSView {
             b.tag = i
             let current = i == m.current
             b.attributedTitle = NSAttributedString(string: "\(i + 1)", attributes: [
-                .foregroundColor: current ? NSColor.white : textColor.withAlphaComponent(0.7),
+                .foregroundColor: current ? activeColor.contrastingText : textColor.withAlphaComponent(0.7),
                 .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
             ])
-            b.layer?.backgroundColor = current ? NSColor.controlAccentColor.cgColor : textColor.withAlphaComponent(0.1).cgColor
+            b.layer?.backgroundColor = current ? activeColor.cgColor : textColor.withAlphaComponent(0.1).cgColor
         }
         if appLabel.superview == nil {
             let sep = NSBox(); sep.boxType = .separator
@@ -297,4 +302,13 @@ final class BarView: NSView {
     }
 
     @objc private func chipPressed(_ sender: NSButton) { onSelectDesktop?(sender.tag) }
+}
+
+extension NSColor {
+    /// Black or white, whichever reads better on this colour.
+    var contrastingText: NSColor {
+        let c = usingColorSpace(.sRGB) ?? self
+        let luminance = 0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent
+        return luminance > 0.6 ? .black : .white
+    }
 }

@@ -32,6 +32,8 @@ public struct Config {
     /// "auto" follows the system label colour, or a hex colour.
     public var barTextColor: String = "auto"
     public var barBorderColor: String = "FFFFFF22"
+    /// "accent" follows the system accent colour, or a hex colour.
+    public var barActiveColor: String = "accent"
     public var barBorderWidth: CGFloat = 0
     public var barRadius: CGFloat = 0
     /// Horizontal space between the bar edge and its content.
@@ -150,6 +152,8 @@ public struct Config {
         barBackground = \(barBackground)
         barTextColor = \(barTextColor)
         barBorderColor = \(barBorderColor)
+        # Active desktop chip: "accent" or a hex colour.
+        barActiveColor = \(barActiveColor)
         barBorderWidth = \(num(barBorderWidth))
         barRadius = \(num(barRadius))
         barPadding = \(num(barPadding))
@@ -234,6 +238,7 @@ public struct Config {
             case "barBackground": cfg.barBackground = value
             case "barTextColor": cfg.barTextColor = value
             case "barBorderColor": cfg.barBorderColor = value
+            case "barActiveColor": cfg.barActiveColor = value
             case "barBorderWidth": cfg.barBorderWidth = Double(value).map { CGFloat($0) } ?? cfg.barBorderWidth
             case "barRadius": cfg.barRadius = Double(value).map { CGFloat($0) } ?? cfg.barRadius
             case "barPadding": cfg.barPadding = Double(value).map { CGFloat($0) } ?? cfg.barPadding

@@ -76,6 +76,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 print("bar snapshot written")
             }
         }
+        if let i = CommandLine.arguments.firstIndex(of: "--snapshot-handle"), i + 1 < CommandLine.arguments.count {
+            let path = CommandLine.arguments[i + 1]
+            let h = HandleWindow()
+            h.setFrame(NSRect(x: 0, y: 0, width: 16, height: 300), display: true)
+            h.isVertical = true
+            h.snapshot(hover: true, dragging: false, to: path)
+            h.snapshot(hover: true, dragging: true, to: path.replacingOccurrences(of: ".png", with: "-drag.png"))
+            print("handle snapshots written")
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--snapshot-hud"), i + 1 < CommandLine.arguments.count {
             let path = CommandLine.arguments[i + 1]
             hud.enabled = true
