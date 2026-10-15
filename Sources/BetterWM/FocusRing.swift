@@ -124,6 +124,6 @@ extension NSColor {
         let c = usingColorSpace(.sRGB) ?? self
         let r = Int(round(c.redComponent * 255)), g = Int(round(c.greenComponent * 255)), b = Int(round(c.blueComponent * 255))
         let a = Int(round(c.alphaComponent * 255))
-        return a == 255 ? String(format: "#%02X%02X%02X", r, g, b) : String(format: "#%02X%02X%02X%02X", r, g, b, a)
+        return a == 255 ? String(format: "%02X%02X%02X", r, g, b) : String(format: "%02X%02X%02X%02X", r, g, b, a)
     }
 }

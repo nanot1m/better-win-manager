@@ -4,7 +4,7 @@ BUILD    = .build/release
 BUNDLE   = dist/$(APP).app
 ZIP      = dist/$(APP)-$(VERSION).zip
 
-.PHONY: build test bundle sign zip install clean
+.PHONY: build test bundle sign zip install run clean
 
 build:
 	swift build -c release --product BetterWM
@@ -31,6 +31,17 @@ zip: sign
 install: sign
 	rm -rf /Applications/$(APP).app
 	cp -R $(BUNDLE) /Applications/
+
+# Debug build as a bundle: needed for anything that reads Info.plist, such as Location Services.
+run:
+	swift build --product $(APP)
+	rm -rf $(BUNDLE)
+	mkdir -p $(BUNDLE)/Contents/MacOS
+	cp .build/debug/$(APP) $(BUNDLE)/Contents/MacOS/
+	sed 's/VERSION/dev/g' Resources/Info.plist > $(BUNDLE)/Contents/Info.plist
+	codesign --force --deep --sign - $(BUNDLE)
+	pkill -x $(APP) || true
+	$(BUNDLE)/Contents/MacOS/$(APP)
 
 clean:
 	rm -rf dist .build

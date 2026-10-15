@@ -4,6 +4,8 @@ import Cocoa
 /// Builds `Snapshot`s from the window list and Accessibility, and resolves window IDs back to AX handles.
 final class SystemObserver {
     private var ax: [WindowID: AXWindow] = [:]
+    /// Space to keep free at the top of each screen (the status bar), in points.
+    var topInset: (NSScreen) -> CGFloat = { _ in 0 }
 
     func axWindow(_ id: WindowID) -> AXWindow? {
         if let w = ax[id], w.isValid { return w }
@@ -18,7 +20,16 @@ final class SystemObserver {
     }
 
     func screens() -> [ScreenInfo] {
-        NSScreen.screens.map { ScreenInfo(space: Spaces.current(for: $0), area: $0.visibleFrame.toCocoa()) }
+        NSScreen.screens.map { s in
+            var area = s.visibleFrame.toCocoa()
+            // The status bar is anchored to the screen's top edge; keep tiled windows below its bottom edge.
+            let barBottom = s.frame.toCocoa().minY + topInset(s)
+            if topInset(s) > 0, area.minY < barBottom {
+                area.size.height -= barBottom - area.minY
+                area.origin.y = barBottom
+            }
+            return ScreenInfo(space: Spaces.current(for: s), area: area)
+        }
     }
 
     /// Full picture: everything on the active Spaces, plus any `tracked` window still resolvable even if

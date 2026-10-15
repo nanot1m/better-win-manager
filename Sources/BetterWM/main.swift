@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var popup: ActionPopup!
     var hotKeys: [HotKey] = []
     let hud = ActionHUD()
+    var bar: StatusBar!
     var overlayItem: NSMenuItem?
     let configWindow = ConfigWindow()
 
@@ -33,6 +34,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let config = Config.load()
         manager = WindowManager(config: config)
         popup = ActionPopup(manager: manager)
+        bar = StatusBar(config: config)
+        manager.system.topInset = { [weak self] screen in self?.bar.inset(for: screen) ?? 0 }
+        bar.onLayoutChange = { [weak self] in self?.manager.apply() }
+        bar.onSelectDesktop = { Spaces.switchToDesktop($0) }
+        manager.onFocusChange = { [weak self] in self?.bar.focusChanged() }
+        manager.apply()
         hud.enabled = config.actionOverlay
         popup.onAction = { [weak self] keys, name in self?.hud.show(keys: keys, action: name, preformatted: true) }
         registerHotKeys(config)
@@ -55,6 +62,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [popup] in
                 popup?.snapshot(to: path)
                 print("popup snapshot written")
+            }
+        }
+        if let i = CommandLine.arguments.firstIndex(of: "--snapshot-bar"), i + 1 < CommandLine.arguments.count {
+            let path = CommandLine.arguments[i + 1]
+            var c = manager.config
+            c.bar = true
+            c.barWeatherLocation = "52.52,13.40"
+            UserDefaults.standard.set(true, forKey: "barMenuBarHintShown")
+            bar.apply(c)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [bar] in
+                bar?.snapshot(to: path)
+                print("bar snapshot written")
             }
         }
         if let i = CommandLine.arguments.firstIndex(of: "--snapshot-hud"), i + 1 < CommandLine.arguments.count {
@@ -214,6 +233,7 @@ extension AppDelegate {
     @objc func equalize() { manager.equalize() }
     @objc func reloadConfig() {
         manager.reloadConfig()
+        bar.apply(manager.config)
         registerHotKeys(manager.config)
         syncAutoTileItems()
     }
@@ -240,6 +260,7 @@ extension AppDelegate {
         configWindow.show(config: manager.config) { [weak self] cfg in
             guard let self else { return }
             self.manager.config = cfg
+            self.bar.apply(cfg)
             self.manager.relayout()
             self.registerHotKeys(cfg)
             self.syncAutoTileItems()

@@ -16,6 +16,7 @@ final class WindowManager {
     private var switching = false
     /// Set while the user drags a window or a gap handle; reconciling mid-gesture would fight it.
     var interacting = false
+    var onFocusChange: (() -> Void)?
 
     var config: Config {
         didSet {
@@ -47,7 +48,10 @@ final class WindowManager {
             }
         }
         axObserver = WindowObserver(onNewWindow: { [weak self] _ in self?.tick() },
-                                    onFocusChange: { [weak self] in self?.focusRing.update() })
+                                    onFocusChange: { [weak self] in
+                                        self?.focusRing.update()
+                                        self?.onFocusChange?()
+                                    })
         tick()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in self?.tick() }
     }

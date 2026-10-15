@@ -46,7 +46,7 @@ final class WindowObserver {
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         AXObserverAddNotification(obs, appEl, kAXWindowCreatedNotification as CFString, refcon)
         for n in [kAXFocusedWindowChangedNotification, kAXWindowMovedNotification, kAXWindowResizedNotification,
-                  kAXWindowMiniaturizedNotification, kAXUIElementDestroyedNotification] {
+                  kAXWindowMiniaturizedNotification, kAXUIElementDestroyedNotification, kAXTitleChangedNotification] {
             AXObserverAddNotification(obs, appEl, n as CFString, refcon)
         }
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .commonModes)

@@ -51,6 +51,24 @@ final class ConfigWindow: NSObject {
     private var ringRadiusLabel: NSTextField!
     private var ringAutoRadius: NSButton!
     private var ringFloating: NSButton!
+    private var barCheck: NSButton!
+    private var barHeightField: NSTextField!
+    private var barClockField: NSTextField!
+    private var barWeatherCheck: NSButton!
+    private var barFahrenheit: NSButton!
+    private var barLocationAuto: NSButton!
+    private var barLocationFixed: NSButton!
+    private var barLocationField: NSTextField!
+    private var barBlur: NSButton!
+    private var barBgColor: NSColorWell!
+    private var barTextAuto: NSButton!
+    private var barTextColorWell: NSColorWell!
+    private var barBorderColorWell: NSColorWell!
+    private var barBorderWidthField: NSTextField!
+    private var barRadiusField: NSTextField!
+    private var barPaddingField: NSTextField!
+    private var barMarginField: NSTextField!
+    private var barTopOffsetField: NSTextField!
 
     func show(config: Config, onSave: @escaping (Config) -> Void) {
         self.config = config
@@ -69,6 +87,7 @@ final class ConfigWindow: NSObject {
         tabs.heightAnchor.constraint(greaterThanOrEqualToConstant: 440).isActive = true
         tabs.addTabViewItem(tab("General", page(generalBoxes())))
         tabs.addTabViewItem(tab("Apps", page(appBoxes())))
+        tabs.addTabViewItem(tab("Bar", page(barBoxes())))
         tabs.addTabViewItem(tab("Hotkeys", hotkeysPage()))
 
         let path = NSTextField(labelWithString: Config.path.path)
@@ -246,6 +265,76 @@ final class ConfigWindow: NSObject {
         return [box("Auto-tile Exclusions", rows: [[list]], twoColumn: false)]
     }
 
+    private func barBoxes() -> [NSView] {
+        barCheck = NSButton(checkboxWithTitle: "Show status bar at the top of each screen", target: nil, action: nil)
+        barHeightField = NSTextField(string: "28")
+        barHeightField.widthAnchor.constraint(equalToConstant: 56).isActive = true
+        barHeightField.alignment = .right
+        barClockField = NSTextField(string: "")
+        barClockField.widthAnchor.constraint(equalToConstant: 220).isActive = true
+        let clockHint = NSTextField(labelWithString: "Unicode date pattern, e.g. EEE d MMM  HH:mm")
+        clockHint.font = .systemFont(ofSize: 11)
+        clockHint.textColor = .secondaryLabelColor
+        let hint = NSTextField(wrappingLabelWithString: "Set \"Automatically hide and show the menu bar\" to Always in System Settings › Control Center so the system bar doesn't overlap this one. Tiled windows start below the bar.")
+        hint.font = .systemFont(ofSize: 11)
+        hint.textColor = .secondaryLabelColor
+        hint.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
+        let general = box("Status Bar", rows: [
+            [label("Bar"), barCheck],
+            [label("Height"), NSStackView(views: [barHeightField, NSTextField(labelWithString: "pt")])],
+            [label("Clock"), NSStackView(views: [barClockField, clockHint])],
+            [NSView(), hint],
+        ])
+
+        barWeatherCheck = NSButton(checkboxWithTitle: "Show weather", target: nil, action: nil)
+        barFahrenheit = NSButton(checkboxWithTitle: "Fahrenheit", target: nil, action: nil)
+        barLocationAuto = NSButton(radioButtonWithTitle: "Use Location Services", target: self, action: #selector(locationModeChanged))
+        barLocationFixed = NSButton(radioButtonWithTitle: "Fixed coordinates", target: self, action: #selector(locationModeChanged))
+        barLocationField = NSTextField(string: "")
+        barLocationField.placeholderString = "latitude, longitude"
+        barLocationField.widthAnchor.constraint(equalToConstant: 180).isActive = true
+        let weather = box("Weather (Open-Meteo)", rows: [
+            [label("Weather"), NSStackView(views: [barWeatherCheck, barFahrenheit])],
+            [label("Location"), barLocationAuto],
+            [NSView(), NSStackView(views: [barLocationFixed, barLocationField])],
+        ])
+        func num(_ v: String) -> NSTextField {
+            let f = NSTextField(string: v); f.widthAnchor.constraint(equalToConstant: 56).isActive = true; f.alignment = .right; return f
+        }
+        func well() -> NSColorWell {
+            let w = NSColorWell(); w.widthAnchor.constraint(equalToConstant: 60).isActive = true; w.heightAnchor.constraint(equalToConstant: 24).isActive = true; return w
+        }
+        barBlur = NSButton(checkboxWithTitle: "Blurred background", target: self, action: #selector(barAppearanceChanged))
+        barBgColor = well()
+        barTextAuto = NSButton(checkboxWithTitle: "System text colour", target: self, action: #selector(barAppearanceChanged))
+        barTextColorWell = well()
+        barBorderColorWell = well()
+        barBorderWidthField = num("0")
+        barRadiusField = num("0")
+        barPaddingField = num("12")
+        barMarginField = num("0")
+        barTopOffsetField = num("0")
+        let appearance = box("Bar Appearance", rows: [
+            [label("Background"), NSStackView(views: [barBlur, barBgColor])],
+            [label("Text"), NSStackView(views: [barTextAuto, barTextColorWell])],
+            [label("Border"), NSStackView(views: [barBorderColorWell, barBorderWidthField, NSTextField(labelWithString: "pt")])],
+            [label("Corner radius"), NSStackView(views: [barRadiusField, NSTextField(labelWithString: "pt")])],
+            [label("Padding"), NSStackView(views: [barPaddingField, NSTextField(labelWithString: "pt inside")])],
+            [label("Side margin"), NSStackView(views: [barMarginField, NSTextField(labelWithString: "pt from the screen sides")])],
+            [label("Top offset"), NSStackView(views: [barTopOffsetField, NSTextField(labelWithString: "pt from the top edge; 0 sticks to the top")])],
+        ])
+        return [general, appearance, weather]
+    }
+
+    @objc private func barAppearanceChanged() {
+        barBgColor.isEnabled = barBlur.state == .off
+        barTextColorWell.isEnabled = barTextAuto.state == .off
+    }
+
+    @objc private func locationModeChanged() {
+        barLocationField.isEnabled = barLocationFixed.state == .on
+    }
+
     private func hotkeysPage() -> NSView {
         var rows: [[NSView]] = []
         for a in Config.actions {
@@ -347,6 +436,29 @@ final class ConfigWindow: NSObject {
         autoRadiusChanged()
         ringSliderChanged(ringWidth)
         ringSliderChanged(ringRadius)
+        barCheck.state = config.bar ? .on : .off
+        barHeightField.stringValue = String(Int(config.barHeight))
+        barClockField.stringValue = config.barClockFormat
+        barWeatherCheck.state = config.barWeather ? .on : .off
+        barFahrenheit.state = config.barWeatherFahrenheit ? .on : .off
+        let auto = config.barWeatherLocation.lowercased() == "auto"
+        barLocationAuto.state = auto ? .on : .off
+        barLocationFixed.state = auto ? .off : .on
+        barLocationField.stringValue = auto ? "" : config.barWeatherLocation
+        locationModeChanged()
+        let blur = config.barBackground.lowercased() == "blur"
+        barBlur.state = blur ? .on : .off
+        barBgColor.color = blur ? NSColor.windowBackgroundColor : (NSColor(hex: config.barBackground) ?? .windowBackgroundColor)
+        let autoText = config.barTextColor.lowercased() == "auto"
+        barTextAuto.state = autoText ? .on : .off
+        barTextColorWell.color = autoText ? .labelColor : (NSColor(hex: config.barTextColor) ?? .labelColor)
+        barBorderColorWell.color = NSColor(hex: config.barBorderColor) ?? .separatorColor
+        barBorderWidthField.stringValue = String(Int(config.barBorderWidth))
+        barRadiusField.stringValue = String(Int(config.barRadius))
+        barPaddingField.stringValue = String(Int(config.barPadding))
+        barMarginField.stringValue = String(Int(config.barMargin))
+        barTopOffsetField.stringValue = String(Int(config.barTopOffset))
+        barAppearanceChanged()
         ignoreText.string = config.ignoreApps.joined(separator: "\n")
         floatSmallCheck.state = config.floatSmallWindows ? .on : .off
         smallW.stringValue = String(Int(config.smallWindowWidth))
@@ -382,6 +494,20 @@ final class ConfigWindow: NSObject {
         config.focusRingWidth = CGFloat(ringWidth.doubleValue.rounded())
         config.focusRingRadius = CGFloat(ringRadius.doubleValue.rounded())
         config.focusRingAutoRadius = ringAutoRadius.state == .on
+        config.bar = barCheck.state == .on
+        config.barHeight = CGFloat(Double(barHeightField.stringValue) ?? 28)
+        config.barClockFormat = barClockField.stringValue.isEmpty ? "EEE d MMM  HH:mm" : barClockField.stringValue
+        config.barWeather = barWeatherCheck.state == .on
+        config.barWeatherFahrenheit = barFahrenheit.state == .on
+        config.barWeatherLocation = barLocationAuto.state == .on ? "auto" : barLocationField.stringValue.trimmingCharacters(in: .whitespaces)
+        config.barBackground = barBlur.state == .on ? "blur" : barBgColor.color.hexString
+        config.barTextColor = barTextAuto.state == .on ? "auto" : barTextColorWell.color.hexString
+        config.barBorderColor = barBorderColorWell.color.hexString
+        config.barBorderWidth = CGFloat(Double(barBorderWidthField.stringValue) ?? 0)
+        config.barRadius = CGFloat(Double(barRadiusField.stringValue) ?? 0)
+        config.barPadding = CGFloat(Double(barPaddingField.stringValue) ?? 12)
+        config.barMargin = CGFloat(Double(barMarginField.stringValue) ?? 0)
+        config.barTopOffset = CGFloat(Double(barTopOffsetField.stringValue) ?? 0)
         config.ignoreApps = ignoreText.string.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         config.floatSmallWindows = floatSmallCheck.state == .on
         config.smallWindowWidth = CGFloat(Double(smallW.stringValue) ?? 500)

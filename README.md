@@ -7,6 +7,7 @@ Column-based tiling window manager for macOS. Tile windows by ⌥-dragging them 
 - Drop zones highlighted while dragging, draggable gap handles to resize
 - Auto-tiling of new windows with several placement strategies
 - Instant desktop switching that skips the slide animation
+- Optional status bar under the auto-hidden menu bar: desktops, active window, weather, clock; notch-aware
 - Menu bar menu, keyboard popup, global hotkeys, settings window
 
 ## Install
@@ -61,6 +62,10 @@ On the first run the windows on the current desktop are tiled, ordered left to r
 | Esc | Close |
 
 Every popup action, plus retile, equalize, pause and desktop switching, can also be bound to a global hotkey in the config.
+
+### Status bar
+
+Enable it in Settings › Bar or with `bar = true`. It sits at the top of each screen where the system menu bar lives, so set "Automatically hide and show the menu bar" to Always in System Settings › Control Center; the app offers to open that pane once. Tiled windows start below the bar. Desktop chips switch desktops on click. Weather comes from Open-Meteo using either Location Services or fixed `barWeatherLocation = lat,lon`.
 
 ### Menu bar
 
@@ -118,6 +123,7 @@ swift build
 .build/debug/BetterWM --snapshot-settings /tmp/s.png   # render each Settings tab to PNG
 make zip                                               # dist/BetterWM-<version>.zip, ad-hoc signed
 swift run CoreTests                                    # reconciler tests (plain executable; CLT has no XCTest)
+make run                                               # debug build as a signed .app (needed for Location Services)
 ```
 
 The layout logic lives in the `BetterWMCore` library: a pure `Reconciler` turns a `Snapshot` of the system plus the `DesiredState` into frame commands, with no Accessibility calls. The app is a thin shell that builds snapshots, executes commands and turns gestures into state changes.

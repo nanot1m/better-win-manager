@@ -18,8 +18,28 @@ public struct Config {
     public var focusRingRadius: CGFloat = 10
     /// Measure each window's real corner radius once and match it; `focusRingRadius` is the fallback.
     public var focusRingAutoRadius: Bool = true
-    public var focusRingColor: String = "#4C8BF5"
+    public var focusRingColor: String = "4C8BF5"
     public var ignoreApps: [String] = Config.defaultIgnoreApps
+    public var bar: Bool = false
+    public var barHeight: CGFloat = 28
+    public var barClockFormat: String = "EEE d MMM  HH:mm"
+    public var barWeather: Bool = true
+    public var barWeatherFahrenheit: Bool = false
+    /// "auto" uses Location Services; otherwise "lat,lon".
+    public var barWeatherLocation: String = "auto"
+    /// "blur" for a translucent material, or a hex colour such as 1E1E1ECC.
+    public var barBackground: String = "blur"
+    /// "auto" follows the system label colour, or a hex colour.
+    public var barTextColor: String = "auto"
+    public var barBorderColor: String = "FFFFFF22"
+    public var barBorderWidth: CGFloat = 0
+    public var barRadius: CGFloat = 0
+    /// Horizontal space between the bar edge and its content.
+    public var barPadding: CGFloat = 12
+    /// Horizontal gap between the bar and the screen edges; above zero the bar floats.
+    public var barMargin: CGFloat = 0
+    /// Distance from the top edge of the screen to the bar.
+    public var barTopOffset: CGFloat = 0
     public var floatSmallWindows: Bool = true
     public var smallWindowWidth: CGFloat = 500
     public var smallWindowHeight: CGFloat = 400
@@ -114,7 +134,29 @@ public struct Config {
         # Match each window's own corner radius (measured once per window); the radius below is the fallback.
         focusRingAutoRadius = \(focusRingAutoRadius)
         focusRingRadius = \(num(focusRingRadius))
+        # Colours are hex RRGGBB or RRGGBBAA without a leading #.
         focusRingColor = \(focusRingColor)
+
+        # Status bar under the (auto-hidden) system menu bar: desktops, active window, weather, clock.
+        bar = \(bar)
+        barHeight = \(num(barHeight))
+        # Unicode date format pattern for the clock.
+        barClockFormat = \(barClockFormat)
+        barWeather = \(barWeather)
+        barWeatherFahrenheit = \(barWeatherFahrenheit)
+        # "auto" asks Location Services; or a fixed "latitude,longitude" such as 52.52,13.40.
+        barWeatherLocation = \(barWeatherLocation)
+        # Appearance: background is "blur" or a hex colour (RRGGBB or RRGGBBAA); text colour "auto" or hex.
+        barBackground = \(barBackground)
+        barTextColor = \(barTextColor)
+        barBorderColor = \(barBorderColor)
+        barBorderWidth = \(num(barBorderWidth))
+        barRadius = \(num(barRadius))
+        barPadding = \(num(barPadding))
+        # Horizontal gap from the screen edges; above zero the bar floats.
+        barMargin = \(num(barMargin))
+        # Distance from the top of the screen. 0 sticks the bar to the edge (where the hidden menu bar lives).
+        barTopOffset = \(num(barTopOffset))
 
         # Apps never tiled automatically, by bundle identifier, comma separated. Manual ⌥-drag still works.
         ignoreApps = \(ignoreApps.joined(separator: ", "))
@@ -148,11 +190,22 @@ public struct Config {
         return parse(text)
     }
 
+    /// A `#` starts a comment unless it directly follows `=`, so older configs with `#4C8BF5` colours still parse.
+    static func stripComment(_ line: String) -> String {
+        var i = line.startIndex
+        while let hash = line[i...].firstIndex(of: "#") {
+            let before = line[..<hash].reversed().first { !$0.isWhitespace }
+            if before == "=" { i = line.index(after: hash); continue }
+            return String(line[..<hash])
+        }
+        return line
+    }
+
     public static func parse(_ text: String) -> Config {
         var cfg = Config()
         cfg.hotkeys = [:]
         for raw in text.split(whereSeparator: \.isNewline) {
-            let line = raw.firstIndex(of: "#").map { String(raw[..<$0]) } ?? String(raw)
+            let line = Config.stripComment(String(raw))
             guard let eq = line.firstIndex(of: "=") else { continue }
             let key = line[..<eq].trimmingCharacters(in: .whitespaces)
             let value = line[line.index(after: eq)...].trimmingCharacters(in: .whitespaces)
@@ -172,6 +225,20 @@ public struct Config {
             case "focusRingAutoRadius": cfg.focusRingAutoRadius = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRingRadius": cfg.focusRingRadius = Double(value).map { CGFloat($0) } ?? cfg.focusRingRadius
             case "focusRingColor": cfg.focusRingColor = value
+            case "bar": cfg.bar = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "barHeight": cfg.barHeight = Double(value).map { CGFloat($0) } ?? cfg.barHeight
+            case "barClockFormat": cfg.barClockFormat = value
+            case "barWeather": cfg.barWeather = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "barWeatherFahrenheit": cfg.barWeatherFahrenheit = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "barWeatherLocation": cfg.barWeatherLocation = value
+            case "barBackground": cfg.barBackground = value
+            case "barTextColor": cfg.barTextColor = value
+            case "barBorderColor": cfg.barBorderColor = value
+            case "barBorderWidth": cfg.barBorderWidth = Double(value).map { CGFloat($0) } ?? cfg.barBorderWidth
+            case "barRadius": cfg.barRadius = Double(value).map { CGFloat($0) } ?? cfg.barRadius
+            case "barPadding": cfg.barPadding = Double(value).map { CGFloat($0) } ?? cfg.barPadding
+            case "barMargin": cfg.barMargin = Double(value).map { CGFloat($0) } ?? cfg.barMargin
+            case "barTopOffset": cfg.barTopOffset = Double(value).map { CGFloat($0) } ?? cfg.barTopOffset
             case "ignoreApps": cfg.ignoreApps = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             case "floatSmallWindows": cfg.floatSmallWindows = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "smallWindowSize":

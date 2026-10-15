@@ -149,6 +149,14 @@ struct ReconcilerTests {
         expect(r.displaced(state, moved) == [2], #function, 150)
     }
 
+    func testHexColoursSurviveCommentStripping() {
+        let c = Config.parse("focusRingColor = #4C8BF5\nbarBackground = #1E1E1ECC # note\ngap = 4 # comment\n# focusRingWidth = 9\n")
+        expect(c.focusRingColor == "#4C8BF5", #function, #line)
+        expect(c.barBackground == "#1E1E1ECC", #function, #line)
+        expect(c.gap == 4, #function, #line)
+        expect(c.focusRingWidth == 3, #function, #line)
+    }
+
     func testStrategiesPlaceRelativeToFocused() {
         var c = config
         c.autoTileStrategy = .nextToFocused
@@ -181,6 +189,7 @@ let tests: [(String, () -> Void)] = [
     ("moveAndMerge", t.testMoveAndMerge),
     ("displacedDetection", t.testDisplacedDetection),
     ("strategiesPlaceRelativeToFocused", t.testStrategiesPlaceRelativeToFocused),
+    ("hexColoursSurviveCommentStripping", t.testHexColoursSurviveCommentStripping),
 ]
 for (name, run) in tests {
     let before = failures
