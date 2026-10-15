@@ -151,8 +151,8 @@ struct ReconcilerTests {
 
     func testHexColoursSurviveCommentStripping() {
         let c = Config.parse("focusRingColor = #4C8BF5\nbarBackground = #1E1E1ECC # note\ngap = 4 # comment\n# focusRingWidth = 9\n")
-        expect(c.focusRingColor == "#4C8BF5", #function, #line)
-        expect(c.barBackground == "#1E1E1ECC", #function, #line)
+        expect(c.focusRingColor == "4C8BF5", #function, #line)  // v1 "#" stripped by migration
+        expect(c.barBackground == "1E1E1ECC", #function, #line)
         expect(c.gap == 4, #function, #line)
         expect(c.focusRingWidth == 3, #function, #line)
     }
@@ -216,6 +216,33 @@ struct ReconcilerTests {
         expect(g.columns.map(\.windows) == [[1], [2]], #function, #line)
     }
 
+    func testConfigV1Migration() {
+        let v1 = "focusRingColor = #FF9300\nhotkey.popup = alt+cmd+space\nbarCatSheet = /tmp/cat.png\n"
+        let c = Config.parse(v1)
+        expect(c.focusRingColor == "FF9300", #function, #line)
+        expect(c.hotkeys["switcher"] == "alt+tab", #function, #line)
+        expect(c.barCatSheets == ["/tmp/cat.png"], #function, #line)
+        // A current-version file that deliberately unbinds the switcher keeps it unbound.
+        let v2 = "version = 2\nhotkey.popup = alt+cmd+space\n"
+        expect(Config.parse(v2).hotkeys["switcher"] == nil, #function, #line)
+        expect(Config.parse(Config().serialized()).hotkeys == Config().hotkeys, #function, #line)
+    }
+
+    func testSavedLayoutV1Migration() {
+        let json = """
+        {"spaces":[{"id":1000201,"columns":[{"weight":1,"windows":[{"bundleID":"com.a","title":"t","frame":[[0,0],[10,10]],"heightWeight":1}]}]},
+                   {"id":7,"columns":[]}]}
+        """
+        let v1 = try! JSONDecoder().decode(SavedLayout.self, from: Data(json.utf8))
+        expect(v1.version == 1, #function, #line)
+        let v2 = v1.migrated(currentSpace: 3)
+        expect(v2.version == 2, #function, #line)
+        expect(v2.spaces[0].id == 1_000_000_000 + 3 * 10_000 + 201, #function, #line)
+        expect(v2.spaces[1].id == 7, #function, #line)
+        let encoded = try! JSONEncoder().encode(v2)
+        expect(try! JSONDecoder().decode(SavedLayout.self, from: encoded) == v2, #function, #line)
+    }
+
     func testStrategiesPlaceRelativeToFocused() {
         var c = config
         c.autoTileStrategy = .nextToFocused
@@ -252,6 +279,8 @@ let tests: [(String, () -> Void)] = [
     ("savedLayoutRoundTripAndMatching", t.testSavedLayoutRoundTripAndMatching),
     ("restoreFallsBackToNearestFrame", t.testRestoreFallsBackToNearestFrame),
     ("edgeMoveCyclesWidth", t.testEdgeMoveCyclesWidth),
+    ("configV1Migration", t.testConfigV1Migration),
+    ("savedLayoutV1Migration", t.testSavedLayoutV1Migration),
 ]
 for (name, run) in tests {
     let before = failures

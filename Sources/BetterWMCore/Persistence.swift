@@ -22,9 +22,34 @@ public struct SavedLayout: Codable, Equatable {
         public var columns: [Column]
         public init(id: SpaceID, columns: [Column]) { self.id = id; self.columns = columns }
     }
+    /// Bumped when the meaning of stored ids changes; `migrated(currentSpace:)` upgrades older files.
+    public static let schemaVersion = 2
+    public var version: Int = SavedLayout.schemaVersion
     public var spaces: [Space] = []
 
     public init(spaces: [Space] = []) { self.spaces = spaces }
+
+    enum CodingKeys: String, CodingKey { case version, spaces }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        spaces = try c.decodeIfPresent([Space].self, forKey: .spaces) ?? []
+    }
+
+    /// v1 virtual ids (1_000_000 + ws*100 + screen) belonged to one global workspace set. v2 ids are
+    /// per macOS desktop; the old grids are attached to `currentSpace`, the desktop they were last used on.
+    public func migrated(currentSpace: SpaceID) -> SavedLayout {
+        guard version < 2 else { return self }
+        var out = self
+        out.version = SavedLayout.schemaVersion
+        out.spaces = spaces.map { sp in
+            guard sp.id >= 1_000_000, sp.id < 1_000_000_000 else { return sp }
+            let rest = sp.id - 1_000_000
+            return Space(id: 1_000_000_000 + currentSpace * 10_000 + rest, columns: sp.columns)
+        }
+        return out
+    }
 
     /// Captures every non-empty grid in `state`, describing windows with what `snapshot` knows about them.
     public static func capture(_ state: DesiredState, _ snapshot: Snapshot) -> SavedLayout {

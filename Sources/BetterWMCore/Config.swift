@@ -1,6 +1,8 @@
 import Foundation
 
 public struct Config {
+    /// Bumped whenever a key is renamed or its meaning changes; `parse` migrates older files.
+    public static let schemaVersion = 2
     public init() {}
     public var gap: CGFloat = 16
     public var outerGap: CGFloat = 16
@@ -15,7 +17,7 @@ public struct Config {
     /// Show live window previews, or just app icons.
     public var switcherThumbnails: Bool = true
     /// "native" uses macOS Spaces; "virtual" emulates desktops on one Space by parking other workspaces' windows off-screen.
-    public var workspaces: WorkspaceMode = .native
+    public var workspaces: WorkspaceMode = .virtual
     public var virtualWorkspaces: Int = 4
 
     public enum WorkspaceMode: String, CaseIterable {
@@ -135,6 +137,7 @@ public struct Config {
     public func serialized() -> String {
         var out = """
         # BetterWM configuration. Lines starting with # are comments.
+        version = \(Config.schemaVersion)
 
         # Space between tiled windows and around the screen edge, in points.
         gap = \(num(gap))
@@ -149,8 +152,8 @@ public struct Config {
         # ⌥Tab window switcher grouped by desktop; previews need Screen Recording permission, otherwise icons only.
         switcher = \(switcher)
         switcherThumbnails = \(switcherThumbnails)
-        # "native": macOS desktops (Spaces). "virtual": N workspaces emulated on a single desktop by parking
-        # the other workspaces' windows just off the bottom-right corner; switching is instant.
+        # "virtual" (default): N workspaces emulated on a single desktop by parking the other workspaces'
+        # windows just off the bottom-right corner; switching is instant. "native": macOS desktops (Spaces).
         workspaces = \(workspaces.rawValue)
         virtualWorkspaces = \(virtualWorkspaces)
         # Tile windows automatically when they open or arrive on a desktop.
@@ -255,13 +258,17 @@ public struct Config {
 
     public static func parse(_ text: String) -> Config {
         var cfg = Config()
+        let defaultHotkeys = cfg.hotkeys
         cfg.hotkeys = [:]
+        var fileVersion = 1
+        var hadHotkeys = false
         for raw in text.split(whereSeparator: \.isNewline) {
             let line = Config.stripComment(String(raw))
             guard let eq = line.firstIndex(of: "=") else { continue }
             let key = line[..<eq].trimmingCharacters(in: .whitespaces)
             let value = line[line.index(after: eq)...].trimmingCharacters(in: .whitespaces)
             switch key {
+            case "version": fileVersion = Int(value) ?? 1
             case "gap": cfg.gap = Double(value).map { CGFloat($0) } ?? cfg.gap
             case "outerGap": cfg.outerGap = Double(value).map { CGFloat($0) } ?? cfg.outerGap
             case "handleWidth": cfg.handleWidth = Double(value).map { CGFloat($0) } ?? cfg.handleWidth
@@ -285,7 +292,7 @@ public struct Config {
             case "bar": cfg.bar = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barHeight": cfg.barHeight = Double(value).map { CGFloat($0) } ?? cfg.barHeight
             case "barClockFormat": cfg.barClockFormat = value
-            case "barCatSheet": if !value.isEmpty { cfg.barCatSheets = [value] }
+            case "barCatSheet": if !value.isEmpty { cfg.barCatSheets = [value] }  // v1 name, kept forever
             case "barCatSheets": cfg.barCatSheets = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             case "barCat": cfg.barCat = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barBatteryPercent": cfg.barBatteryPercent = ["true", "yes", "1", "on"].contains(value.lowercased())
@@ -312,8 +319,27 @@ public struct Config {
             case "smallWindowSize":
                 let parts = value.lowercased().split(separator: "x").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
                 if parts.count == 2 { cfg.smallWindowWidth = CGFloat(parts[0]); cfg.smallWindowHeight = CGFloat(parts[1]) }
-        case _ where key.hasPrefix("hotkey."): cfg.hotkeys[String(key.dropFirst("hotkey.".count))] = value
+            case _ where key.hasPrefix("hotkey."): cfg.hotkeys[String(key.dropFirst("hotkey.".count))] = value; hadHotkeys = true
             default: print("Unknown config key '\(key)'")
+            }
+        }
+        if !hadHotkeys { cfg.hotkeys = defaultHotkeys }
+        return migrate(cfg, from: fileVersion, hadHotkeys: hadHotkeys)
+    }
+
+    /// Migrations from older schema versions. Each step only fills in what that version could not express.
+    static func migrate(_ cfg: Config, from version: Int, hadHotkeys: Bool) -> Config {
+        var cfg = cfg
+        if version < 2 {
+            // v1 files predate the ⌥Tab switcher; give them its default bindings.
+            if hadHotkeys {
+                if cfg.hotkeys["switcher"] == nil { cfg.hotkeys["switcher"] = "alt+tab" }
+                if cfg.hotkeys["switcherBack"] == nil { cfg.hotkeys["switcherBack"] = "alt+shift+tab" }
+            }
+            // v1 stored hex colours with a leading '#'.
+            for kp in [\Config.focusRingColor, \Config.barBorderColor, \Config.barBackground, \Config.barTextColor, \Config.barActiveColor]
+            where cfg[keyPath: kp].hasPrefix("#") {
+                cfg[keyPath: kp].removeFirst()
             }
         }
         return cfg

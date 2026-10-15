@@ -9,8 +9,32 @@ final class WindowManager {
     private var saved = SavedLayout()
     private var lastSaved = SavedLayout()
     private var saveWork: DispatchWorkItem?
-    private var virtualWS: VirtualWorkspaces?
-    var isVirtual: Bool { virtualWS != nil }
+    /// Virtual mode: one independent workspace set per macOS desktop (nil in native mode).
+    private var virtualSets: [SpaceID: VirtualWorkspaces]?
+    var isVirtual: Bool { virtualSets != nil }
+
+    /// The set for the desktop currently shown on the main screen; created on first use.
+    private var virtualWS: VirtualWorkspaces? { virtualSet(for: NSScreen.screens.first ?? NSScreen.main!) }
+
+    private func virtualSet(for screen: NSScreen) -> VirtualWorkspaces? {
+        guard virtualSets != nil else { return nil }
+        return virtualSet(realSpace: Spaces.current(for: screen))
+    }
+
+    private func virtualSet(realSpace: SpaceID) -> VirtualWorkspaces? {
+        guard virtualSets != nil else { return nil }
+        if let v = virtualSets?[realSpace] { return v }
+        let v = VirtualWorkspaces(realSpace: realSpace, count: config.virtualWorkspaces)
+        virtualSets?[realSpace] = v
+        return v
+    }
+
+    /// The set a window belongs to: that of the macOS desktop it is on.
+    private func virtualSet(ofWindow id: WindowID) -> VirtualWorkspaces? {
+        guard virtualSets != nil else { return nil }
+        guard let real = Spaces.spaces(of: id).first else { return virtualWS }
+        return virtualSet(realSpace: real)
+    }
     /// Visible window IDs front to back from the last full tick; avoids re-enumerating on every gesture frame.
     private var zOrder: [WindowID] = []
     private var reconciler: Reconciler
@@ -40,74 +64,52 @@ final class WindowManager {
     private func configureWorkspaces() {
         switch config.workspaces {
         case .native:
-            guard let v = virtualWS else { return }
-            migrateToNative(from: v)
-            virtualWS = nil
+            guard let sets = virtualSets else { return }
+            migrateToNative(from: Array(sets.values))
+            virtualSets = nil
             system.spaceOverride = nil
             system.windowSpacesOverride = nil
         case .virtual:
-            if let v = virtualWS { v.setCount(config.virtualWorkspaces); return }
-            let v = VirtualWorkspaces(count: config.virtualWorkspaces)
-            virtualWS = v
-            migrateToVirtual(v)
-            system.spaceOverride = { [unowned v] screen in
-                v.spaceID(workspace: v.active, screenIndex: NSScreen.screens.firstIndex(of: screen) ?? 0)
+            if let sets = virtualSets { sets.values.forEach { $0.setCount(config.virtualWorkspaces) }; return }
+            virtualSets = [:]
+            migrateToVirtual()
+            system.spaceOverride = { [unowned self] screen in
+                guard let v = self.virtualSet(for: screen) else { return Spaces.current(for: screen) }
+                return v.spaceID(workspace: v.active, screenIndex: NSScreen.screens.firstIndex(of: screen) ?? 0)
             }
-            system.windowSpacesOverride = { [unowned v, unowned self] id in
+            system.windowSpacesOverride = { [unowned self] id in
+                guard let v = self.virtualSet(ofWindow: id) else { return Spaces.spaces(of: id) }
                 let screenIndex = self.system.axWindow(id).flatMap { w in NSScreen.screens.firstIndex { $0.visibleFrame.toCocoa().contains(w.frame.center) } } ?? 0
                 return [v.spaceID(workspace: v.workspace(of: id), screenIndex: screenIndex)]
             }
         }
         tick()
-        // Window moves between Spaces land asynchronously.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.tick() }
     }
 
-    /// Native → virtual: every window on another macOS desktop comes to this one and joins the matching workspace.
-    private func migrateToVirtual(_ v: VirtualWorkspaces) {
-        let desktops = Spaces.desktops()
-        guard let currentIndex = Spaces.currentDesktopIndex() else { state = DesiredState(); return }
-        v.switchTo(min(currentIndex, v.count - 1))
-        let currentSpace = desktops[currentIndex]
+    /// Native → virtual: each macOS desktop keeps its windows and gets its own workspace set; the existing grid
+    /// becomes workspace 1 of that desktop.
+    private func migrateToVirtual() {
         var newState = DesiredState()
-        func screenIndex(_ f: CGRect) -> Int { NSScreen.screens.firstIndex { $0.visibleFrame.toCocoa().contains(f.center) } ?? 0 }
-        // Switching modes at runtime: desktop N becomes workspace N. At launch (no grids yet) the saved
-        // layout assigns workspaces as windows appear, so only gather the windows here.
-        let atLaunch = state.grids.isEmpty
-        for w in Spaces.allWindows() {
-            guard let id = id(w), let space = Spaces.spaces(of: id).first, let index = desktops.firstIndex(of: space) else { continue }
-            if !atLaunch { v.move(id, to: min(index, v.count - 1)) }
-            if space != currentSpace { Spaces.moveWindow(id, toSpace: currentSpace) { _ in } }
-        }
-        for (space, grid) in state.grids {
-            guard let index = desktops.firstIndex(of: space), let first = grid.windows.first,
-                  let f = system.axWindow(first)?.frame else { continue }
-            let target = v.spaceID(workspace: min(index, v.count - 1), screenIndex: screenIndex(f))
+        for (space, grid) in state.grids where !VirtualWorkspaces.isVirtual(space) {
+            guard let v = virtualSet(realSpace: space), let first = grid.windows.first, let f = system.axWindow(first)?.frame else { continue }
+            let screenIndex = NSScreen.screens.firstIndex { $0.visibleFrame.toCocoa().contains(f.center) } ?? 0
+            let target = v.spaceID(workspace: 0, screenIndex: screenIndex)
+            for id in grid.windows { v.move(id, to: 0) }
             newState.grids[target] = grid
             newState.seen[target] = Set(grid.windows)
         }
-        // At launch there are no native grids yet; saved-layout matching then decides workspaces as windows appear.
         if !state.grids.isEmpty { virtualRestoreDeadline = .distantPast }
         state = newState
     }
 
-    /// Virtual → native: unpark everything and send each window to the macOS desktop matching its workspace.
-    private func migrateToNative(from v: VirtualWorkspaces) {
-        let desktops = Spaces.desktops()
-        let current = Spaces.current(for: NSScreen.screens[0])
+    /// Virtual → native: unpark everything; workspace 1 of each desktop becomes that desktop's grid, the rest float.
+    private func migrateToNative(from sets: [VirtualWorkspaces]) {
+        for v in sets { v.unparkAll { self.system.execute([.setFrame($0, $1)]) } }
         var newState = DesiredState()
-        let snap = system.snapshot(tracked: tracked)
-        v.unparkAll { self.system.execute([.setFrame($0, $1)]) }
-        for w in snap.windows {
-            let ws = v.workspace(of: w.id)
-            guard ws < desktops.count, desktops[ws] != current else { continue }
-            Spaces.moveWindow(w.id, toSpace: desktops[ws]) { _ in }
-        }
-        for (space, grid) in state.grids where space >= 1_000_000 {
-            let ws = Int((space - 1_000_000) / 100)
-            guard ws < desktops.count else { continue }
-            newState.grids[desktops[ws]] = grid
-            newState.seen[desktops[ws]] = Set(grid.windows)
+        for (space, grid) in state.grids {
+            guard let d = VirtualWorkspaces.decode(space), d.workspace == 0 else { continue }
+            newState.grids[d.real] = grid
+            newState.seen[d.real] = Set(grid.windows)
         }
         state = newState
     }
@@ -118,7 +120,11 @@ final class WindowManager {
     func windowsByDesktop() -> [(desktop: Int, windows: [AXWindow])] {
         var byDesktop: [Int: [AXWindow]] = [:]
         if let v = virtualWS {
-            for w in Spaces.visibleWindows() { if let id = id(w) { byDesktop[v.workspace(of: id), default: []].append(w) } }
+            // Only this macOS desktop's set: windows on other desktops belong to their own sets.
+            for w in Spaces.visibleWindows() {
+                guard let id = id(w), virtualSet(ofWindow: id) === v else { continue }
+                byDesktop[v.workspace(of: id), default: []].append(w)
+            }
         } else {
             let desktops = Spaces.desktops()
             for w in Spaces.allWindows() {
@@ -196,7 +202,7 @@ final class WindowManager {
     private var ignoreFocusSwitchUntil = Date.distantPast
     private var lastFocusedID: WindowID?
     private func followFocusedWindowsWorkspace() {
-        guard let v = virtualWS, let f = AXWindow.focused, let id = id(f) else { return }
+        guard isVirtual, let f = AXWindow.focused, let id = id(f), let v = virtualSet(ofWindow: id) else { return }
         guard id != lastFocusedID else { return }
         lastFocusedID = id
         guard Date() >= ignoreFocusSwitchUntil else { return }
@@ -215,20 +221,24 @@ final class WindowManager {
 
     private func focusTopWindow() {
         guard let v = virtualWS else { return }
-        if let id = zOrder.first(where: { v.workspace(of: $0) == v.active }) { system.execute([.raise(id)]) }
+        if let id = zOrder.first(where: { virtualSet(ofWindow: $0) === v && v.workspace(of: $0) == v.active }) { system.execute([.raise(id)]) }
     }
 
     /// Parks windows of inactive workspaces and restores returning floating ones; tiled ones follow their grid.
     private func applyVirtualParking(_ snap: Snapshot) {
-        guard let v = virtualWS else { return }
-        let ids = snap.windows.map(\.id)
-        v.apply(windows: ids, isTiled: { self.state.isTiled($0) }, frame: { snap.window($0)?.frame },
+        guard let sets = virtualSets else { return }
+        var bySet: [SpaceID: [WindowID]] = [:]
+        for w in snap.windows { if let v = virtualSet(ofWindow: w.id) { bySet[v.realSpace, default: []].append(w.id) } }
+        for (real, ids) in bySet {
+            guard let v = sets[real] ?? virtualSets?[real] else { continue }
+            v.apply(windows: ids, isTiled: { self.state.isTiled($0) }, frame: { snap.window($0)?.frame },
                 setFrame: { self.system.execute([.setFrame($0, $1)]) }, parkOrigin: { f in
                     // Bottom-right corner of the screen the window is on, leaving two points visible.
                     let screen = NSScreen.screens.first { $0.frame.toCocoa().contains(f.center) } ?? NSScreen.screens[0]
                     let r = screen.frame.toCocoa()
                     return CGPoint(x: r.maxX - 2, y: r.maxY - 2)
                 })
+        }
     }
 
     var enabled: Bool {
@@ -245,8 +255,9 @@ final class WindowManager {
         focusRing.onReorder = { [unowned self] in self.stackHandles() }
         if config.restoreLayouts, let data = try? Data(contentsOf: Config.statePath),
            let layout = try? JSONDecoder().decode(SavedLayout.self, from: data) {
-            saved = layout
-            lastSaved = layout
+            let current = Spaces.current(for: NSScreen.screens.first ?? NSScreen.main!)
+            saved = layout.migrated(currentSpace: current)
+            lastSaved = saved
         }
         configureWorkspaces()
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
@@ -309,15 +320,16 @@ final class WindowManager {
     /// Gives every not-yet-assigned window a workspace: its saved slot if one matches, otherwise the active one.
     /// Returns true if any window was placed from the saved layout, so the snapshot should be rebuilt.
     private func assignNewVirtualWindows(_ snap: Snapshot) -> Bool {
-        guard let v = virtualWS else { return false }
-        var pool = snap.windows.filter { !v.isKnown($0.id) }
+        guard virtualSets != nil else { return false }
+        var pool = snap.windows.filter { !(virtualSet(ofWindow: $0.id)?.isKnown($0.id) ?? true) }
         guard !pool.isEmpty else { return false }
         var placed = false
         if config.restoreLayouts, Date() < virtualRestoreDeadline {
-            for savedSpace in saved.spaces where savedSpace.id >= 1_000_000 {
-                let candidates = pool.filter { !reconciler.isIgnored($0) }
+            for savedSpace in saved.spaces {
+                guard let d = VirtualWorkspaces.decode(savedSpace.id), let v = virtualSet(realSpace: d.real) else { continue }
+                let candidates = pool.filter { !reconciler.isIgnored($0) && Spaces.spaces(of: $0.id).first == d.real }
                 guard let grid = saved.restore(space: savedSpace.id, candidates: candidates) else { continue }
-                let ws = Int((savedSpace.id - 1_000_000) / 100)
+                let ws = d.workspace
                 for id in grid.windows { v.move(id, to: ws) }
                 pool.removeAll { grid.contains($0.id) }
                 // Merge into whatever that workspace already has rather than replacing it.
@@ -329,7 +341,7 @@ final class WindowManager {
                 placed = true
             }
         }
-        for w in pool { v.adopt(w.id) }
+        for w in pool { virtualSet(ofWindow: w.id)?.adopt(w.id) }
         return placed
     }
 
@@ -530,8 +542,8 @@ final class WindowManager {
 
     func sendFocusedWindow(toDesktop index: Int) {
         guard let w = AXWindow.focused else { return }
-        if let v = virtualWS {
-            guard let id = id(w), index >= 0, index < 9, index != v.active else { return }
+        if isVirtual {
+            guard let id = id(w), let v = virtualSet(ofWindow: id), index >= 0, index < 9, index != v.active else { return }
             if index >= v.count { v.setCount(index + 1) }
             let wasTiled = isTiled(w)
             untile(w)

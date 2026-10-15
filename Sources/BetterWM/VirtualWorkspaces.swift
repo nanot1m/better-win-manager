@@ -11,16 +11,33 @@ final class VirtualWorkspaces {
     private var parkedFrames: [WindowID: CGRect] = [:]
     private var parked: Set<WindowID> = []
 
-    init(count: Int) { self.count = max(1, count) }
-
     func setCount(_ n: Int) {
         count = max(1, n)
         if active >= count { active = count - 1 }
         for (w, ws) in membership where ws >= count { membership[w] = count - 1 }
     }
 
-    /// Space ID used in the model for workspace `ws` on `screen`; stable across launches so saved layouts match.
-    func spaceID(workspace ws: Int, screenIndex: Int) -> SpaceID { 1_000_000 + SpaceID(ws) * 100 + SpaceID(screenIndex) }
+    /// The macOS Space this set belongs to; every real desktop has its own independent set.
+    let realSpace: SpaceID
+
+    init(realSpace: SpaceID, count: Int) {
+        self.realSpace = realSpace
+        self.count = max(1, count)
+    }
+
+    /// Model Space ID for workspace `ws` on `screenIndex` within this set; stable across launches so saved layouts match.
+    func spaceID(workspace ws: Int, screenIndex: Int) -> SpaceID { VirtualWorkspaces.spaceID(real: realSpace, workspace: ws, screenIndex: screenIndex) }
+
+    static let base: SpaceID = 1_000_000_000
+    static func spaceID(real: SpaceID, workspace ws: Int, screenIndex: Int) -> SpaceID {
+        base + real * 10_000 + SpaceID(ws) * 100 + SpaceID(screenIndex)
+    }
+    static func isVirtual(_ id: SpaceID) -> Bool { id >= base }
+    static func decode(_ id: SpaceID) -> (real: SpaceID, workspace: Int, screenIndex: Int)? {
+        guard id >= base else { return nil }
+        let rest = id - base
+        return (rest / 10_000, Int((rest % 10_000) / 100), Int(rest % 100))
+    }
 
     func workspace(of w: WindowID) -> Int { membership[w] ?? active }
     func isKnown(_ w: WindowID) -> Bool { membership[w] != nil }
