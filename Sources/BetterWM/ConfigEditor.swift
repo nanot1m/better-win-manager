@@ -1,5 +1,6 @@
 import BetterWMCore
 import Cocoa
+import UniformTypeIdentifiers
 
 final class ConfigWindow: NSObject {
     private var window: NSWindow?
@@ -141,22 +142,25 @@ final class ConfigWindow: NSObject {
         return item
     }
 
+    /// Pages scroll: some tabs have grown taller than the window.
     private func page(_ boxes: [NSView]) -> NSView {
         let stack = NSStackView(views: boxes)
         stack.orientation = .vertical
         stack.alignment = .width
         stack.spacing = 14
-        for b in boxes { b.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
-        let container = NSView()
-        container.addSubview(stack)
+        stack.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        for b in boxes { b.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true }
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.drawsBackground = false
+        scroll.documentView = stack
         stack.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
-            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -16),
+            stack.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+            stack.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
         ])
-        return container
+        return scroll
     }
 
     private func generalBoxes() -> [NSView] {
@@ -298,16 +302,21 @@ final class ConfigWindow: NSObject {
         barDiskCheck = NSButton(checkboxWithTitle: "Free disk", target: nil, action: nil)
         barCatSheetField = NSTextField(string: "")
         barCatSheetField.placeholderString = "path to sheet PNG; empty = built-in cat"
-        barCatSheetField.widthAnchor.constraint(equalToConstant: 260).isActive = true
-        let sheetHint = NSTextField(wrappingLabelWithString: "Optional sprite sheet in Last tick's \"Pixel Cats 64x64\" layout. Downloaded by you; not bundled with the app.")
+        barCatSheetField.widthAnchor.constraint(equalToConstant: 220).isActive = true
+        let sheetHint = NSTextField(wrappingLabelWithString: "Optional sprite sheet in Last tick's \"Pixel Cats 64x64\" layout, e.g. \"cat 2 (64x64).png\" from the pack. Downloaded by you; not bundled with the app.")
         sheetHint.font = .systemFont(ofSize: 11)
         sheetHint.textColor = .secondaryLabelColor
         sheetHint.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
+        let chooseSheet = NSButton(title: "Choose…", target: self, action: #selector(chooseCatSheet))
+        let sheetLink = NSButton(title: "Get the free pack on itch.io", target: self, action: #selector(openCatPack))
+        sheetLink.bezelStyle = .inline
+        sheetLink.font = .systemFont(ofSize: 11)
+        sheetLink.contentTintColor = .linkColor
         let general = box("Status Bar", rows: [
             [label("Bar"), barCheck],
             [label("Show"), NSStackView(views: [barBatteryCheck, barBatteryPercentCheck, barWifiCheck, barCatCheck])],
             [NSView(), NSStackView(views: [barCpuCheck, barMemoryCheck, barDiskCheck])],
-            [label("Cat sprites"), barCatSheetField],
+            [label("Cat sprites"), NSStackView(views: [barCatSheetField, chooseSheet, sheetLink])],
             [NSView(), sheetHint],
             [label("Height"), NSStackView(views: [barHeightField, NSTextField(labelWithString: "pt")])],
             [label("Clock"), NSStackView(views: [barClockField, clockHint])],
@@ -361,6 +370,22 @@ final class ConfigWindow: NSObject {
         barBgColor.isEnabled = barBlur.state == .off
         barTextColorWell.isEnabled = barTextAuto.state == .off
         barActiveColorWell.isEnabled = barActiveAccent.state == .off
+    }
+
+    @objc private func chooseCatSheet() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png]
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a sprite sheet PNG from the Pixel Cats 64x64 pack"
+        if !barCatSheetField.stringValue.isEmpty {
+            panel.directoryURL = URL(fileURLWithPath: (barCatSheetField.stringValue as NSString).expandingTildeInPath).deletingLastPathComponent()
+        }
+        if panel.runModal() == .OK, let url = panel.url { barCatSheetField.stringValue = url.path }
+    }
+
+    @objc private func openCatPack() {
+        NSWorkspace.shared.open(URL(string: "https://last-tick.itch.io/animated-pixel-cats-64x64")!)
     }
 
     @objc private func locationModeChanged() {
