@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var hotKeys: [HotKey] = []
     let hud = ActionHUD()
     var bar: StatusBar!
+    var demo: DemoRunner?
     var overlayItem: NSMenuItem?
     let configWindow = ConfigWindow()
 
@@ -63,6 +64,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 popup?.snapshot(to: path)
                 print("popup snapshot written")
             }
+        }
+        if let i = CommandLine.arguments.firstIndex(of: "--demo"), i + 1 < CommandLine.arguments.count {
+            let path = CommandLine.arguments[i + 1]
+            demo = DemoRunner(manager: manager, popup: popup, hud: hud) { [weak self] in self?.perform(action: $0) ?? false }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [demo] in demo?.run(scriptAt: path) }
         }
         if let i = CommandLine.arguments.firstIndex(of: "--snapshot-bar"), i + 1 < CommandLine.arguments.count {
             let path = CommandLine.arguments[i + 1]
@@ -196,8 +202,16 @@ extension AppDelegate {
     @objc func toggleFocused() { manager.toggleFocused() }
     @objc func showPopup() { popup.toggle() }
 
-    func registerHotKeys(_ config: Config) {
-        hotKeys.removeAll()
+    func perform(action name: String) -> Bool {
+        guard let a = actionTable()[name] else { return false }
+        if let title = Config.actions.first(where: { $0.key == name })?.title {
+            hud.show(keys: manager.config.hotkeys[name], action: title)
+        }
+        a()
+        return true
+    }
+
+    func actionTable() -> [String: () -> Void] {
         var actions: [String: () -> Void] = [
             "popup": { [weak self] in self?.popup.toggle() },
             "focusNext": { [weak self] in self?.manager.focusNext() },
@@ -220,6 +234,18 @@ extension AppDelegate {
         for i in 1...9 {
             actions["desktop\(i)"] = { Spaces.switchToDesktop(i - 1) }
             actions["sendToDesktop\(i)"] = { [weak self] in self?.manager.sendFocusedWindow(toDesktop: i - 1) }
+        }
+        return actions
+    }
+
+    func registerHotKeys(_ config: Config) {
+        hotKeys.removeAll()
+        var actions = actionTable()
+        // While a demo runs, the popup hotkey doubles as its stop button.
+        if let popupAction = actions["popup"] {
+            actions["popup"] = { [weak self] in
+                if let demo = self?.demo, demo.running { demo.stop() } else { popupAction() }
+            }
         }
         for (index, (name, spec)) in config.hotkeys.sorted(by: { $0.key < $1.key }).enumerated() {
             guard let action = actions[name] else { print("Unknown hotkey action '\(name)'"); continue }

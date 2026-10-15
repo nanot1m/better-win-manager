@@ -124,9 +124,12 @@ swift build
 make zip                                               # dist/BetterWM-<version>.zip, ad-hoc signed
 swift run CoreTests                                    # reconciler tests (plain executable; CLT has no XCTest)
 make run                                               # debug build as a signed .app (needed for Location Services)
+make demo                                              # record demo/demo.txt to dist/demo.mov (+ .mp4 with ffmpeg)
 ```
 
 The layout logic lives in the `BetterWMCore` library: a pure `Reconciler` turns a `Snapshot` of the system plus the `DesiredState` into frame commands, with no Accessibility calls. The app is a thin shell that builds snapshots, executes commands and turns gestures into state changes.
+
+`demo/demo.txt` is a step-per-line script (`open`, `drag`, `action`, `layout`, `popup`, `caption`, `wait`, `quit`) that the app replays with `--demo`, so recordings are repeatable; `make demo` wraps it in `screencapture`, which needs Screen Recording permission for the terminal. Press the popup hotkey (⌥⌘Space by default) to abort a running demo; Ctrl+C in the terminal stops the recording and quits the app.
 
 Pushing a tag like `v0.1.0` runs the Release workflow, which builds the zip and publishes a GitHub release.
 

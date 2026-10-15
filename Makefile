@@ -4,7 +4,7 @@ BUILD    = .build/release
 BUNDLE   = dist/$(APP).app
 ZIP      = dist/$(APP)-$(VERSION).zip
 
-.PHONY: build test bundle sign zip install run clean
+.PHONY: build test bundle sign zip install run demo clean
 
 build:
 	swift build -c release --product BetterWM
@@ -45,3 +45,15 @@ run:
 
 clean:
 	rm -rf dist .build
+
+# Records demo/demo.txt to dist/demo.mov (and demo.mp4 if ffmpeg is installed).
+# Needs Screen Recording permission for the terminal. DEMO_SECONDS bounds the recording.
+DEMO_SECONDS ?= 45
+demo:
+	swift build --product $(APP)
+	mkdir -p dist
+	rm -f dist/demo.mov dist/demo.mp4
+	pkill -x $(APP) || true
+	.build/debug/$(APP) --demo demo/demo.txt & pid=$$!; trap 'kill $$pid 2>/dev/null' INT TERM EXIT; sleep 1; \
+	screencapture -v -V $(DEMO_SECONDS) -C dist/demo.mov; kill $$pid 2>/dev/null; trap - INT TERM EXIT
+	@command -v ffmpeg >/dev/null && ffmpeg -y -loglevel error -i dist/demo.mov -vf "scale=1920:-2" -c:v libx264 -pix_fmt yuv420p -crf 20 dist/demo.mp4 && echo "Wrote dist/demo.mp4" || echo "Wrote dist/demo.mov (install ffmpeg for mp4)"

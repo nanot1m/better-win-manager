@@ -1,0 +1,31 @@
+# BetterWM demo script. Run with: make demo   (or .build/debug/BetterWM --demo demo/demo.txt)
+caption BetterWM — column tiling for macOS
+open Notes
+open TextEdit
+open Safari
+wait 1
+caption Windows tile automatically as they open
+wait 1.5
+drag Safari bottom
+wait 1
+caption Move and merge with the keyboard
+focus Notes
+action moveRight
+action mergeRight
+wait 1
+caption Layout presets
+layout 2
+wait 1.5
+layout 1
+wait 1
+caption The window actions popup
+popup
+wait 2.5
+popup close
+caption Desktops: switch and send windows
+action desktop2
+wait 1.5
+action desktop1
+wait 1
+caption Thanks for watching
+wait 2
