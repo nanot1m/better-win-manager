@@ -338,8 +338,10 @@ final class BarCat: NSView {
             if cats.count >= 2, Int.random(in: 0..<250) == 0 { startScene() }
         case let .meeting(a, b, hold, approaching, until):
             stepMeeting(a: a, b: b, hold: hold, approaching: approaching, until: until)
+            for (i, c) in cats.enumerated() where i != a && i != b { stepFree(c) }
         case let .chase(chaser, runner, until):
             stepChase(chaser: chaser, runner: runner, until: until)
+            for (i, c) in cats.enumerated() where i != chaser && i != runner { stepFree(c) }
         }
         for c in cats {
             c.sprite.frame.origin = NSPoint(x: c.x, y: baseline(for: c))
@@ -370,8 +372,9 @@ final class BarCat: NSView {
         if c.x + c.size.width >= roam.upperBound { c.x = roam.upperBound - c.size.width; c.direction = -1 }
     }
 
-    /// Moves `c` toward `target` (its left edge), returning true when there.
-    private func approach(_ c: Cat, to target: CGFloat, speed: CGFloat) -> Bool {
+    /// Moves `c` toward `target` (its left edge, clamped to the roam range), returning true when there.
+    private func approach(_ c: Cat, to rawTarget: CGFloat, speed: CGFloat) -> Bool {
+        let target = min(max(rawTarget, roam.lowerBound), max(roam.lowerBound, roam.upperBound - c.size.width))
         let delta = target - c.x
         if abs(delta) <= speed { c.x = target; return true }
         c.direction = delta > 0 ? 1 : -1
@@ -427,14 +430,20 @@ final class BarCat: NSView {
 
     private func stepChase(chaser: Int, runner: Int, until: Date) {
         let c = cats[chaser], r = cats[runner]
-        // The runner flees away from the chaser; the chaser follows. Both bounce off the edges.
+        // The runner flees away from the chaser; the chaser follows.
         r.direction = r.x >= c.x ? 1 : -1
+        let before = r.x
         move(r, by: 5)
+        let cornered = abs(r.x - before) < 1
         c.direction = r.x >= c.x ? 1 : -1
         if abs(r.x - c.x) > c.size.width + 2 { move(c, by: 5) }
-        if Date() >= until {
-            c.enter(.walk); r.enter(.walk)
-            scene = .free
+        // Cornered at the end of the bar, or time's up: both catch their breath facing each other.
+        if cornered || Date() >= until {
+            r.direction = -r.direction
+            c.direction = -r.direction
+            r.enter(.sit, for: 2...4)
+            c.enter(.sit, for: 2...4)
+            scene = .meeting(a: chaser, b: runner, hold: .sit, approaching: false, until: Date().addingTimeInterval(2))
         }
     }
 }
