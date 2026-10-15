@@ -92,7 +92,10 @@ final class StatusBar {
             battery: config.barBattery ? SystemStatus.battery() : nil,
             batteryPercent: config.barBatteryPercent,
             wifi: config.barWifi ? SystemStatus.wifiStrength() : nil,
-            showWifi: config.barWifi
+            showWifi: config.barWifi,
+            cpu: config.barCpu ? SystemStatus.cpuLoad() : nil,
+            memory: config.barMemory ? SystemStatus.memoryUsed() : nil,
+            disk: config.barDisk ? SystemStatus.diskFree() : nil
         )
         windows.forEach { $0.view.render(model) }
     }
@@ -161,6 +164,9 @@ final class BarView: NSView {
         var batteryPercent: Bool
         var wifi: Double?
         var showWifi: Bool
+        var cpu: Double?
+        var memory: Double?
+        var disk: Int64?
     }
 
     var onSelectDesktop: ((Int) -> Void)?
@@ -177,6 +183,12 @@ final class BarView: NSView {
     private let titleLabel = NSTextField(labelWithString: "")
     private let weatherIcon = NSImageView()
     private let weatherLabel = NSTextField(labelWithString: "")
+    private let cpuIcon = NSImageView()
+    private let cpuLabel = NSTextField(labelWithString: "")
+    private let memIcon = NSImageView()
+    private let memLabel = NSTextField(labelWithString: "")
+    private let diskIcon = NSImageView()
+    private let diskLabel = NSTextField(labelWithString: "")
     private let wifiIcon = NSImageView()
     private let batteryIcon = NSImageView()
     private let batteryLabel = NSTextField(labelWithString: "")
@@ -202,7 +214,7 @@ final class BarView: NSView {
         wantsLayer = true
         layer?.masksToBounds = true
 
-        for l in [appLabel, titleLabel, weatherLabel, batteryLabel, clockLabel] {
+        for l in [appLabel, titleLabel, weatherLabel, cpuLabel, memLabel, diskLabel, batteryLabel, clockLabel] {
             l.font = .systemFont(ofSize: 12, weight: l === appLabel ? .semibold : .regular)
             l.textColor = .labelColor
             l.lineBreakMode = .byTruncatingTail
@@ -210,11 +222,15 @@ final class BarView: NSView {
         }
         titleLabel.textColor = .secondaryLabelColor
         clockLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-        for icon in [weatherIcon, wifiIcon, batteryIcon] {
+        for icon in [weatherIcon, cpuIcon, memIcon, diskIcon, wifiIcon, batteryIcon] {
             icon.imageScaling = .scaleProportionallyDown
             icon.contentTintColor = .labelColor
             icon.widthAnchor.constraint(equalToConstant: icon === batteryIcon ? 22 : 16).isActive = true
         }
+        cpuIcon.image = NSImage(systemSymbolName: "cpu", accessibilityDescription: nil)
+        memIcon.image = NSImage(systemSymbolName: "memorychip", accessibilityDescription: nil)
+        diskIcon.image = NSImage(systemSymbolName: "internaldrive", accessibilityDescription: nil)
+        for l in [cpuLabel, memLabel, diskLabel] { l.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular) }
 
         left.orientation = .horizontal
         left.spacing = 10
@@ -224,6 +240,12 @@ final class BarView: NSView {
         right.alignment = .centerY
         right.addArrangedSubview(weatherIcon)
         right.addArrangedSubview(weatherLabel)
+        for (icon, label) in [(cpuIcon, cpuLabel), (memIcon, memLabel), (diskIcon, diskLabel)] {
+            right.addArrangedSubview(icon)
+            right.addArrangedSubview(label)
+            right.setCustomSpacing(3, after: icon)
+            right.setCustomSpacing(12, after: label)
+        }
         right.addArrangedSubview(wifiIcon)
         right.addArrangedSubview(batteryIcon)
         right.addArrangedSubview(batteryLabel)
@@ -271,9 +293,9 @@ final class BarView: NSView {
         layer?.cornerRadius = config.barRadius
         layer?.borderWidth = config.barBorderWidth
         layer?.borderColor = (NSColor(hex: config.barBorderColor) ?? .separatorColor).cgColor
-        for l in [appLabel, weatherLabel, batteryLabel, clockLabel] { l.textColor = textColor }
+        for l in [appLabel, weatherLabel, cpuLabel, memLabel, diskLabel, batteryLabel, clockLabel] { l.textColor = textColor }
         titleLabel.textColor = textColor.withAlphaComponent(0.65)
-        for icon in [weatherIcon, wifiIcon, batteryIcon] { icon.contentTintColor = textColor }
+        for icon in [weatherIcon, cpuIcon, memIcon, diskIcon, wifiIcon, batteryIcon] { icon.contentTintColor = textColor }
         cat.color = textColor
         cat.isHidden = !config.barCat
         cat.useSheet(path: config.barCatSheet, barHeight: config.barHeight)
@@ -337,6 +359,14 @@ final class BarView: NSView {
             weatherIcon.isHidden = true
             weatherLabel.isHidden = true
         }
+        func show(_ icon: NSImageView, _ label: NSTextField, _ text: String?) {
+            icon.isHidden = text == nil
+            label.isHidden = text == nil
+            if let text { label.stringValue = text }
+        }
+        show(cpuIcon, cpuLabel, m.cpu.map { BarView.percent($0 * 100) })
+        show(memIcon, memLabel, m.memory.map { BarView.percent($0 * 100) })
+        show(diskIcon, diskLabel, m.disk.map(SystemStatus.formatBytes))
         wifiIcon.isHidden = !m.showWifi
         if m.showWifi {
             wifiIcon.image = m.wifi.map { NSImage(systemSymbolName: "wifi", variableValue: $0, accessibilityDescription: nil) }
@@ -346,7 +376,7 @@ final class BarView: NSView {
             batteryIcon.isHidden = false
             batteryLabel.isHidden = !m.batteryPercent
             batteryIcon.image = NSImage(systemSymbolName: b.symbol, accessibilityDescription: nil)
-            batteryLabel.stringValue = "\(b.percent)%"
+            batteryLabel.stringValue = BarView.percent(Double(b.percent))
             batteryIcon.toolTip = "\(b.percent)%"
             batteryIcon.contentTintColor = b.percent <= 15 && !b.charging ? .systemRed : textColor
         } else {
@@ -354,6 +384,12 @@ final class BarView: NSView {
             batteryLabel.isHidden = true
         }
         clockLabel.stringValue = m.clock
+    }
+
+    /// Two digits minimum, padded with a figure space so the monospaced labels keep a stable width.
+    static func percent(_ value: Double) -> String {
+        let n = Int(value.rounded())
+        return (n < 10 ? "\u{2007}" : "") + "\(n)%"
     }
 
     @objc private func chipPressed(_ sender: NSButton) { onSelectDesktop?(sender.tag) }
