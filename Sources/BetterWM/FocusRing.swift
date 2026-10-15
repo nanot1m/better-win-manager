@@ -17,6 +17,14 @@ final class FocusRing {
     var onReorder: (() -> Void)?
     var windowNumber: Int? { window.isVisible ? window.windowNumber : nil }
 
+    /// Show Desktop is active: stay hidden until it ends.
+    var hiddenForSystemReveal = false {
+        didSet {
+            guard hiddenForSystemReveal != oldValue else { return }
+            if hiddenForSystemReveal { window.orderOut(nil) } else { update() }
+        }
+    }
+
     /// While the user drags a window the ring hides instead of chasing every mouse event; it returns on drop.
     var suspended = false {
         didSet {
@@ -82,7 +90,7 @@ final class FocusRing {
     }
 
     func update() {
-        guard !suspended, config.focusRing, let w = AXWindow.focused, config.focusRingFloating || isTiled(w), let id = w.windowID,
+        guard !suspended, !hiddenForSystemReveal, config.focusRing, let w = AXWindow.focused, config.focusRingFloating || isTiled(w), let id = w.windowID,
               !Spaces.spaces(of: id).contains(where: Spaces.isFullscreen) else {
             current = nil
             window.orderOut(nil)

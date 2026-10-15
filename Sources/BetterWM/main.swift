@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var bar: StatusBar!
     var demo: DemoRunner?
     var switcher: WindowSwitcher!
+    let systemReveal = SystemReveal()
     var overlayItem: NSMenuItem?
     var switcherItem: NSMenuItem?
     let configWindow = ConfigWindow()
@@ -46,6 +47,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.currentDesktop = { [weak self] in self?.manager.currentDesktop }
         manager.onDesktopChange = { [weak self] in self?.bar.focusChanged() }
         manager.onFocusChange = { [weak self] in self?.bar.focusChanged() }
+        systemReveal.onChange = { [weak self] active in
+            self?.manager.focusRing.hiddenForSystemReveal = active
+            self?.bar.hiddenForSystemReveal = active
+        }
         manager.apply()
         hud.enabled = config.actionOverlay
         popup.onAction = { [weak self] keys, name in self?.hud.show(keys: keys, action: name, preformatted: true) }

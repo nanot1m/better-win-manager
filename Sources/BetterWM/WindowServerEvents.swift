@@ -4,7 +4,7 @@ import Cocoa
 /// events with no Accessibility round trips and no polling. Event IDs are undocumented but long stable.
 final class WindowServerEvents {
     enum Event: UInt32 {
-        case windowMove = 806, windowResize = 807, windowReorder = 808, windowDestroy = 1326
+        case windowMove = 806, windowResize = 807, windowReorder = 808, windowLevel = 811, windowCreate = 1325, windowDestroy = 1326
         case spaceChange = 1401, frontChange = 1508
     }
 
@@ -27,20 +27,53 @@ final class WindowServerEvents {
 
     static var available: Bool { register != nil && mainConnection != nil }
 
-    var onEvent: ((Event, CGWindowID?) -> Void)?
+    /// One process-wide hub: SkyLight keeps a single callback per event ID, so every interested party subscribes here.
+    static let shared = WindowServerEvents(hub: ())
 
-    init() {
+    private var handlers: [UUID: (Event, CGWindowID?) -> Void] = [:]
+
+    /// Convenience for the common single-handler case; a fresh instance just forwards to the shared hub.
+    var onEvent: ((Event, CGWindowID?) -> Void)? {
+        didSet {
+            if let t = token { WindowServerEvents.shared.unsubscribe(t) }
+            token = onEvent.map { h in WindowServerEvents.shared.subscribe(h) }
+        }
+    }
+    private var token: UUID?
+
+    @discardableResult
+    func subscribe(_ handler: @escaping (Event, CGWindowID?) -> Void) -> UUID {
+        let id = UUID()
+        handlers[id] = handler
+        return id
+    }
+
+    func unsubscribe(_ id: UUID) { handlers[id] = nil }
+
+    /// A subscription handle; set `onEvent` to receive events from the shared hub.
+    init() {}
+
+    private init(hub: Void) {
+        guard WindowServerEvents.register != nil else { return }
         let ctx = Unmanaged.passUnretained(self).toOpaque()
-        for e in [Event.windowMove, .windowResize, .windowReorder, .windowDestroy, .spaceChange, .frontChange] {
+        for e in [Event.windowMove, .windowResize, .windowReorder, .windowLevel, .windowCreate, .windowDestroy, .spaceChange, .frontChange] {
             WindowServerEvents.register?({ event, data, length, context in
                 guard let context, let e = Event(rawValue: event) else { return }
                 let me = Unmanaged<WindowServerEvents>.fromOpaque(context).takeUnretainedValue()
                 // Payloads are packed; the pointer is not necessarily 4-byte aligned.
                 let wid: UInt32? = (data != nil && length >= 4) ? data!.loadUnaligned(as: UInt32.self) : nil
-                let isWindowEvent = [Event.windowMove, .windowResize, .windowReorder, .windowDestroy].contains(e)
-                me.onEvent?(e, isWindowEvent ? wid : nil)
+                let isWindowEvent = [Event.windowMove, .windowResize, .windowReorder, .windowLevel, .windowCreate, .windowDestroy].contains(e)
+                for h in me.handlers.values { h(e, isWindowEvent ? wid : nil) }
             }, e.rawValue, ctx)
         }
+        // Notifications only start flowing once at least one window has been requested; prime with what's on screen.
+        openChannel()
+    }
+
+    private func openChannel() {
+        let ids = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? [])
+            .compactMap { $0[kCGWindowNumber as String] as? CGWindowID }
+        watch(ids)
     }
 
     /// Move/resize events are only delivered for windows explicitly requested.

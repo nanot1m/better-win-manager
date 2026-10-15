@@ -51,6 +51,14 @@ final class StatusBar {
 
     func focusChanged() { refresh() }
 
+    /// Show Desktop / Mission Control: step aside, come back when it ends.
+    var hiddenForSystemReveal = false {
+        didSet {
+            guard hiddenForSystemReveal != oldValue else { return }
+            if hiddenForSystemReveal { windows.forEach { $0.orderOut(nil) } } else { refresh() }
+        }
+    }
+
     /// Dev aid: renders the first bar window's content to a PNG.
     func snapshot(to path: String) {
         guard let v = windows.first?.view, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { return }
@@ -80,7 +88,7 @@ final class StatusBar {
         guard config.bar else { return }
         // A fullscreen app owns the whole screen; stay out of its way.
         for w in windows {
-            let fullscreen = Spaces.isFullscreen(Spaces.current(for: w.targetScreen))
+            let fullscreen = Spaces.isFullscreen(Spaces.current(for: w.targetScreen)) || hiddenForSystemReveal
             if fullscreen { w.orderOut(nil) } else if !w.isVisible { w.orderBack(nil) }
         }
         let focused = AXWindow.focused
