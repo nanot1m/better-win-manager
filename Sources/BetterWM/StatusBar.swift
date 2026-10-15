@@ -90,6 +90,7 @@ final class StatusBar {
                 (String(format: "%.0f°", r.temperature), r.symbol)
             },
             battery: config.barBattery ? SystemStatus.battery() : nil,
+            batteryPercent: config.barBatteryPercent,
             wifi: config.barWifi ? SystemStatus.wifiStrength() : nil,
             showWifi: config.barWifi
         )
@@ -157,6 +158,7 @@ final class BarView: NSView {
         var clock: String
         var weather: (String, String)?
         var battery: SystemStatus.Battery?
+        var batteryPercent: Bool
         var wifi: Double?
         var showWifi: Bool
     }
@@ -179,6 +181,7 @@ final class BarView: NSView {
     private let batteryIcon = NSImageView()
     private let batteryLabel = NSTextField(labelWithString: "")
     private let clockLabel = NSTextField(labelWithString: "")
+    private let cat = BarCat(frame: .zero)
     private var chips: [NSButton] = []
     private var leftLeading: NSLayoutConstraint!
     private var leftTrailing: NSLayoutConstraint!
@@ -229,6 +232,12 @@ final class BarView: NSView {
         right.setCustomSpacing(14, after: weatherLabel)
         right.setCustomSpacing(14, after: batteryLabel)
         for v in [left, right] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
+        cat.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(cat)
+        NSLayoutConstraint.activate([
+            cat.topAnchor.constraint(equalTo: topAnchor), cat.bottomAnchor.constraint(equalTo: bottomAnchor),
+            cat.leadingAnchor.constraint(equalTo: leadingAnchor), cat.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         appLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
 
@@ -265,6 +274,8 @@ final class BarView: NSView {
         for l in [appLabel, weatherLabel, batteryLabel, clockLabel] { l.textColor = textColor }
         titleLabel.textColor = textColor.withAlphaComponent(0.65)
         for icon in [weatherIcon, wifiIcon, batteryIcon] { icon.contentTintColor = textColor }
+        cat.color = textColor
+        cat.isHidden = !config.barCat
         needsLayout = true
     }
 
@@ -278,6 +289,11 @@ final class BarView: NSView {
             leftTrailing.constant = -padding
             rightLeading.constant = padding
         }
+        // The cat roams whatever is free between the left content and the right content (or the notch).
+        let freeStart = left.frame.maxX + 16
+        var freeEnd = right.frame.minX - 16
+        if avoidNotch, let l = screen.auxiliaryTopLeftArea { freeEnd = min(freeEnd, l.maxX - screen.frame.minX - 8) }
+        cat.roam = freeStart...max(freeStart, freeEnd)
     }
 
     func render(_ m: Model) {
@@ -327,9 +343,10 @@ final class BarView: NSView {
         }
         if let b = m.battery {
             batteryIcon.isHidden = false
-            batteryLabel.isHidden = false
+            batteryLabel.isHidden = !m.batteryPercent
             batteryIcon.image = NSImage(systemSymbolName: b.symbol, accessibilityDescription: nil)
             batteryLabel.stringValue = "\(b.percent)%"
+            batteryIcon.toolTip = "\(b.percent)%"
             batteryIcon.contentTintColor = b.percent <= 15 && !b.charging ? .systemRed : textColor
         } else {
             batteryIcon.isHidden = true

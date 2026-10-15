@@ -25,6 +25,9 @@ public struct Config {
     public var barClockFormat: String = "EEE d MMM  HH:mm"
     public var barWeather: Bool = true
     public var barBattery: Bool = true
+    public var barBatteryPercent: Bool = true
+    /// A pixel cat wandering the empty part of the bar.
+    public var barCat: Bool = true
     public var barWifi: Bool = true
     public var barWeatherFahrenheit: Bool = false
     /// "auto" uses Location Services; otherwise "lat,lon".
@@ -148,6 +151,8 @@ public struct Config {
         barClockFormat = \(barClockFormat)
         barWeather = \(barWeather)
         barBattery = \(barBattery)
+        barBatteryPercent = \(barBatteryPercent)
+        barCat = \(barCat)
         barWifi = \(barWifi)
         barWeatherFahrenheit = \(barWeatherFahrenheit)
         # "auto" asks Location Services; or a fixed "latitude,longitude" such as 52.52,13.40.
@@ -236,6 +241,8 @@ public struct Config {
             case "bar": cfg.bar = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barHeight": cfg.barHeight = Double(value).map { CGFloat($0) } ?? cfg.barHeight
             case "barClockFormat": cfg.barClockFormat = value
+            case "barCat": cfg.barCat = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "barBatteryPercent": cfg.barBatteryPercent = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barBattery": cfg.barBattery = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barWifi": cfg.barWifi = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barWeather": cfg.barWeather = ["true", "yes", "1", "on"].contains(value.lowercased())
