@@ -263,7 +263,7 @@ struct ReconcilerTests {
         expect(g.columns.map(\.windows) == [[1], [3], [2]], #function, #line)
     }
 
-    func testStackedDeckFollowsZOrder() {
+    func testStackedDeckKeepsPositions() {
         var c = config
         c.stackOffset = 50
         let r = Reconciler(config: c)
@@ -273,14 +273,25 @@ struct ReconcilerTests {
         g.columns = [Column([1]), Column([2]), Column([3])]
         state.grids[space] = g
         state.seen[space] = [1, 2, 3]
-        // Snapshot order is front to back: 2 is frontmost, then 3, then 1.
-        let snap = snapshot([win(2, area), win(3, area), win(1, area)])
-        let (next, commands) = r.reconcile(state, snap)
-        expect(next.grid(for: space).windows == [1, 3, 2], #function, #line)
+        // Focus (z-order) changes never reorder the deck.
+        let (next, commands) = r.reconcile(state, snapshot([win(1, area), win(3, area), win(2, area)]))
+        expect(next.grid(for: space).windows == [1, 2, 3], #function, #line)
         let x = Dictionary(uniqueKeysWithValues: commands.compactMap { c -> (WindowID, CGFloat)? in
             if case let .setFrame(w, f) = c { return (w, f.minX) } else { return nil }
         })
-        expect(x[1] == 0 && x[3] == 50 && x[2] == 100, #function, #line)
+        expect(x[1] == 0 && x[2] == 50 && x[3] == 100, #function, #line)
+        // Deliberate reordering still works.
+        expect(next.grid(for: space).canMove(1, .right) && !next.grid(for: space).canMove(1, .mergeRight), #function, #line)
+    }
+
+    func testStackedModeSurvivesSaveWithoutWindows() {
+        var state = DesiredState()
+        var g = Grid(); g.setMode(.stacked)
+        state.grids[space] = g
+        let saved = SavedLayout.capture(state, snapshot([]))
+        expect(saved.mode(for: space) == .stacked, #function, #line)
+        let data = try! JSONEncoder().encode(saved)
+        expect(try! JSONDecoder().decode(SavedLayout.self, from: data).mode(for: space) == .stacked, #function, #line)
     }
 
     func testStrategiesPlaceRelativeToFocused() {
@@ -321,7 +332,8 @@ let tests: [(String, () -> Void)] = [
     ("edgeMoveCyclesWidth", t.testEdgeMoveCyclesWidth),
     ("configV1Migration", t.testConfigV1Migration),
     ("stackedModeGeometry", t.testStackedModeGeometry),
-    ("stackedDeckFollowsZOrder", t.testStackedDeckFollowsZOrder),
+    ("stackedDeckKeepsPositions", t.testStackedDeckKeepsPositions),
+    ("stackedModeSurvivesSaveWithoutWindows", t.testStackedModeSurvivesSaveWithoutWindows),
     ("savedLayoutV1Migration", t.testSavedLayoutV1Migration),
 ]
 for (name, run) in tests {

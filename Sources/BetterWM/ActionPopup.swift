@@ -5,7 +5,12 @@ final class ActionPopup: NSPanel {
     private let manager: WindowManager
     private let view: ActionView
     private var clickMonitor: Any?
-    var onAction: ((String?, String) -> Void)?
+    var onAction: ((String?, String) -> Void)? {
+        didSet {
+            let inner = onAction
+            onAction = { keys, name in Log.write("popup", "\(keys ?? "") \(name)"); inner?(keys, name) }
+        }
+    }
 
     init(manager: WindowManager) {
         self.manager = manager

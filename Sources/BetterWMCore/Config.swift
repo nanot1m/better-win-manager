@@ -34,6 +34,8 @@ public struct Config {
     public var stackScreensNarrowerThan: CGFloat = 0
     /// Remember each desktop's grid and put matching windows back into it on the next launch.
     public var restoreLayouts: Bool = true
+    /// Action log at ~/.config/betterwm/log.txt (menu: Open Log File / Copy Diagnostics Report).
+    public var debugLog: Bool = true
     /// Window switcher (⌥Tab). Off leaves the ⌥Tab hotkeys unregistered.
     public var switcher: Bool = true
     /// Show live window previews, or just app icons.
@@ -170,6 +172,8 @@ public struct Config {
 
         # Tile the windows already open when a desktop is first seen (at launch or on first visit).
         tileExistingOnStart = \(tileExistingOnStart)
+        # Action log (log.txt next to this file) for debugging; Copy Diagnostics Report in the menu bundles it.
+        debugLog = \(debugLog)
         # Remember each desktop's grid (state.json next to this file) and restore matching windows on launch.
         restoreLayouts = \(restoreLayouts)
         # ⌥Tab window switcher grouped by desktop; previews need Screen Recording permission, otherwise icons only.
@@ -307,9 +311,11 @@ public struct Config {
             case "virtualWorkspaces": cfg.virtualWorkspaces = Int(value).map { max(1, min(9, $0)) } ?? cfg.virtualWorkspaces
             case "switcher": cfg.switcher = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "switcherThumbnails": cfg.switcherThumbnails = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "debugLog": cfg.debugLog = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "restoreLayouts": cfg.restoreLayouts = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "stackOffset": cfg.stackOffset = Double(value).map { CGFloat($0) } ?? cfg.stackOffset
             case "stackScreensNarrowerThan": cfg.stackScreensNarrowerThan = Double(value).map { CGFloat($0) } ?? cfg.stackScreensNarrowerThan
+            case "animateLayout": break  // removed: Accessibility-driven frame animation was too laggy
             case "tileExistingOnStart": cfg.tileExistingOnStart = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "autoTile": cfg.autoTile = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "autoTileStrategy": cfg.autoTileStrategy = AutoTileStrategy(rawValue: value) ?? cfg.autoTileStrategy

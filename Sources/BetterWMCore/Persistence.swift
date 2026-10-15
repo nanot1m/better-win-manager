@@ -63,7 +63,8 @@ public struct SavedLayout: Codable, Equatable {
     /// Captures every non-empty grid in `state`, describing windows with what `snapshot` knows about them.
     public static func capture(_ state: DesiredState, _ snapshot: Snapshot) -> SavedLayout {
         var out = SavedLayout()
-        for (space, grid) in state.grids.sorted(by: { $0.key < $1.key }) where !grid.isEmpty {
+        // Empty grids are still worth saving when their mode isn't the default.
+        for (space, grid) in state.grids.sorted(by: { $0.key < $1.key }) where !grid.isEmpty || grid.mode != .columns {
             let columns = grid.columns.compactMap { col -> Column? in
                 let windows = col.windows.compactMap { id -> Window? in
                     guard let w = snapshot.window(id) else { return nil }
@@ -71,10 +72,12 @@ public struct SavedLayout: Codable, Equatable {
                 }
                 return windows.isEmpty ? nil : Column(weight: col.weight, windows: windows)
             }
-            if !columns.isEmpty { out.spaces.append(Space(id: space, columns: columns, mode: grid.mode)) }
+            if !columns.isEmpty || grid.mode != .columns { out.spaces.append(Space(id: space, columns: columns, mode: grid.mode)) }
         }
         return out
     }
+
+    public func mode(for space: SpaceID) -> LayoutMode? { spaces.first { $0.id == space }?.mode }
 
     /// Rebuilds a grid for `space` from the saved slots, using the windows in `candidates`.
     /// Matching prefers same app and title, then same app and nearest frame, then any window of the app.

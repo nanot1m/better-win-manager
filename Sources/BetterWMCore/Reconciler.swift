@@ -84,16 +84,6 @@ public struct Reconciler {
                 }
             }
 
-            // Stacked screens fan the deck in z-order (back to front, left to right): a window's visible left strip is
-            // then only ever overlapped by windows behind it, so every window stays peekable and the front one is whole.
-            if grid.mode == .stacked {
-                let depth = Dictionary(uniqueKeysWithValues: snapshot.windows.enumerated().map { ($1.id, $0) })
-                let ordered = grid.windows.enumerated().sorted { a, b in
-                    (depth[a.element] ?? -1, a.offset) > (depth[b.element] ?? -1, b.offset)
-                }.map(\.element)
-                grid.columns = ordered.map { Column([$0]) }
-            }
-
             // Minimum sizes: a window still larger than the frame we asked for refused to shrink; distribute space around it.
             let geo = geometry(grid, screen)
             for (w, target) in geo.windowFrames() {

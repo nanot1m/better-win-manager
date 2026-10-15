@@ -98,6 +98,7 @@ final class WindowSwitcher {
         let item = flat.indices.contains(selected) ? flat[selected] : nil
         close()
         guard let item else { return }
+        Log.write("switcher", "pick \(manager.describe(item.window)) on desktop \(item.desktop + 1)")
         manager.activate(item.window, onDesktop: item.desktop)
     }
 }

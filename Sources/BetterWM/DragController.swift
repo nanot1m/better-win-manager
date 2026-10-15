@@ -78,7 +78,10 @@ final class DragController {
                 originalFrame = w.frame
             }
             guard let w = dragged else { return Unmanaged.passUnretained(event) }
-            // A plain click never gets here; only a real drag suspends reconciling and the focus ring.
+            // Clicks often carry a pixel of motion; only real movement suspends reconciling and the focus ring.
+            if !manager.interacting, hypot(p.x - dragStart.x, p.y - dragStart.y) < 4 {
+                return intercepting ? nil : Unmanaged.passUnretained(event)
+            }
             manager.interacting = true
             if intercepting {
                 let dx = p.x - dragStart.x, dy = p.y - dragStart.y

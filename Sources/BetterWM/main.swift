@@ -63,6 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = StatusIcon.make(paused: false)
         statusItem.menu = buildMenu()
+        Log.enabled = config.debugLog
+        Log.write("app", "launched \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"), workspaces=\(config.workspaces.rawValue)")
         print("BetterWM running. Hold ⌥ and drag a window.")
         if CommandLine.arguments.contains("--settings") {
             showSettings()
@@ -211,6 +213,8 @@ extension AppDelegate {
         add("Settings…", #selector(showSettings), ",")
         add("Open Config File", #selector(openConfig))
         add("Reload Config", #selector(reloadConfig))
+        add("Open Log File", #selector(openLog))
+        add("Copy Diagnostics Report", #selector(copyDiagnostics))
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
@@ -223,6 +227,7 @@ extension AppDelegate {
 
     func perform(action name: String) -> Bool {
         guard let a = actionTable()[name] else { return false }
+        Log.write("action", name)
         if let title = Config.actions.first(where: { $0.key == name })?.title {
             hud.show(keys: manager.config.hotkeys[name], action: title)
         }
@@ -274,6 +279,7 @@ extension AppDelegate {
             if name.hasPrefix("switcher"), !config.switcher { continue }
             let title = Config.actions.first { $0.key == name }?.title ?? name
             let wrapped = { [weak self] in
+                Log.write("hotkey", "\(spec) -> \(name)")
                 if !name.hasPrefix("switcher") { self?.hud.show(keys: spec, action: title) }
                 action()
             }
@@ -322,6 +328,16 @@ extension AppDelegate {
         syncAutoTileItems()
     }
     @objc func openConfig() { NSWorkspace.shared.open(Config.path) }
+    @objc func openLog() { NSWorkspace.shared.open(Log.path) }
+    @objc func copyDiagnostics() {
+        let state = try? String(contentsOf: Config.statePath, encoding: .utf8)
+        let report = Log.diagnostics(config: manager.config, stateJSON: state)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(report, forType: .string)
+        hud.enabled = true
+        hud.show(keys: nil, action: "Diagnostics copied to clipboard", preformatted: true)
+        Log.write("app", "diagnostics report copied (\(report.count) chars)")
+    }
     @objc func showSettings() {
         configWindow.show(config: manager.config) { [weak self] cfg in
             guard let self else { return }

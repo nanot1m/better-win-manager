@@ -10,6 +10,7 @@ final class WindowManager {
     private var lastSaved = SavedLayout()
     private var saveWork: DispatchWorkItem?
     /// Virtual mode: one independent workspace set per macOS desktop (nil in native mode).
+    private let wsEvents = WindowServerEvents()
     private var virtualSets: [SpaceID: VirtualWorkspaces]?
     var isVirtual: Bool { virtualSets != nil }
 
@@ -47,12 +48,13 @@ final class WindowManager {
     /// Set while a Space switch is in flight; the window list mixes both desktops during the slide.
     private var switching = false
     /// Set while the user drags a window or a gap handle; reconciling mid-gesture would fight it.
-    var interacting = false { didSet { focusRing.suspended = interacting } }
+    var interacting = false
     var onFocusChange: (() -> Void)?
     var onDesktopChange: (() -> Void)?
 
     var config: Config {
         didSet {
+            Log.enabled = config.debugLog
             reconciler.config = config
             focusRing.apply(config)
             configureWorkspaces()
@@ -173,6 +175,7 @@ final class WindowManager {
             if index >= v.count { v.setCount(index + 1) }
             // Hide the ring during the switch so it doesn't linger on the parked window.
             focusRing.suspended = true
+            Log.write("desktop", "switch to workspace \(index + 1) (real space \(v.realSpace))")
             v.switchTo(index)
             ignoreFocusSwitchUntil = Date().addingTimeInterval(0.8)
             lastFocusedID = AXWindow.focused.flatMap(id)
@@ -181,6 +184,7 @@ final class WindowManager {
             v.trimEmptyTrailing(minimum: config.virtualWorkspaces)
             onDesktopChange?()
         } else {
+            Log.write("desktop", "switch to macOS desktop \(index + 1)")
             Spaces.switchToDesktop(index)
         }
     }
@@ -204,7 +208,7 @@ final class WindowManager {
         guard Date() >= ignoreFocusSwitchUntil else { return }
         let ws = v.workspace(of: id)
         guard ws != v.active else { return }
-        print("Virtual: focused window belongs to workspace \(ws + 1); switching")
+        Log.write("desktop", "focus follows \(describe(f)) to workspace \(ws + 1)")
         focusRing.suspended = true
         v.switchTo(ws)
         tick()
@@ -295,6 +299,10 @@ final class WindowManager {
                                                           object: nil, queue: .main) { [weak self] _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self?.followFocusedWindowsWorkspace() }
         }
+        // WindowServer reports a new front window before Accessibility does; stacked screens re-fan on it.
+        wsEvents.onEvent = { [weak self] event, _ in
+            if event == .frontChange || event == .windowReorder { self?.refanStackedScreens() }
+        }
         axObserver = WindowObserver(onNewWindow: { [weak self] _ in self?.tick() },
                                     onFocusChange: { [weak self] in
                                         self?.followFocusedWindowsWorkspace()
@@ -319,8 +327,11 @@ final class WindowManager {
             zOrder = snap.windows.map(\.id)
             if assignNewVirtualWindows(snap) { snap = system.snapshot(tracked: tracked) }
             restoreIfFirstVisit(snap)
+            restoreSavedModes(snap)
+            let before = state
             let (next, commands) = reconciler.reconcile(state, snap)
             state = next
+            logReconcileChanges(from: before, to: next)
             scheduleSave(snap)
             applyVirtualParking(snap)
             guard !commands.isEmpty else { break }
@@ -351,6 +362,7 @@ final class WindowManager {
                 pool.removeAll { grid.contains($0.id) }
                 // Merge into whatever that workspace already has rather than replacing it.
                 state.mutate(savedSpace.id) { existing in
+                    existing.mode = grid.mode
                     for col in grid.columns { existing.columns.append(col) }
                     for (k, h) in grid.heightWeights { existing.heightWeights[k] = h }
                 }
@@ -360,6 +372,16 @@ final class WindowManager {
         }
         for w in pool { virtualSet(ofWindow: w.id)?.adopt(w.id) }
         return placed
+    }
+
+    /// A screen's layout mode (stacked/columns) comes back even if none of its saved windows are around anymore.
+    private func restoreSavedModes(_ snap: Snapshot) {
+        guard config.restoreLayouts else { return }
+        for screen in snap.screens where state.grids[screen.space] == nil {
+            if let mode = saved.mode(for: screen.space), mode != .columns {
+                state.mutate(screen.space) { $0.mode = mode }
+            }
+        }
     }
 
     /// A desktop seen for the first time this run gets its saved grid back, with windows matched by app and title.
@@ -415,8 +437,26 @@ final class WindowManager {
 
     func relayout() { apply() }
 
+    private func logReconcileChanges(from a: DesiredState, to b: DesiredState) {
+        guard Log.enabled else { return }
+        for space in Set(a.grids.keys).union(b.grids.keys) {
+            let was = Set(a.grid(for: space).windows), now = Set(b.grid(for: space).windows)
+            let added = now.subtracting(was), removed = was.subtracting(now)
+            if !added.isEmpty { Log.write("reconcile", "space \(space): tiled \(added.map { describe($0) })") }
+            if !removed.isEmpty { Log.write("reconcile", "space \(space): dropped \(removed.map { describe($0) })") }
+        }
+    }
+
     /// Puts the ring where the focused window is about to be, before the app has even applied the move.
+    /// On stacked screens the front window by z-order is used: it is known before Accessibility reports focus.
     private func anticipateRing(_ commands: [Command], _ focused: WindowID?) {
+        for screen in system.screens() where state.grid(for: screen.space).mode == .stacked {
+            let grid = state.grid(for: screen.space)
+            guard let top = zOrder.first(where: grid.contains),
+                  let frame = reconciler.geometry(grid, screen).frame(of: top) else { continue }
+            focusRing.show(windowID: top, frame: frame)
+            return
+        }
         guard let focused else { return }
         for case let .setFrame(w, f) in commands where w == focused { focusRing.anticipate(windowID: focused, frame: f) }
     }
@@ -462,6 +502,8 @@ final class WindowManager {
 
     func drop(_ w: AXWindow, into zone: DropZone, at p: CGPoint) {
         guard let id = id(w), let screen = screen(at: p) else { return }
+        Log.write("tile", "drop \(describe(w)) into \(zone) on space \(screen.space)")
+        virtualSet(ofWindow: id)?.claimForActive(id)
         for space in state.grids.keys where space != screen.space { state.grids[space]?.remove(id) }
         state.mutate(screen.space) { $0.apply(zone, to: id) }
         state.seen[screen.space, default: []].insert(id)
@@ -471,11 +513,16 @@ final class WindowManager {
 
     func untile(_ w: AXWindow) {
         guard let id = id(w) else { return }
+        Log.write("tile", "untile \(describe(w))")
         state.untile(id)
     }
 
     func tile(_ w: AXWindow) {
-        guard let id = id(w), !state.isTiled(id), let screen = screen(at: w.frame.center) else { return }
+        guard let id = id(w), !state.isTiled(id) else { return }
+        Log.write("tile", "tile \(describe(w))")
+        // A parked window sits in the screen corner; claim it first so it belongs here and can be placed.
+        virtualSet(ofWindow: id)?.claimForActive(id)
+        guard let screen = screen(at: w.frame.center) else { return }
         let geo = reconciler.geometry(state.grid(for: screen.space), screen)
         state.mutate(screen.space) { $0.apply(.newColumn(index: geo.columnIndex(forX: w.frame.midX)), to: id) }
         state.seen[screen.space, default: []].insert(id)
@@ -492,6 +539,7 @@ final class WindowManager {
         let snap = system.lightSnapshot(tracked: tracked)
         let displaced = reconciler.displaced(state, snap)
         guard !displaced.isEmpty else { return }
+        Log.write("tile", "released by hand: \(displaced.map { describe($0) })")
         displaced.forEach { state.untile($0) }
         apply()
     }
@@ -515,6 +563,7 @@ final class WindowManager {
         let anchor = AXWindow.focused?.frame.center ?? NSEvent.mouseLocation.toAX()
         guard let screen = screen(at: anchor) else { return }
         state.mutate(screen.space) { $0.setMode($0.mode == .stacked ? .columns : .stacked) }
+        Log.write("layout", "space \(screen.space) mode -> \(state.grid(for: screen.space).mode)")
         apply()
     }
 
@@ -540,6 +589,7 @@ final class WindowManager {
 
     func moveFocused(_ dir: Move) {
         guard let w = AXWindow.focused, let id = id(w), let space = state.space(containing: id) else { return }
+        Log.write("layout", "move \(describe(w)) \(dir)")
         state.mutate(space) { $0.move(id, dir) }
         apply()
     }
@@ -572,6 +622,7 @@ final class WindowManager {
 
     func applyPreset(_ preset: LayoutPreset) {
         guard let (space, windows) = presetCandidates() else { return }
+        Log.write("layout", "preset \(preset.name) on space \(space) for \(windows.count) windows")
         state.mutate(space) { $0.apply(preset: preset, windows: windows) }
         state.seen[space] = Set(windows)
         apply()
@@ -589,6 +640,7 @@ final class WindowManager {
             guard let id = id(w), let v = virtualSet(ofWindow: id), index >= 0, index < 9, index != v.active else { return }
             if index >= v.count { v.setCount(index + 1) }
             let wasTiled = isTiled(w)
+            Log.write("desktop", "send \(describe(w)) to workspace \(index + 1) (tiled: \(wasTiled))")
             untile(w)
             v.move(id, to: index)
             // The sent window is still focused for a moment; don't let that pull us into its workspace.
@@ -619,6 +671,12 @@ final class WindowManager {
     }
 
     /// The Space switch and the drop land asynchronously; wait until the window shows up on the active desktop.
+    /// Short, stable description of a window for the log: app, title, id.
+    func describe(_ w: AXWindow) -> String {
+        "\(w.bundleID?.split(separator: ".").last.map(String.init) ?? "?")/\"\(w.title.prefix(30))\"#\(w.windowID ?? 0)"
+    }
+    func describe(_ id: WindowID) -> String { system.axWindow(id).map(describe) ?? "#\(id)" }
+
     private func tileWhenVisible(_ w: AXWindow, attempts: Int) {
         tick()
         if Spaces.visibleWindows().contains(w) {

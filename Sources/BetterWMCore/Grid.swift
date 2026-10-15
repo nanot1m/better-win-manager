@@ -132,8 +132,8 @@ public struct Grid: Equatable {
 
     public func canMove(_ w: WindowID, _ dir: Move) -> Bool {
         guard let (ci, wi) = position(of: w) else { return false }
-        // A stacked deck orders itself by z-order; manual moves would be undone immediately.
-        if mode == .stacked { return false }
+        // A stacked deck has no stacks to merge into; left/right reorder the deck.
+        if mode == .stacked, dir == .mergeLeft || dir == .mergeRight { return false }
         let alone = columns[ci].windows.count == 1
         switch dir {
         case .left: return !alone || ci > 0 || columns.count > 1

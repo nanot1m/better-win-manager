@@ -65,7 +65,7 @@ Default global hotkeys: ⌥⌘Space popup, ⌥Tab switcher, ⌃] / ⌃[ focus ne
 
 ### Stacked layout
 
-Per screen, as an alternative to columns: every tiled window gets almost the whole screen and each is shifted right by `stackOffset` points, so the windows behind stay visible as strips you can peek at and click. The deck is fanned in z-order, back to front from left to right, so no window can hide completely behind another; focusing a window moves it to the right end. Toggle it for the current screen with ⌃⌥S, the popup's S key, or the menu. `stackScreensNarrowerThan` starts narrow screens in this mode automatically.
+Per screen, as an alternative to columns: every tiled window gets almost the whole screen and each is shifted right by `stackOffset` points, so the windows behind stay visible as strips you can peek at and click. Windows keep their positions in the deck; focusing one only brings it to the front. Move Left/Right reorder the deck. Toggle it for the current screen with ⌃⌥S, the popup's S key, or the menu. `stackScreensNarrowerThan` starts narrow screens in this mode automatically.
 
 ### Virtual workspaces
 
@@ -74,6 +74,10 @@ By default (`workspaces = virtual`, Settings › General › Desktops) every mac
 ### Status bar
 
 Enable it in Settings › Bar or with `bar = true`. Pixel cats wander the free part of the bar (`barCat`); list sprite sheets in Last tick's free [Pixel Cats 64x64](https://last-tick.itch.io/animated-pixel-cats-64x64) layout in `barCatSheets`, one cat each, and two or more cats will chase, sit, groom and nap together. That pack forbids redistribution, so it is never bundled; download it yourself. It sits at the top of each screen where the system menu bar lives, so set "Automatically hide and show the menu bar" to Always in System Settings › Control Center; the app offers to open that pane once. Tiled windows start below the bar. Desktop chips switch desktops on click. Weather comes from Open-Meteo using either Location Services or fixed `barWeatherLocation = lat,lon`.
+
+### Debugging and bug reports
+
+BetterWM keeps an action log at `~/.config/betterwm/log.txt` (hotkeys, popup and menu actions, tiles and drops, workspace switches, reconcile changes, parking, errors; `debugLog = false` turns it off). For a bug report use **Copy Diagnostics Report** in the menu: it puts the app and macOS versions, screen setup, config (location redacted), `state.json` and the recent log on the clipboard.
 
 ### Menu bar
 

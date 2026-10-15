@@ -49,6 +49,13 @@ final class VirtualWorkspaces {
     func adopt(_ w: WindowID) { if membership[w] == nil { membership[w] = active } }
     func forget(_ w: WindowID) { membership[w] = nil; parkedFrames[w] = nil; parked.remove(w) }
     func move(_ w: WindowID, to ws: Int) { membership[w] = max(0, min(count - 1, ws)) }
+
+    /// Claims a window for the active workspace and drops any parking state so the layout can place it.
+    func claimForActive(_ w: WindowID) {
+        membership[w] = active
+        parked.remove(w)
+        parkedFrames[w] = nil
+    }
     func switchTo(_ ws: Int) { active = max(0, min(count - 1, ws)) }
 
     /// Drops trailing workspaces above the configured minimum once they hold no windows and aren't active.
@@ -76,8 +83,10 @@ final class VirtualWorkspaces {
                 if !isTiled(w) { parkedFrames[w] = f }
                 setFrame(w, CGRect(origin: parkOrigin(f), size: f.size))
                 parked.insert(w)
+                Log.write("park", "park #\(w) (workspace \(workspace(of: w) + 1), active \(active + 1))")
             } else if !shouldPark, parked.contains(w) {
                 parked.remove(w)
+                Log.write("park", "unpark #\(w)")
                 if let f = parkedFrames.removeValue(forKey: w) { setFrame(w, f) }
             }
         }

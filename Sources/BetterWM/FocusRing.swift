@@ -25,7 +25,7 @@ final class FocusRing {
         }
     }
 
-    /// While the user drags a window the ring hides instead of chasing every mouse event; it returns on drop.
+    /// Hidden briefly around a workspace switch so it never lingers on a parked window.
     var suspended = false {
         didSet {
             guard suspended != oldValue else { return }
@@ -90,7 +90,20 @@ final class FocusRing {
     }
 
     func update() {
-        guard !suspended, !hiddenForSystemReveal, config.focusRing, let w = AXWindow.focused, config.focusRingFloating || isTiled(w), let id = w.windowID,
+        guard !suspended, !hiddenForSystemReveal, config.focusRing else {
+            current = nil
+            window.orderOut(nil)
+            return
+        }
+        guard let w = AXWindow.focused else {
+            // Electron apps briefly report no focused window while moving focus inside one; don't blink.
+            if let id = current, let owner = Spaces.visibleWindows().first(where: { $0.windowID == id }),
+               NSWorkspace.shared.frontmostApplication?.processIdentifier == owner.pid { return }
+            current = nil
+            window.orderOut(nil)
+            return
+        }
+        guard config.focusRingFloating || isTiled(w), let id = w.windowID,
               !Spaces.spaces(of: id).contains(where: Spaces.isFullscreen) else {
             current = nil
             window.orderOut(nil)
@@ -100,6 +113,8 @@ final class FocusRing {
     }
 
     private func present(id: CGWindowID, frame: CGRect) {
+        let wasHidden = !window.isVisible
+        let targetChanged = current != id
         if current != id {
             current = id
             events.watch([id])
@@ -118,10 +133,14 @@ final class FocusRing {
         }
         CATransaction.commit()
         place(frame: frame)
-        // Normal level either way: floating windows in front of the target must cover the ring too.
+        // Always just beneath the window it belongs to: the outline is drawn outside the window's frame so it
+        // stays visible, clicks that raise the window never put it on the wrong side, and a re-order (which
+        // flashes) is needed only when the target changes.
         window.level = .normal
-        window.order(config.focusRingStyle == .underneath ? .below : .above, relativeTo: Int(id))
-        onReorder?()
+        if wasHidden || targetChanged {
+            window.order(.below, relativeTo: Int(id))
+            onReorder?()
+        }
     }
 
     private func radius(for id: CGWindowID) -> CGFloat {

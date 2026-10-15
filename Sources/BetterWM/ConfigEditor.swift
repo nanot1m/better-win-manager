@@ -37,6 +37,7 @@ final class ConfigWindow: NSObject {
     private var autoTileCheck: NSButton!
     private var tileOnStartCheck: NSButton!
     private var restoreCheck: NSButton!
+    private var debugLogCheck: NSButton!
     private var stackOffsetField: NSTextField!
     private var stackNarrowField: NSTextField!
     private var switcherThumbsCheck: NSButton!
@@ -183,6 +184,7 @@ final class ConfigWindow: NSObject {
         autoTileCheck = NSButton(checkboxWithTitle: "Tile new windows automatically", target: nil, action: nil)
         tileOnStartCheck = NSButton(checkboxWithTitle: "Tile existing windows when a desktop is first seen", target: nil, action: nil)
         restoreCheck = NSButton(checkboxWithTitle: "Remember each desktop's layout and restore it on launch", target: nil, action: nil)
+        debugLogCheck = NSButton(checkboxWithTitle: "Write an action log (log.txt) for debugging", target: nil, action: nil)
         switcherCheck = NSButton(checkboxWithTitle: "Enable the ⌥Tab window switcher", target: self, action: #selector(switcherChanged))
         switcherThumbsCheck = NSButton(checkboxWithTitle: "Show window previews (needs Screen Recording)", target: nil, action: nil)
         overlayCheck = NSButton(checkboxWithTitle: "Show pressed hotkey and action on screen (for demos)", target: nil, action: nil)
@@ -238,6 +240,7 @@ final class ConfigWindow: NSObject {
             [label("New windows"), autoTileCheck],
             [label("On launch"), tileOnStartCheck],
             [NSView(), restoreCheck],
+            [label("Logging"), debugLogCheck],
             [label("Switcher"), switcherCheck],
             [NSView(), switcherThumbsCheck],
             [label("Placement"), strategyPopup],
@@ -557,6 +560,7 @@ final class ConfigWindow: NSObject {
         autoTileCheck.state = config.autoTile ? .on : .off
         tileOnStartCheck.state = config.tileExistingOnStart ? .on : .off
         restoreCheck.state = config.restoreLayouts ? .on : .off
+        debugLogCheck.state = config.debugLog ? .on : .off
         stackOffsetField.stringValue = String(Int(config.stackOffset))
         stackNarrowField.stringValue = String(Int(config.stackScreensNarrowerThan))
         switcherThumbsCheck.state = config.switcherThumbnails ? .on : .off
@@ -637,6 +641,7 @@ final class ConfigWindow: NSObject {
         config.autoTile = autoTileCheck.state == .on
         config.tileExistingOnStart = tileOnStartCheck.state == .on
         config.restoreLayouts = restoreCheck.state == .on
+        config.debugLog = debugLogCheck.state == .on
         config.stackOffset = CGFloat(Double(stackOffsetField.stringValue) ?? 48)
         config.stackScreensNarrowerThan = CGFloat(Double(stackNarrowField.stringValue) ?? 0)
         config.switcherThumbnails = switcherThumbsCheck.state == .on
