@@ -95,15 +95,16 @@ public struct SavedLayout: Codable, Equatable {
 
     /// Pairs saved floating windows of `space` with `candidates` (same app and title, else nearest frame) and
     /// returns each match with the frame to put it back at.
-    public func restoreFloating(space: SpaceID, candidates: [WindowInfo]) -> [(id: WindowID, frame: CGRect)] {
+    /// With `exactTitle`, only a window with the slot's exact title qualifies (no nearest-frame fallback).
+    public func restoreFloating(space: SpaceID, candidates: [WindowInfo], exactTitle: Bool = false) -> [(id: WindowID, frame: CGRect)] {
         guard let saved = spaces.first(where: { $0.id == space }), !saved.floating.isEmpty else { return [] }
         var pool = candidates
         var out: [(WindowID, CGRect)] = []
         for slot in saved.floating {
             let sameApp = pool.indices.filter { pool[$0].bundleID == slot.bundleID }
             guard !sameApp.isEmpty else { continue }
-            let pick = sameApp.first { pool[$0].title == slot.title }
-                ?? sameApp.min { distance(pool[$0].frame, slot.frame) < distance(pool[$1].frame, slot.frame) }!
+            let exact = sameApp.first { pool[$0].title == slot.title }
+            guard let pick = exact ?? (exactTitle ? nil : sameApp.min { distance(pool[$0].frame, slot.frame) < distance(pool[$1].frame, slot.frame) }) else { continue }
             out.append((pool.remove(at: pick).id, slot.frame))
         }
         return out
@@ -114,14 +115,14 @@ public struct SavedLayout: Codable, Equatable {
     /// Rebuilds a grid for `space` from the saved slots, using the windows in `candidates`.
     /// Matching prefers same app and title, then same app and nearest frame, then any window of the app.
     /// Unmatched slots are dropped; a column with no survivors disappears.
-    public func restore(space: SpaceID, candidates: [WindowInfo]) -> Grid? {
+    public func restore(space: SpaceID, candidates: [WindowInfo], exactTitle: Bool = false) -> Grid? {
         guard let saved = spaces.first(where: { $0.id == space }) else { return nil }
         var pool = candidates
         func take(_ slot: Window) -> WindowInfo? {
             let sameApp = pool.indices.filter { pool[$0].bundleID == slot.bundleID }
             guard !sameApp.isEmpty else { return nil }
-            let pick = sameApp.first { pool[$0].title == slot.title }
-                ?? sameApp.min { distance(pool[$0].frame, slot.frame) < distance(pool[$1].frame, slot.frame) }!
+            let exact = sameApp.first { pool[$0].title == slot.title }
+            guard let pick = exact ?? (exactTitle ? nil : sameApp.min { distance(pool[$0].frame, slot.frame) < distance(pool[$1].frame, slot.frame) }) else { return nil }
             return pool.remove(at: pick)
         }
         var grid = Grid()

@@ -65,10 +65,12 @@ public struct Config {
     public var bar: Bool = false
     public var barHeight: CGFloat = 28
     public var barClockFormat: String = "EEE d MMM  HH:mm"
+    /// Active window label; {app} and {title} are replaced. The title part is dropped when the title is empty.
+    public var barTitleFormat: String = "{app} — {title}"
     /// Right-side widgets of the bar, in display order. The per-widget booleans below are views onto this list,
     /// kept so older config files (and older app versions reading new ones) keep working.
     public enum BarWidget: String, CaseIterable {
-        case weather, cpu, memory, disk, keyboard, wifi, battery, clock, menu
+        case weather, cpu, memory, disk, keyboard, wifi, battery, clock, menu, media
         public var title: String {
             switch self {
             case .weather: return "Weather"
@@ -80,6 +82,7 @@ public struct Config {
             case .battery: return "Battery"
             case .clock: return "Clock"
             case .menu: return "BetterWM menu button"
+            case .media: return "Now playing (Music, Spotify)"
             }
         }
     }
@@ -254,7 +257,9 @@ public struct Config {
         barHeight = \(num(barHeight))
         # Unicode date format pattern for the clock.
         barClockFormat = \(barClockFormat)
-        # Right-side widgets in display order: weather, cpu, memory, disk, keyboard, wifi, battery, clock, menu.
+        # Active window label: {app} and {title} are replaced; the rest is shown as is.
+        barTitleFormat = \(barTitleFormat)
+        # Right-side widgets in display order: weather, cpu, memory, disk, keyboard, wifi, battery, clock, menu, media.
         # Leave one out to hide it. (The barWeather/barBattery/... flags below mirror this list for older versions.)
         barWidgets = \(barWidgets.map(\.rawValue).joined(separator: ", "))
         barWeather = \(barWeather)
@@ -376,6 +381,7 @@ public struct Config {
             case "bar": cfg.bar = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barHeight": cfg.barHeight = Double(value).map { CGFloat($0) } ?? cfg.barHeight
             case "barClockFormat": cfg.barClockFormat = value
+            case "barTitleFormat": cfg.barTitleFormat = value
             case "barCatSheet": if !value.isEmpty { cfg.barCatSheets = [value] }  // v1 name, kept forever
             case "barCatSheets": cfg.barCatSheets = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             case "barCat": cfg.barCat = ["true", "yes", "1", "on"].contains(value.lowercased())

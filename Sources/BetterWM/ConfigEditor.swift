@@ -65,6 +65,7 @@ final class ConfigWindow: NSObject {
     private var barCheck: NSButton!
     private var barHeightField: NSTextField!
     private var barClockField: NSTextField!
+    private var barTitleField: NSTextField!
     private var barDesktopAppsCheck: NSButton!
     private var widgetOrder: [(Config.BarWidget, Bool)] = []
     private let widgetList = NSStackView()
@@ -396,6 +397,11 @@ final class ConfigWindow: NSObject {
         barHeightField = NSTextField(string: "28")
         barHeightField.widthAnchor.constraint(equalToConstant: 56).isActive = true
         barHeightField.alignment = .right
+        barTitleField = NSTextField(string: "")
+        barTitleField.widthAnchor.constraint(equalToConstant: 220).isActive = true
+        let titleHint = NSTextField(labelWithString: "{app} and {title} are replaced")
+        titleHint.font = .systemFont(ofSize: 11)
+        titleHint.textColor = .secondaryLabelColor
         barClockField = NSTextField(string: "")
         barClockField.widthAnchor.constraint(equalToConstant: 220).isActive = true
         let clockHint = NSTextField(labelWithString: "Unicode date pattern, e.g. EEE d MMM  HH:mm")
@@ -441,6 +447,7 @@ final class ConfigWindow: NSObject {
             [NSView(), sheetButtons],
             [NSView(), sheetHint],
             [label("Height"), NSStackView(views: [barHeightField, NSTextField(labelWithString: "pt")])],
+            [label("Window title"), NSStackView(views: [barTitleField, titleHint])],
             [label("Clock"), NSStackView(views: [barClockField, clockHint])],
             [NSView(), hint],
         ])
@@ -637,6 +644,7 @@ final class ConfigWindow: NSObject {
         barCheck.state = config.bar ? .on : .off
         barHeightField.stringValue = String(Int(config.barHeight))
         barClockField.stringValue = config.barClockFormat
+        barTitleField.stringValue = config.barTitleFormat
         barDesktopAppsCheck.state = config.barDesktopApps ? .on : .off
         barBatteryPercentCheck.state = config.barBatteryPercent ? .on : .off
         barCatCheck.state = config.barCat ? .on : .off
@@ -717,6 +725,7 @@ final class ConfigWindow: NSObject {
         config.bar = barCheck.state == .on
         config.barHeight = CGFloat(Double(barHeightField.stringValue) ?? 28)
         config.barClockFormat = barClockField.stringValue.isEmpty ? "EEE d MMM  HH:mm" : barClockField.stringValue
+        config.barTitleFormat = barTitleField.stringValue.isEmpty ? "{app} — {title}" : barTitleField.stringValue
         config.barDesktopApps = barDesktopAppsCheck.state == .on
         config.barBatteryPercent = barBatteryPercentCheck.state == .on
         config.barCat = barCatCheck.state == .on

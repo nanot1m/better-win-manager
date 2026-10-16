@@ -251,7 +251,7 @@ struct ReconcilerTests {
     func testBarWidgetsCompatibility() {
         // Old files only have the flags: the list is derived from them in the default order.
         let old = Config.parse("version = 3\nbarWifi = false\nbarCpu = false\n")
-        expect(old.barWidgets == [.weather, .memory, .disk, .keyboard, .battery, .clock, .menu], #function, #line)
+        expect(old.barWidgets == Config.BarWidget.allCases.filter { $0 != .wifi && $0 != .cpu }, #function, #line)
         // New files carry the order; the flags mirror it for older versions reading the file.
         // A v2 file with an explicit list gains the menu widget added in v3; a v3 file is taken as is.
         let v2 = Config.parse("version = 2\nbarWidgets = clock, battery, weather\n")

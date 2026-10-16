@@ -297,6 +297,15 @@ final class WindowManager {
         onDesktopChange?()
     }
 
+    private func activateTopApp(in v: VirtualWorkspaces) {
+        let top = zOrder.first { virtualSet(ofWindow: $0) === v && v.workspace(of: $0) == v.active && !v.isParked($0) }
+        if let id = top, let pid = system.pid(of: id), let app = NSRunningApplication(processIdentifier: pid) {
+            app.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
     private func focusTopWindow() {
         guard let v = virtualWS else { return }
         if let id = zOrder.first(where: { virtualSet(ofWindow: $0) === v && v.workspace(of: $0) == v.active }) { system.execute([.raise(id)]) }
@@ -354,7 +363,12 @@ final class WindowManager {
                     let r = screen.frame.toCocoa()
                     return CGPoint(x: r.maxX - 2, y: r.maxY - 2)
                 },
-                hide: { NSRunningApplication(processIdentifier: $0)?.hide() },
+                hide: { pid in
+                    // Hiding the frontmost app lets macOS pick the next one (usually Finder, with no window);
+                    // hand focus to the destination workspace's top app first, or to ourselves if it is empty.
+                    if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { self.activateTopApp(in: v) }
+                    NSRunningApplication(processIdentifier: pid)?.hide()
+                },
                 unhide: { NSRunningApplication(processIdentifier: $0)?.unhide() })
         }
     }
@@ -447,11 +461,20 @@ final class WindowManager {
 
     // MARK: Reconcile loop
 
-    private var tracked: [WindowID] { state.grids.values.flatMap(\.windows) }
+    /// Windows the snapshot must include even when they are not on screen: tiled ones (parked or on other
+    /// desktops) and every window a workspace knows, since floating windows of a hidden app are invisible
+    /// yet still need saving and restoring per workspace.
+    private var tracked: [WindowID] {
+        var ids = Set(state.grids.values.flatMap(\.windows))
+        ids.formUnion(state.floating)
+        virtualSets?.values.forEach { ids.formUnion($0.knownWindows) }
+        return Array(ids)
+    }
 
     /// Full reconcile: observe, reconcile, execute, and settle (windows that refuse a size need a second pass).
     func tick() {
         guard !interacting, !switching else { return }
+        pruneDeadWindows()
         for _ in 0..<3 {
             var snap = system.snapshot(tracked: tracked)
             zOrder = snap.windows.map(\.id)
@@ -474,6 +497,22 @@ final class WindowManager {
         refreshChrome()
     }
 
+    /// Workspace membership outlives windows unless told otherwise; a closed window must not keep showing its
+    /// app on a desktop chip or count as a sibling.
+    private func pruneDeadWindows() {
+        guard let sets = virtualSets, !sets.isEmpty,
+              let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else { return }
+        let alive = Set(list.compactMap { $0[kCGWindowNumber as String] as? CGWindowID })
+        for v in sets.values {
+            for id in v.knownWindows where !alive.contains(id) {
+                v.forget(id)
+                state.floating.remove(id)
+                state.requested[id] = nil
+                floatingFrames[id] = nil
+            }
+        }
+    }
+
     /// Windows keep arriving for a while after launch (moves from other desktops land asynchronously), so saved
     /// slots are matched against newly seen windows until this deadline instead of once.
     private var virtualRestoreDeadline = Date().addingTimeInterval(20)
@@ -485,11 +524,22 @@ final class WindowManager {
         var pool = snap.windows.filter { !(virtualSet(ofWindow: $0.id)?.isKnown($0.id) ?? true) }
         guard !pool.isEmpty else { return false }
         var placed = false
-        if config.restoreLayouts, Date() < virtualRestoreDeadline {
-            for savedSpace in saved.spaces {
+        // At launch everything is matched against the saved layout. Later, only windows of an app that just
+        // (re)started are, and only by exact title, against the latest save and never into the active
+        // workspace: an updated browser reopening its windows gets them back where they were.
+        let atLaunch = Date() < virtualRestoreDeadline
+        let layout = atLaunch ? saved : lastSaved
+        let launchCutoff = Date().addingTimeInterval(-15)
+        func eligible(_ w: WindowInfo) -> Bool {
+            atLaunch || (NSRunningApplication(processIdentifier: w.pid)?.launchDate.map { $0 > launchCutoff } ?? false)
+        }
+        if config.restoreLayouts {
+            for savedSpace in layout.spaces {
                 guard let d = VirtualWorkspaces.decode(savedSpace.id), let v = virtualSet(realSpace: d.real) else { continue }
-                let candidates = pool.filter { !reconciler.isIgnored($0) && Spaces.spaces(of: $0.id).first == d.real }
-                guard let grid = saved.restore(space: savedSpace.id, candidates: candidates) else { continue }
+                if !atLaunch, d.workspace == v.active { continue }
+                let candidates = pool.filter { !reconciler.isIgnored($0) && Spaces.spaces(of: $0.id).first == d.real && eligible($0) }
+                guard !candidates.isEmpty, let grid = layout.restore(space: savedSpace.id, candidates: candidates, exactTitle: !atLaunch) else { continue }
+                if !atLaunch { Log.write("restore", "\(grid.windows.map { describe($0) }) back on workspace \(d.workspace + 1) (app relaunched)") }
                 let ws = d.workspace
                 for id in grid.windows { v.move(id, to: ws) }
                 pool.removeAll { grid.contains($0.id) }
@@ -503,11 +553,12 @@ final class WindowManager {
                 placed = true
             }
         }
-        if config.restoreLayouts, Date() < virtualRestoreDeadline {
-            for savedSpace in saved.spaces where !savedSpace.floating.isEmpty {
+        if config.restoreLayouts {
+            for savedSpace in layout.spaces where !savedSpace.floating.isEmpty {
                 guard let d = VirtualWorkspaces.decode(savedSpace.id), let v = virtualSet(realSpace: d.real) else { continue }
-                let candidates = pool.filter { Spaces.spaces(of: $0.id).first == d.real }
-                for (id, frame) in saved.restoreFloating(space: savedSpace.id, candidates: candidates) {
+                if !atLaunch, d.workspace == v.active { continue }
+                let candidates = pool.filter { Spaces.spaces(of: $0.id).first == d.real && eligible($0) }
+                for (id, frame) in layout.restoreFloating(space: savedSpace.id, candidates: candidates, exactTitle: !atLaunch) {
                     v.move(id, to: d.workspace)
                     state.floating.insert(id)
                     system.execute([.setFrame(id, frame)])

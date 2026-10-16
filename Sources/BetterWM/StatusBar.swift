@@ -9,6 +9,7 @@ final class StatusBar {
     private let weather: WeatherService
     private let events = WindowServerEvents()
     private var clock: Timer?
+    private let media = MediaService()
     private var inputSourceObserver: NSObjectProtocol?
     var onSelectDesktop: ((Int) -> Void)?
     /// The menu widget was clicked; the app pops its menu at the given view.
@@ -25,6 +26,8 @@ final class StatusBar {
         self.config = config
         weather = WeatherService(config: config)
         weather.onUpdate = { [weak self] _ in self?.refresh() }
+        media.onUpdate = { [weak self] _ in self?.refresh() }
+        if config.bar && config.barWidgets.contains(.media) { media.start() }
         events.onEvent = { [weak self] event, _ in
             switch event {
             case .frontChange, .spaceChange, .windowDestroy, .windowReorder: self?.refresh()
@@ -49,6 +52,7 @@ final class StatusBar {
     }
 
     func apply(_ config: Config) {
+        if config.bar && config.barWidgets.contains(.media) { media.start() } else { media.stop() }
         self.config = config
         weather.apply(config)
         rebuild()
@@ -82,6 +86,7 @@ final class StatusBar {
             w.view.apply(config, avoidNotch: atScreenTop(screen))
             w.view.onSelectDesktop = { [weak self] i in self?.onSelectDesktop?(i) }
             w.view.onMenuRequested = { [weak self] v in self?.onMenuRequested?(v) }
+            w.view.onPlayPause = { [weak self] in self?.media.togglePlayPause() }
             windows.append(w)
             w.orderBack(nil)
         }
@@ -132,7 +137,9 @@ final class StatusBar {
             cpu: config.barCpu ? SystemStatus.cpuLoad() : nil,
             memory: config.barMemory ? SystemStatus.memoryUsed() : nil,
             disk: config.barDisk ? SystemStatus.diskFree() : nil,
-            inputSource: config.barInputSource ? InputSource.current() : nil
+            inputSource: config.barInputSource ? InputSource.current() : nil,
+            media: config.barWidgets.contains(.media) ? media.current : nil,
+            titleFormat: config.barTitleFormat
         )
         windows.forEach { $0.view.render(model) }
     }
@@ -259,10 +266,13 @@ final class BarView: NSView {
         var memory: Double?
         var disk: Int64?
         var inputSource: String?
+        var media: MediaService.NowPlaying?
+        var titleFormat: String
     }
 
     var onSelectDesktop: ((Int) -> Void)?
     var onMenuRequested: ((NSView) -> Void)?
+    var onPlayPause: (() -> Void)?
     private let screen: NSScreen
     private let background = NSVisualEffectView()
     private let solid = NSView()
@@ -290,6 +300,8 @@ final class BarView: NSView {
     private let batteryLabel = NSTextField(labelWithString: "")
     private let clockLabel = NSTextField(labelWithString: "")
     private let menuButton = ChipButton(title: "", target: nil, action: nil)
+    private let mediaButton = ChipButton(title: "", target: nil, action: nil)
+    private let mediaLabel = NSTextField(labelWithString: "")
     private let cat = BarCat(frame: .zero)
     /// One container per right-side widget; `apply` arranges them in the configured order.
     private var widgetViews: [Config.BarWidget: NSStackView] = [:]
@@ -367,6 +379,17 @@ final class BarView: NSView {
         menuButton.action = #selector(menuPressed)
         menuButton.toolTip = "BetterWM"
         widget(.menu, [menuButton])
+        mediaButton.isBordered = false
+        mediaButton.imageScaling = .scaleProportionallyDown
+        mediaButton.widthAnchor.constraint(equalToConstant: 24).isActive = true
+        mediaButton.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        mediaButton.target = self
+        mediaButton.action = #selector(playPausePressed)
+        mediaLabel.font = .systemFont(ofSize: 12)
+        mediaLabel.lineBreakMode = .byTruncatingTail
+        mediaLabel.maximumNumberOfLines = 1
+        mediaLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 220).isActive = true
+        widget(.media, [mediaButton, mediaLabel], spacing: 2)
         right.spacing = 12
         for v in [left, right] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
         cat.translatesAutoresizingMaskIntoConstraints = false
@@ -413,6 +436,8 @@ final class BarView: NSView {
         titleLabel.textColor = textColor.withAlphaComponent(0.65)
         for icon in [weatherIcon, cpuIcon, memIcon, diskIcon, wifiIcon, batteryIcon] { icon.contentTintColor = textColor }
         menuButton.contentTintColor = textColor
+        mediaButton.contentTintColor = textColor
+        mediaLabel.textColor = textColor
         cat.isHidden = !config.barCat
         catsEnabled = config.barCat
         notchPortals = config.barNotchPortals
@@ -481,8 +506,14 @@ final class BarView: NSView {
             left.addArrangedSubview(appLabel)
             left.addArrangedSubview(titleLabel)
         }
-        appLabel.stringValue = m.app
-        titleLabel.stringValue = m.title.isEmpty || m.title == m.app ? "" : "— " + m.title
+        appLabel.isHidden = true
+        titleLabel.attributedStringValue = BarView.formatTitle(m.titleFormat, app: m.app, title: m.title, color: textColor)
+        show(.media, m.media != nil)
+        if let np = m.media {
+            mediaButton.image = NSImage(systemSymbolName: np.playing ? "pause.fill" : "play.fill", accessibilityDescription: np.playing ? "Pause" : "Play")
+            mediaLabel.stringValue = np.text
+            mediaLabel.toolTip = np.text
+        }
         func show(_ w: Config.BarWidget, _ visible: Bool) { widgetViews[w]?.isHidden = !visible }
         show(.weather, m.weather != nil)
         if let (text, symbol) = m.weather {
@@ -515,6 +546,34 @@ final class BarView: NSView {
     }
 
     @objc private func menuPressed() { onMenuRequested?(menuButton) }
+    @objc private func playPausePressed() { onPlayPause?() }
+
+    /// Expands {app} and {title} in `format`; the app name is bold, everything else dimmer. With no title (or a
+    /// title equal to the app name) only the app is shown.
+    static func formatTitle(_ format: String, app: String, title: String, color: NSColor) -> NSAttributedString {
+        // Attributed strings carry their own paragraph style; without this the label wraps instead of truncating.
+        let para = NSMutableParagraphStyle()
+        para.lineBreakMode = .byTruncatingTail
+        let bold: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: color, .paragraphStyle: para]
+        let dim: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: color.withAlphaComponent(0.65), .paragraphStyle: para]
+        guard !title.isEmpty, title != app, format.contains("{title}") else {
+            return NSAttributedString(string: app, attributes: bold)
+        }
+        let out = NSMutableAttributedString()
+        var rest = Substring(format)
+        while let open = rest.range(of: "{") , let close = rest[open.upperBound...].range(of: "}") {
+            out.append(NSAttributedString(string: String(rest[..<open.lowerBound]), attributes: dim))
+            let key = rest[open.upperBound..<close.lowerBound]
+            switch key {
+            case "app": out.append(NSAttributedString(string: app, attributes: bold))
+            case "title": out.append(NSAttributedString(string: title, attributes: dim))
+            default: out.append(NSAttributedString(string: "{\(key)}", attributes: dim))
+            }
+            rest = rest[close.upperBound...]
+        }
+        out.append(NSAttributedString(string: String(rest), attributes: dim))
+        return out
+    }
 
     /// Two digits minimum, padded with a figure space so the monospaced labels keep a stable width.
     static func percent(_ value: Double) -> String {

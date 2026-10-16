@@ -4,6 +4,18 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.14] - 2026-10-16
+
+### Added
+- Status bar: the active window label is formatted by `barTitleFormat` (default `{app} — {title}`; Settings › Bar › Window title).
+- Status bar: a Now Playing widget (off by default; enable in Settings › Widgets) showing the current Music or Spotify track with a play/pause button. The button presses the system media key, so it also controls other players; track info is read only from Music and Spotify, since macOS no longer exposes Now Playing to third-party apps.
+
+### Fixed
+- Floating windows of apps hidden for an inactive workspace were not saved, so they lost their workspace on relaunch. Every window a workspace knows is now part of the snapshot and the saved layout.
+- Closed windows stayed in the workspace bookkeeping, so a desktop chip kept showing an app that had no window there, and after an app restarted (Chrome updating itself) the old and new processes both showed. Dead windows are now pruned every tick.
+- When an app restarts mid-session (an update), its windows reopened on the active workspace. Windows of an app launched in the last 15 seconds are matched against the latest saved layout by exact title and sent back to the workspace they were on.
+- Switching workspaces sometimes left Finder frontmost with no window: hiding the departing app let macOS pick the next one. The destination workspace's top app is activated first; an empty workspace activates BetterWM itself instead.
+
 ## [0.11.13] - 2026-10-16
 
 ### Fixed
