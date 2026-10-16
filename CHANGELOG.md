@@ -4,6 +4,17 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.8] - 2026-10-16
+
+### Fixed
+- Virtual workspaces: floating windows came back after a relaunch on the wrong workspace, stuck in the parking corner. Their workspace and real frame are now saved in state.json and restored on launch, and they stay floating instead of being tiled as new windows (native desktops too); quitting unparks everything first; a window still found stranded in a corner is pulled back on screen.
+- Virtual workspaces: a window untiled by hand was tiled again after leaving and returning to its workspace, because parking hid it from the desktop's known set and it came back as a new arrival. Hand-untiled windows now stay floating until tiled again.
+- Menu toggles (Auto-tile New Windows, the strategy, ⌥Tab switcher, action overlay) were not written to the config and reset on relaunch.
+- ⌥-dragging a window lagged. Profiling under a synthetic drag found the main thread, where the event tap runs, blocked by Accessibility round-trips per mouse move: the Accessibility observer treated every window-moved and window-resized notification as a focus change (two focus lookups and a status bar refresh each); the focus ring did a full focus lookup for moves of windows other than the ringed one; the status bar's per-desktop app scan went through Accessibility for every window; the dragged window's ID was re-resolved per move; and the window itself was moved with synchronous calls inside the tap. Moves now run off-thread with only the latest position applied, moved/resized notifications only nudge the ring (and not during a drag), the app scan uses the window list alone, bar refreshes wait until the drag ends, and screens and the window ID are resolved once per drag.
+
+### Added
+- A window dragged or resized by hand (without ⌥) that ends up floating remembers that spot, so toggling tiling off later returns it there. ⌥-dropping into a zone keeps the pre-drag position as the floating spot.
+
 ## [0.11.7] - 2026-10-16
 
 ### Added

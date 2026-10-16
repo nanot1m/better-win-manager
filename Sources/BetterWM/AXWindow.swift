@@ -98,6 +98,11 @@ final class AXWindow: Hashable {
         }
     }
 
+    func setOrigin(_ origin: CGPoint) {
+        var pos = origin
+        if let p = AXValueCreate(.cgPoint, &pos) { AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, p) }
+    }
+
     func raise() {
         AXUIElementPerformAction(element, kAXRaiseAction as CFString)
         NSRunningApplication(processIdentifier: pid)?.activate()

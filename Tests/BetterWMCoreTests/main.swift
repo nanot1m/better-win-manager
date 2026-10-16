@@ -102,6 +102,25 @@ struct ReconcilerTests {
         expect(state.grid(for: space).windows == [3], #function, 103)
     }
 
+    func testRestoredFloatingWindowIsNotTiled() {
+        let r = Reconciler(config: config)
+        var initial = DesiredState()
+        initial.floating = [2]
+        var (state, _) = r.reconcile(initial, snapshot([win(1, area), win(2, area)]))
+        expect(state.grid(for: space).windows == [1], #function, #line)
+        (state, _) = r.reconcile(state, snapshot([win(1, area), win(2, area), win(3, area)]))
+        expect(state.grid(for: space).windows == [1, 3], #function, #line)
+        // Once tiled by hand it is an ordinary window again.
+        state.mutate(space) { $0.apply(.newColumn(index: 2), to: 2) }
+        (state, _) = r.reconcile(state, snapshot([win(1, area), win(2, area), win(3, area)]))
+        expect(!state.floating.contains(2), #function, #line)
+        // Untiled by hand, then gone (parked on an inactive workspace) and back: still floating.
+        state.untile(2)
+        (state, _) = r.reconcile(state, snapshot([win(1, area), win(3, area)]))
+        (state, _) = r.reconcile(state, snapshot([win(1, area), win(2, area), win(3, area)]))
+        expect(state.grid(for: space).windows == [1, 3], #function, #line)
+    }
+
     func testRetileRequestTilesEverythingOnce() {
         var c = config
         c.tileExistingOnStart = false
@@ -244,6 +263,26 @@ struct ReconcilerTests {
         expect(try! JSONDecoder().decode(SavedLayout.self, from: encoded) == v2, #function, #line)
     }
 
+    func testFloatingWindowsSavedAndRestored() {
+        let space: SpaceID = 1_000_030_201
+        var state = DesiredState()
+        var g = Grid(); g.columns = [Column([1])]
+        state.grids[space] = g
+        let snap = Snapshot(screens: [], windows: [
+            WindowInfo(id: 1, pid: 1, bundleID: "com.a", frame: CGRect(x: 0, y: 0, width: 800, height: 600), spaces: [space], title: "tiled"),
+            WindowInfo(id: 2, pid: 2, bundleID: "com.b", frame: CGRect(x: 100, y: 100, width: 400, height: 300), spaces: [space], title: "float"),
+        ], focused: nil)
+        let saved = SavedLayout.capture(state, snap, floatingSpace: { _ in space })
+        expect(saved.spaces.count == 1 && saved.spaces[0].floating.map { $0.title } == ["float"], #function, #line)
+        let encoded = try! JSONEncoder().encode(saved)
+        expect(try! JSONDecoder().decode(SavedLayout.self, from: encoded) == saved, #function, #line)
+        let later = WindowInfo(id: 9, pid: 9, bundleID: "com.b", frame: CGRect(x: 1900, y: 1200, width: 400, height: 300), spaces: [space], title: "float")
+        let restored = saved.restoreFloating(space: space, candidates: [later])
+        expect(restored.count == 1 && restored[0].id == 9 && restored[0].frame == CGRect(x: 100, y: 100, width: 400, height: 300), #function, #line)
+        let legacy = try! JSONDecoder().decode(SavedLayout.self, from: Data(#"{"version":2,"spaces":[{"id":5,"columns":[]}]}"#.utf8))
+        expect(legacy.spaces[0].floating.isEmpty, #function, #line)
+    }
+
     func testStackedModeGeometry() {
         var c = config
         c.stackOffset = 50
@@ -321,6 +360,7 @@ let tests: [(String, () -> Void)] = [
     ("ignoredAppIsNotTiled", t.testIgnoredAppIsNotTiled),
     ("minimumSizeIsLearnedAndRespected", t.testMinimumSizeIsLearnedAndRespected),
     ("noTilingOnFirstVisitWhenDisabled", t.testNoTilingOnFirstVisitWhenDisabled),
+    ("restoredFloatingWindowIsNotTiled", t.testRestoredFloatingWindowIsNotTiled),
     ("retileRequestTilesEverythingOnce", t.testRetileRequestTilesEverythingOnce),
     ("dropZonesAndApply", t.testDropZonesAndApply),
     ("moveAndMerge", t.testMoveAndMerge),
@@ -331,6 +371,7 @@ let tests: [(String, () -> Void)] = [
     ("restoreFallsBackToNearestFrame", t.testRestoreFallsBackToNearestFrame),
     ("edgeMoveCyclesWidth", t.testEdgeMoveCyclesWidth),
     ("configV1Migration", t.testConfigV1Migration),
+    ("floatingWindowsSavedAndRestored", t.testFloatingWindowsSavedAndRestored),
     ("stackedModeGeometry", t.testStackedModeGeometry),
     ("stackedDeckKeepsPositions", t.testStackedDeckKeepsPositions),
     ("stackedModeSurvivesSaveWithoutWindows", t.testStackedModeSurvivesSaveWithoutWindows),

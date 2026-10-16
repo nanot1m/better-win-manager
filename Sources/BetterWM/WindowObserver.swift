@@ -6,10 +6,15 @@ final class WindowObserver {
     private var observers: [pid_t: AXObserver] = [:]
     private let onNewWindow: (AXWindow) -> Void
     private let onFocusChange: () -> Void
+    private let onGeometryChange: () -> Void
+    private let onTitleChange: () -> Void
 
-    init(onNewWindow: @escaping (AXWindow) -> Void, onFocusChange: @escaping () -> Void) {
+    init(onNewWindow: @escaping (AXWindow) -> Void, onFocusChange: @escaping () -> Void,
+         onGeometryChange: @escaping () -> Void, onTitleChange: @escaping () -> Void) {
         self.onNewWindow = onNewWindow
         self.onFocusChange = onFocusChange
+        self.onGeometryChange = onGeometryChange
+        self.onTitleChange = onTitleChange
         for app in NSWorkspace.shared.runningApplications { observe(app) }
         let nc = NSWorkspace.shared.notificationCenter
         nc.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] n in
@@ -29,9 +34,12 @@ final class WindowObserver {
         var obs: AXObserver?
         let cb: AXObserverCallback = { _, element, notification, refcon in
             let me = Unmanaged<WindowObserver>.fromOpaque(refcon!).takeUnretainedValue()
-            if notification as String != kAXWindowCreatedNotification {
-                me.onFocusChange()
-                return
+            // Moves and resizes arrive for every frame of a drag; they must not cost a focus lookup each.
+            switch notification as String {
+            case kAXWindowCreatedNotification: break
+            case kAXWindowMovedNotification, kAXWindowResizedNotification: me.onGeometryChange(); return
+            case kAXTitleChangedNotification: me.onTitleChange(); return
+            default: me.onFocusChange(); return
             }
             var pid: pid_t = 0
             AXUIElementGetPid(element, &pid)

@@ -21,14 +21,19 @@ public struct SavedLayout: Codable, Equatable {
         public var id: SpaceID
         public var columns: [Column]
         public var mode: LayoutMode
-        public init(id: SpaceID, columns: [Column], mode: LayoutMode = .columns) { self.id = id; self.columns = columns; self.mode = mode }
+        /// Untiled windows living on this space, with their real frames (not the parking spot).
+        public var floating: [Window]
+        public init(id: SpaceID, columns: [Column], mode: LayoutMode = .columns, floating: [Window] = []) {
+            self.id = id; self.columns = columns; self.mode = mode; self.floating = floating
+        }
 
-        enum CodingKeys: String, CodingKey { case id, columns, mode }
+        enum CodingKeys: String, CodingKey { case id, columns, mode, floating }
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             id = try c.decode(SpaceID.self, forKey: .id)
             columns = try c.decode([Column].self, forKey: .columns)
             mode = try c.decodeIfPresent(LayoutMode.self, forKey: .mode) ?? .columns
+            floating = try c.decodeIfPresent([Window].self, forKey: .floating) ?? []
         }
     }
     /// Bumped when the meaning of stored ids changes; `migrated(currentSpace:)` upgrades older files.
@@ -61,7 +66,8 @@ public struct SavedLayout: Codable, Equatable {
     }
 
     /// Captures every non-empty grid in `state`, describing windows with what `snapshot` knows about them.
-    public static func capture(_ state: DesiredState, _ snapshot: Snapshot) -> SavedLayout {
+    /// `floatingSpace` names the space an untiled window belongs to; nil leaves it out.
+    public static func capture(_ state: DesiredState, _ snapshot: Snapshot, floatingSpace: (WindowInfo) -> SpaceID? = { _ in nil }) -> SavedLayout {
         var out = SavedLayout()
         // Empty grids are still worth saving when their mode isn't the default.
         for (space, grid) in state.grids.sorted(by: { $0.key < $1.key }) where !grid.isEmpty || grid.mode != .columns {
@@ -73,6 +79,29 @@ public struct SavedLayout: Codable, Equatable {
                 return windows.isEmpty ? nil : Column(weight: col.weight, windows: windows)
             }
             if !columns.isEmpty || grid.mode != .columns { out.spaces.append(Space(id: space, columns: columns, mode: grid.mode)) }
+        }
+        for w in snapshot.windows where !state.isTiled(w.id) {
+            guard let space = floatingSpace(w) else { continue }
+            let slot = Window(bundleID: w.bundleID, title: w.title, frame: w.frame, heightWeight: 1)
+            if let i = out.spaces.firstIndex(where: { $0.id == space }) { out.spaces[i].floating.append(slot) }
+            else { out.spaces.append(Space(id: space, columns: [], floating: [slot])) }
+        }
+        out.spaces.sort { $0.id < $1.id }
+        return out
+    }
+
+    /// Pairs saved floating windows of `space` with `candidates` (same app and title, else nearest frame) and
+    /// returns each match with the frame to put it back at.
+    public func restoreFloating(space: SpaceID, candidates: [WindowInfo]) -> [(id: WindowID, frame: CGRect)] {
+        guard let saved = spaces.first(where: { $0.id == space }), !saved.floating.isEmpty else { return [] }
+        var pool = candidates
+        var out: [(WindowID, CGRect)] = []
+        for slot in saved.floating {
+            let sameApp = pool.indices.filter { pool[$0].bundleID == slot.bundleID }
+            guard !sameApp.isEmpty else { continue }
+            let pick = sameApp.first { pool[$0].title == slot.title }
+                ?? sameApp.min { distance(pool[$0].frame, slot.frame) < distance(pool[$1].frame, slot.frame) }!
+            out.append((pool.remove(at: pick).id, slot.frame))
         }
         return out
     }

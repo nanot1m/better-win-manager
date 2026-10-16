@@ -59,17 +59,18 @@ final class FocusRing {
             case .windowResize:
                 // Apps change corner style with size (e.g. entering split view); measure again.
                 if let wid { self.radiusCache[wid] = nil }
-                guard !self.suspended else { return }
-                if wid == self.current { self.update() }
+                guard !self.suspended, wid == self.current else { return }
+                self.scheduleUpdate()
             case .windowMove:
-                guard !self.suspended else { return }
-                // Cheap path: the focused window moved; just follow it without re-resolving focus.
-                if wid == self.current, let id = wid, let f = WindowServerEvents.bounds(of: id) { self.place(frame: f) } else { self.update() }
+                // Moving a window never changes focus; only the ringed window matters, and it is followed straight
+                // from WindowServer. An ⌥-drag of an unfocused window fires this per pixel, so no AX here.
+                guard !self.suspended, wid == self.current, let id = wid, let f = WindowServerEvents.bounds(of: id) else { return }
+                self.place(frame: f)
             case .spaceChange:
                 self.window.orderOut(nil)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.update() }
             default:
-                self.update()
+                self.scheduleUpdate()
             }
         }
         let nc = NSWorkspace.shared.notificationCenter
@@ -103,6 +104,17 @@ final class FocusRing {
         suspended = false
         guard config.focusRing else { return }
         present(id: id, frame: frame)
+    }
+
+    /// Reorder/level/front events arrive in bursts; one Accessibility round-trip per burst is enough.
+    private var updateScheduled = false
+    func scheduleUpdate() {
+        guard !updateScheduled else { return }
+        updateScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            self?.updateScheduled = false
+            self?.update()
+        }
     }
 
     func update() {

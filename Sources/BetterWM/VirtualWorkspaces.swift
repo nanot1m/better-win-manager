@@ -45,6 +45,7 @@ final class VirtualWorkspaces {
     func workspace(of w: WindowID) -> Int { membership[w] ?? active }
     func isKnown(_ w: WindowID) -> Bool { membership[w] != nil }
     func isParked(_ w: WindowID) -> Bool { parked.contains(w) }
+    var parkedWindows: Set<WindowID> { parked }
     /// The real frame of a parked floating window, if remembered.
     func parkedFrame(of w: WindowID) -> CGRect? { parkedFrames[w] }
 

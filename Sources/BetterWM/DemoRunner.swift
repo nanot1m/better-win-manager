@@ -145,7 +145,7 @@ final class DemoRunner {
             guard let self else { return }
             self.manager.overlay.hide()
             self.manager.interacting = false
-            if let zone = self.manager.zone(at: point, dragging: w) { self.manager.drop(w, into: zone.0, at: point) }
+            if let zone = self.manager.zone(at: point, dragging: w) { self.manager.drop(w, into: zone.0, at: point, from: w.frame) }
         }
         return 2.2
     }

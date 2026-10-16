@@ -14,6 +14,8 @@ final class StatusBar {
     var desktopCount: () -> Int = { Spaces.desktops().count }
     var currentDesktop: () -> Int? = { Spaces.currentDesktopIndex() }
     var desktopApps: () -> [Int: [pid_t]] = { [:] }
+    /// While the user drags a window the bar stays as it is; any work on the main thread stalls the event tap.
+    var isInteracting: () -> Bool = { false }
     /// Called whenever the bar is shown or hidden so the layout can reserve space.
     var onLayoutChange: (() -> Void)?
 
@@ -85,7 +87,19 @@ final class StatusBar {
         maybeSuggestMenuBarAutoHide()
     }
 
+    /// Events come in bursts and a refresh scans every window for the desktop chips; one pass per burst.
+    private var refreshScheduled = false
     private func refresh() {
+        guard !refreshScheduled else { return }
+        refreshScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self else { return }
+            self.refreshScheduled = false
+            if self.isInteracting() { self.refresh() } else { self.refreshNow() }
+        }
+    }
+
+    private func refreshNow() {
         guard config.bar else { return }
         // A fullscreen app owns the whole screen; stay out of its way.
         for w in windows {

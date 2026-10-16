@@ -10,6 +10,8 @@ public struct DesiredState: Equatable {
     public var retileRequested: Set<SpaceID> = []
     /// Frames last requested per window; a window still larger than a frame we asked for has a minimum size.
     public var requested: [WindowID: CGRect] = [:]
+    /// Windows floating on purpose (untiled by hand or restored as floating); never arrivals, even on a first visit.
+    public var floating: Set<WindowID> = []
 
     public init() {}
 
@@ -17,8 +19,11 @@ public struct DesiredState: Equatable {
     public func space(containing w: WindowID) -> SpaceID? { grids.first { $0.value.contains(w) }?.key }
     public func isTiled(_ w: WindowID) -> Bool { space(containing: w) != nil }
 
+    /// Untiling by hand makes the window floating until it is tiled again: leaving and returning to its
+    /// workspace (which parks it out of sight) must not present it as a new arrival.
     public mutating func untile(_ w: WindowID) {
         for k in grids.keys { grids[k]?.remove(w) }
+        floating.insert(w)
     }
 
     public mutating func mutate(_ space: SpaceID, _ body: (inout Grid) -> Void) {
@@ -70,7 +75,7 @@ public struct Reconciler {
             let known = state.seen[space] ?? []
             let shouldTile = firstVisit ? (config.tileExistingOnStart || state.retileRequested.contains(space)) : config.autoTile
             if enabled, shouldTile {
-                let arrivals = here.filter { !known.contains($0.id) && !grid.contains($0.id) && !isIgnored($0) }
+                let arrivals = here.filter { !known.contains($0.id) && !grid.contains($0.id) && !state.floating.contains($0.id) && !isIgnored($0) }
                     .sorted { a, b in
                         (a.frame.midX, a.frame.minY, a.id) < (b.frame.midX, b.frame.minY, b.id)
                     }
@@ -98,6 +103,7 @@ public struct Reconciler {
 
             state.grids[space] = grid
             state.seen[space] = hereIDs
+            state.floating.subtract(grid.windows)
             state.retileRequested.remove(space)
         }
         let cmds = commands(for: state, snapshot)

@@ -53,7 +53,14 @@ final class WindowManager {
     /// Set while a Space switch is in flight; the window list mixes both desktops during the slide.
     private var switching = false
     /// Set while the user drags a window or a gap handle; reconciling mid-gesture would fight it.
-    var interacting = false
+    var interacting = false { didSet { interactionScreens = nil } }
+    /// Screen geometry is stable for the length of a drag; asking SkyLight for it on every mouse move is not free.
+    private var interactionScreens: [ScreenInfo]?
+    private func screens() -> [ScreenInfo] {
+        guard interacting else { return system.screens() }
+        if interactionScreens == nil { interactionScreens = system.screens() }
+        return interactionScreens!
+    }
     var onFocusChange: (() -> Void)?
     var onWindowsChange: (() -> Void)?
     private var lastWindowIDs: Set<WindowID> = []
@@ -111,6 +118,20 @@ final class WindowManager {
         state = newState
     }
 
+    /// Quitting must leave every window reachable: unpark all of them and write the layout one last time.
+    func prepareForQuit() {
+        saveWork?.cancel()
+        saveNow()
+        guard let sets = virtualSets?.values else { return }
+        for v in sets {
+            // Parked tiled windows have no remembered frame; their grid slot is where they go.
+            for id in v.parkedWindows where state.isTiled(id) {
+                if let f = targetFrame(of: id) { system.execute([.setFrame(id, f)]) }
+            }
+            v.unparkAll { self.system.execute([.setFrame($0, $1)]) }
+        }
+    }
+
     /// Virtual → native: unpark everything; workspace 1 of each desktop becomes that desktop's grid, the rest float.
     private func migrateToNative(from sets: [VirtualWorkspaces]) {
         for v in sets { v.unparkAll { self.system.execute([.setFrame($0, $1)]) } }
@@ -152,12 +173,25 @@ final class WindowManager {
         }
     }
 
-    /// Apps with a window on each desktop, in reading order of their first window, one entry per app.
+    /// Apps with a window on each desktop, front to back, one entry per app. Built from the window list alone:
+    /// the bar asks for this often and an Accessibility pass over every window would stall the event tap.
     func appsByDesktop() -> [Int: [pid_t]] {
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return [:] }
         var out: [Int: [pid_t]] = [:]
-        for (d, windows) in windowsByDesktop() {
-            var seen: Set<pid_t> = []
-            out[d] = windows.map(\.pid).filter { seen.insert($0).inserted }
+        let desktops = isVirtual ? [] : Spaces.desktops()
+        for info in list {
+            guard (info[kCGWindowLayer as String] as? Int) == 0,
+                  let pid = info[kCGWindowOwnerPID as String] as? pid_t, pid != getpid(),
+                  let id = info[kCGWindowNumber as String] as? CGWindowID else { continue }
+            let desktop: Int
+            if let v = virtualWS {
+                guard virtualSet(ofWindow: id) === v, v.isKnown(id) else { continue }
+                desktop = v.workspace(of: id)
+            } else {
+                guard let space = Spaces.spaces(of: id).first, let d = desktops.firstIndex(of: space) else { continue }
+                desktop = d
+            }
+            if !(out[desktop]?.contains(pid) ?? false) { out[desktop, default: []].append(pid) }
         }
         return out
     }
@@ -351,7 +385,12 @@ final class WindowManager {
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self?.followFocusedWindowsWorkspace() }
                                         self?.focusRing.update()
                                         self?.onFocusChange?()
-                                    })
+                                    },
+                                    onGeometryChange: { [weak self] in
+                                        guard let self, !self.interacting else { return }
+                                        self.focusRing.scheduleUpdate()
+                                    },
+                                    onTitleChange: { [weak self] in self?.onFocusChange?() })
         tick()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in self?.tick() }
     }
@@ -414,6 +453,33 @@ final class WindowManager {
                 placed = true
             }
         }
+        if config.restoreLayouts, Date() < virtualRestoreDeadline {
+            for savedSpace in saved.spaces where !savedSpace.floating.isEmpty {
+                guard let d = VirtualWorkspaces.decode(savedSpace.id), let v = virtualSet(realSpace: d.real) else { continue }
+                let candidates = pool.filter { Spaces.spaces(of: $0.id).first == d.real }
+                for (id, frame) in saved.restoreFloating(space: savedSpace.id, candidates: candidates) {
+                    v.move(id, to: d.workspace)
+                    state.floating.insert(id)
+                    system.execute([.setFrame(id, frame)])
+                    pool.removeAll { $0.id == id }
+                    Log.write("restore", "\(describe(id)) floats on workspace \(d.workspace + 1) at \(frame)")
+                    placed = true
+                }
+            }
+        }
+        // A window left in a parking corner by a previous run (quit without unparking, a crash) and matched by
+        // nothing above would be adopted here, unreachable; pull it back onto its screen.
+        for w in pool {
+            guard let screen = NSScreen.screens.first(where: { $0.frame.toCocoa().contains(w.frame.center) })
+                ?? NSScreen.screens.first(where: { $0.frame.toCocoa().contains(w.frame.origin) }) else { continue }
+            let r = screen.frame.toCocoa()
+            guard w.frame.minX >= r.maxX - 3, w.frame.minY >= r.maxY - 3 else { continue }
+            let area = screen.visibleFrame.toCocoa()
+            let origin = CGPoint(x: max(area.minX, area.midX - w.frame.width / 2), y: max(area.minY, area.midY - w.frame.height / 2))
+            system.execute([.setFrame(w.id, CGRect(origin: origin, size: w.frame.size))])
+            Log.write("restore", "\(describe(w.id)) was stranded in the parking corner; moved on screen")
+            placed = true
+        }
         let frontPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let recentInput = Date().timeIntervalSince(lastUserInput) < 2
         for w in pool {
@@ -455,6 +521,12 @@ final class WindowManager {
         for screen in snap.screens where state.seen[screen.space] == nil && state.grid(for: screen.space).isEmpty {
             let here = snap.windows.filter { screen.area.contains($0.frame.center) && $0.spaces.contains(screen.space) && !reconciler.isIgnored($0) }
             if let grid = saved.restore(space: screen.space, candidates: here) { state.grids[screen.space] = grid }
+            let rest = here.filter { !state.isTiled($0.id) }
+            for (id, frame) in saved.restoreFloating(space: screen.space, candidates: rest) {
+                state.floating.insert(id)
+                system.execute([.setFrame(id, frame)])
+                Log.write("restore", "\(describe(id)) floats at \(frame)")
+            }
         }
     }
 
@@ -484,7 +556,12 @@ final class WindowManager {
                 return fixed
             }
         }
-        var layout = SavedLayout.capture(state, snap)
+        var layout = SavedLayout.capture(state, snap, floatingSpace: { w in
+            guard let v = self.virtualSet(ofWindow: w.id) else { return self.isVirtual ? nil : w.spaces.first }
+            guard v.isKnown(w.id) else { return nil }
+            let screenIndex = NSScreen.screens.firstIndex { $0.visibleFrame.toCocoa().contains(w.frame.center) } ?? 0
+            return v.spaceID(workspace: v.workspace(of: w.id), screenIndex: screenIndex)
+        })
         // Desktops not active right now keep what was saved for them before.
         let activeSpaces = Set(snap.screens.map(\.space))
         let captured = Set(layout.spaces.map(\.id))
@@ -516,7 +593,7 @@ final class WindowManager {
         for space in Set(a.grids.keys).union(b.grids.keys) {
             let was = Set(a.grid(for: space).windows), now = Set(b.grid(for: space).windows)
             let added = now.subtracting(was), removed = was.subtracting(now)
-            if !added.isEmpty { Log.write("reconcile", "space \(space): tiled \(added.map { describe($0) })") }
+            if !added.isEmpty { Log.write("reconcile", "space \(space): tiled \(added.map { describe($0) }) (first visit: \(a.seen[space] == nil), floating: \(a.floating.sorted()))") }
             if !removed.isEmpty { Log.write("reconcile", "space \(space): dropped \(removed.map { describe($0) })") }
         }
     }
@@ -556,7 +633,7 @@ final class WindowManager {
     func id(_ w: AXWindow) -> WindowID? { system.id(of: w) }
     func isTiled(_ w: AXWindow) -> Bool { id(w).map(state.isTiled) ?? false }
 
-    private func screen(at p: CGPoint) -> ScreenInfo? { system.screens().first { $0.area.contains(p) } ?? system.screens().first }
+    private func screen(at p: CGPoint) -> ScreenInfo? { let all = screens(); return all.first { $0.area.contains(p) } ?? all.first }
 
     private func geometry(for space: SpaceID) -> GridGeometry? {
         guard let screen = system.screens().first(where: { $0.space == space }) else { return nil }
@@ -567,24 +644,33 @@ final class WindowManager {
         system.screens().map { ($0.space, reconciler.geometry(state.grid(for: $0.space), $0)) }
     }
 
-    func zone(at p: CGPoint, dragging w: AXWindow) -> (DropZone, CGRect)? {
+    func zone(at p: CGPoint, dragging w: AXWindow) -> (DropZone, CGRect)? { zone(at: p, draggingID: id(w)) }
+
+    /// Resolving a window's ID is a round-trip; drags resolve it once and pass it here per mouse move.
+    func zone(at p: CGPoint, draggingID id: WindowID?) -> (DropZone, CGRect)? {
         guard let screen = screen(at: p) else { return nil }
-        return reconciler.geometry(state.grid(for: screen.space), screen).zone(at: p, dragging: id(w))
+        return reconciler.geometry(state.grid(for: screen.space), screen).zone(at: p, dragging: id)
     }
 
     // MARK: Mutations
 
     /// Where each window floated before it was tiled by hand, so toggling tiling off puts it back.
     private var floatingFrames: [WindowID: CGRect] = [:]
-    private func rememberFloatingFrame(_ w: AXWindow, _ id: WindowID) {
+    private func rememberFloatingFrame(_ w: AXWindow, _ id: WindowID, frame: CGRect? = nil) {
         guard !state.isTiled(id), !(virtualSet(ofWindow: id)?.isParked(id) ?? false) else { return }
-        floatingFrames[id] = w.frame
+        floatingFrames[id] = frame ?? w.frame
+    }
+    /// After a drag or resize by hand that left the window floating, that is where it now belongs.
+    func rememberFloatingFrame(_ w: AXWindow) {
+        guard let id = id(w) else { return }
+        rememberFloatingFrame(w, id)
     }
 
-    func drop(_ w: AXWindow, into zone: DropZone, at p: CGPoint) {
+    /// `from` is where the window sat before the drag began; that, not the drop point, is its floating spot.
+    func drop(_ w: AXWindow, into zone: DropZone, at p: CGPoint, from original: CGRect) {
         guard let id = id(w), let screen = screen(at: p) else { return }
         Log.write("tile", "drop \(describe(w)) into \(zone) on space \(screen.space)")
-        rememberFloatingFrame(w, id)
+        rememberFloatingFrame(w, id, frame: original)
         virtualSet(ofWindow: id)?.claimForActive(id)
         for space in state.grids.keys where space != screen.space { state.grids[space]?.remove(id) }
         state.mutate(screen.space) { $0.apply(zone, to: id) }

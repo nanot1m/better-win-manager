@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var switcherItem: NSMenuItem?
     let configWindow = ConfigWindow()
 
+    func applicationWillTerminate(_ n: Notification) { manager.prepareForQuit() }
+
     func applicationDidFinishLaunching(_ n: Notification) {
         let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         guard AXIsProcessTrustedWithOptions(opts) else {
@@ -46,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.desktopCount = { [weak self] in self?.manager.desktopCount ?? 0 }
         bar.currentDesktop = { [weak self] in self?.manager.currentDesktop }
         bar.desktopApps = { [weak self] in self?.manager.appsByDesktop() ?? [:] }
+        bar.isInteracting = { [weak self] in self?.manager.interacting ?? false }
         manager.onWindowsChange = { [weak self] in self?.bar.focusChanged() }
         manager.onDesktopChange = { [weak self] in self?.bar.focusChanged() }
         manager.onFocusChange = { [weak self] in self?.bar.focusChanged() }
@@ -309,11 +312,13 @@ extension AppDelegate {
     }
     @objc func toggleAutoTile() {
         manager.config.autoTile.toggle()
+        manager.config.save()
         syncAutoTileItems()
     }
     @objc func setStrategy(_ sender: NSMenuItem) {
         if let raw = sender.representedObject as? String, let st = Config.AutoTileStrategy(rawValue: raw) {
             manager.config.autoTileStrategy = st
+            manager.config.save()
         }
     }
     func syncAutoTileItems() {
@@ -324,11 +329,13 @@ extension AppDelegate {
     }
     @objc func toggleSwitcher() {
         manager.config.switcher.toggle()
+        manager.config.save()
         registerHotKeys(manager.config)
         syncAutoTileItems()
     }
     @objc func toggleOverlay() {
         manager.config.actionOverlay.toggle()
+        manager.config.save()
         syncAutoTileItems()
     }
     @objc func openConfig() { NSWorkspace.shared.open(Config.path) }

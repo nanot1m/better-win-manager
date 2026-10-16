@@ -5,11 +5,36 @@ final class DragController {
     private let manager: WindowManager
     private var tap: CFMachPort?
     private var dragged: AXWindow?
+    private var draggedID: WindowID?
     private var dragStart: CGPoint = .zero
     private var originalFrame: CGRect = .zero
     private var intercepting = false
     private var currentZone: (DropZone, CGRect)?
     private var lastScrollSwitch = Date.distantPast
+    /// AX moves are synchronous IPC into the target app; done inside the tap callback they stall every event in
+    /// the system, so they run off-thread and only the latest position is applied.
+    private let moveQueue = DispatchQueue(label: "betterwm.drag", qos: .userInteractive)
+    private let moveLock = NSLock()
+    private var pendingOrigin: CGPoint?
+    private var moveInFlight = false
+
+    private func scheduleMove(_ w: AXWindow, to origin: CGPoint) {
+        moveLock.lock()
+        pendingOrigin = origin
+        let start = !moveInFlight
+        moveInFlight = true
+        moveLock.unlock()
+        guard start else { return }
+        moveQueue.async { [self] in
+            while true {
+                moveLock.lock()
+                guard let o = pendingOrigin else { moveInFlight = false; moveLock.unlock(); return }
+                pendingOrigin = nil
+                moveLock.unlock()
+                w.setOrigin(o)
+            }
+        }
+    }
 
     init(manager: WindowManager) { self.manager = manager }
 
@@ -71,6 +96,7 @@ final class DragController {
             dragStart = p
             guard manager.enabled, let w = AXWindow.at(point: p) else { return Unmanaged.passUnretained(event) }
             dragged = w
+            draggedID = manager.id(w)
             dragStart = p
             originalFrame = w.frame
             currentZone = nil
@@ -81,6 +107,7 @@ final class DragController {
             if dragged == nil, alt, manager.enabled, let w = AXWindow.focused {
                 // Hit-testing failed on mouse-down; the window being dragged is the frontmost app's focused one.
                 dragged = w
+                draggedID = manager.id(w)
                 manager.interacting = true
                 originalFrame = w.frame
             }
@@ -92,10 +119,10 @@ final class DragController {
             manager.interacting = true
             if intercepting {
                 let dx = p.x - dragStart.x, dy = p.y - dragStart.y
-                w.frame = CGRect(origin: CGPoint(x: originalFrame.minX + dx, y: originalFrame.minY + dy), size: originalFrame.size)
+                scheduleMove(w, to: CGPoint(x: originalFrame.minX + dx, y: originalFrame.minY + dy))
             }
             if intercepting || alt {
-                currentZone = manager.zone(at: p, dragging: w)
+                currentZone = manager.zone(at: p, draggingID: draggedID)
                 manager.overlay.show(zone: currentZone?.1)
             } else {
                 currentZone = nil
@@ -109,15 +136,19 @@ final class DragController {
             let zone = currentZone?.0
             let wasIntercepting = intercepting
             intercepting = false
+            let original = originalFrame
             let finish = { [manager] in
                 manager.interacting = false
                 if let w, let zone {
-                    manager.drop(w, into: zone, at: p)
+                    manager.drop(w, into: zone, at: p, from: original)
                 } else {
                     manager.releaseDisplacedWindows()
+                    // Only a plain drag or resize settles a new floating spot; a ⌥-drag that misses every zone does not.
+                    if let w, !wasIntercepting { manager.rememberFloatingFrame(w) }
                 }
             }
             if wasIntercepting {
+                moveQueue.sync {}
                 finish()
                 return nil
             }
