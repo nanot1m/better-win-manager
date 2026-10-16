@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.13] - 2026-10-16
+
+### Fixed
+- The menu widget's click area was only as big as its icon; it now spans the bar height and a wider margin.
+
 ## [0.11.12] - 2026-10-16
 
 Config schema is now version 3 (adds the menu widget to saved widget lists); older files are migrated on load.

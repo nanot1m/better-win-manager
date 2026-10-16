@@ -360,7 +360,9 @@ final class BarView: NSView {
         menuButton.isBordered = false
         menuButton.image = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: "BetterWM menu")
         menuButton.imageScaling = .scaleProportionallyDown
-        menuButton.widthAnchor.constraint(equalToConstant: 18).isActive = true
+        // Generous hit area: the icon is 16pt but the whole bar height and a wide margin should take the click.
+        menuButton.widthAnchor.constraint(equalToConstant: 32).isActive = true
+        menuButton.heightAnchor.constraint(equalToConstant: 28).isActive = true
         menuButton.target = self
         menuButton.action = #selector(menuPressed)
         menuButton.toolTip = "BetterWM"
