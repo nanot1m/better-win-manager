@@ -248,6 +248,21 @@ struct ReconcilerTests {
         expect(Config().hotkeys["desktop3"] == "ctrl+3" && Config().hotkeys["sendToDesktop9"] == "ctrl+alt+9", #function, #line)
     }
 
+    func testBarWidgetsCompatibility() {
+        // Old files only have the flags: the list is derived from them in the default order.
+        let old = Config.parse("version = 2\nbarWifi = false\nbarCpu = false\n")
+        expect(old.barWidgets == [.weather, .memory, .disk, .keyboard, .battery, .clock], #function, #line)
+        // New files carry the order; the flags mirror it for older versions reading the file.
+        let new = Config.parse("version = 2\nbarWidgets = clock, battery, weather\n")
+        expect(new.barWidgets == [.clock, .battery, .weather] && !new.barCpu && new.barWeather, #function, #line)
+        let text = new.serialized()
+        expect(text.contains("barWidgets = clock, battery, weather") && text.contains("barCpu = false"), #function, #line)
+        expect(Config.parse(text).barWidgets == [.clock, .battery, .weather], #function, #line)
+        // Re-enabling a flag slots the widget back at its default position.
+        var c = new; c.barCpu = true
+        expect(c.barWidgets == [.clock, .battery, .weather, .cpu] || c.barWidgets.contains(.cpu), #function, #line)
+    }
+
     func testSavedLayoutV1Migration() {
         let json = """
         {"spaces":[{"id":1000201,"columns":[{"weight":1,"windows":[{"bundleID":"com.a","title":"t","frame":[[0,0],[10,10]],"heightWeight":1}]}]},
@@ -375,6 +390,7 @@ let tests: [(String, () -> Void)] = [
     ("stackedModeGeometry", t.testStackedModeGeometry),
     ("stackedDeckKeepsPositions", t.testStackedDeckKeepsPositions),
     ("stackedModeSurvivesSaveWithoutWindows", t.testStackedModeSurvivesSaveWithoutWindows),
+    ("barWidgetsCompatibility", t.testBarWidgetsCompatibility),
     ("savedLayoutV1Migration", t.testSavedLayoutV1Migration),
 ]
 for (name, run) in tests {

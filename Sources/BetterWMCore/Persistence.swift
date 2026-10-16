@@ -40,15 +40,18 @@ public struct SavedLayout: Codable, Equatable {
     public static let schemaVersion = 2
     public var version: Int = SavedLayout.schemaVersion
     public var spaces: [Space] = []
+    /// Apps hidden by the window manager at the time of the save; unhidden at launch if a run ended without cleanup.
+    public var hiddenPids: [Int32] = []
 
     public init(spaces: [Space] = []) { self.spaces = spaces }
 
-    enum CodingKeys: String, CodingKey { case version, spaces }
+    enum CodingKeys: String, CodingKey { case version, spaces, hiddenPids }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
         spaces = try c.decodeIfPresent([Space].self, forKey: .spaces) ?? []
+        hiddenPids = try c.decodeIfPresent([Int32].self, forKey: .hiddenPids) ?? []
     }
 
     /// v1 virtual ids (1_000_000 + ws*100 + screen) belonged to one global workspace set. v2 ids are

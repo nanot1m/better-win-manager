@@ -63,16 +63,11 @@ final class ConfigWindow: NSObject {
     private var barCheck: NSButton!
     private var barHeightField: NSTextField!
     private var barClockField: NSTextField!
-    private var barWeatherCheck: NSButton!
-    private var barBatteryCheck: NSButton!
     private var barDesktopAppsCheck: NSButton!
+    private var widgetOrder: [(Config.BarWidget, Bool)] = []
+    private let widgetList = NSStackView()
     private var barBatteryPercentCheck: NSButton!
-    private var barWifiCheck: NSButton!
     private var barCatCheck: NSButton!
-    private var barCpuCheck: NSButton!
-    private var barMemoryCheck: NSButton!
-    private var barDiskCheck: NSButton!
-    private var barInputCheck: NSButton!
     private var barCatSheets: NSTextView!
     private var barFahrenheit: NSButton!
     private var barLocationAuto: NSButton!
@@ -109,6 +104,7 @@ final class ConfigWindow: NSObject {
         tabs.addTabViewItem(tab("General", page(generalBoxes())))
         tabs.addTabViewItem(tab("Apps", page(appBoxes())))
         tabs.addTabViewItem(tab("Bar", page(barBoxes())))
+        tabs.addTabViewItem(tab("Widgets", page(widgetBoxes())))
         tabs.addTabViewItem(tab("Hotkeys", hotkeysPage()))
 
         let path = NSTextField(labelWithString: Config.path.path)
@@ -341,6 +337,48 @@ final class ConfigWindow: NSObject {
         return [box("Auto-tile Exclusions", rows: [[list]], twoColumn: false)]
     }
 
+    private func widgetBoxes() -> [NSView] {
+        widgetList.orientation = .vertical
+        widgetList.alignment = .leading
+        widgetList.spacing = 6
+        let hint = NSTextField(wrappingLabelWithString: "Right side of the bar, listed left to right. Untick a widget to hide it; use the arrows to reorder. Weather units and location are on the Bar tab; the battery percentage toggle too.")
+        hint.font = .systemFont(ofSize: 11)
+        hint.textColor = .secondaryLabelColor
+        hint.widthAnchor.constraint(lessThanOrEqualToConstant: 420).isActive = true
+        return [box("Widgets", rows: [[widgetList], [hint]], twoColumn: false)]
+    }
+
+    private func rebuildWidgetRows() {
+        widgetList.arrangedSubviews.forEach { widgetList.removeArrangedSubview($0); $0.removeFromSuperview() }
+        for (i, (w, on)) in widgetOrder.enumerated() {
+            let check = NSButton(checkboxWithTitle: w.title, target: self, action: #selector(widgetToggled(_:)))
+            check.state = on ? .on : .off
+            check.tag = i
+            check.widthAnchor.constraint(equalToConstant: 160).isActive = true
+            let up = NSButton(image: NSImage(systemSymbolName: "chevron.up", accessibilityDescription: "Move up")!, target: self, action: #selector(widgetMoved(_:)))
+            let down = NSButton(image: NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Move down")!, target: self, action: #selector(widgetMoved(_:)))
+            up.tag = i * 2; down.tag = i * 2 + 1
+            up.isEnabled = i > 0; down.isEnabled = i < widgetOrder.count - 1
+            for b in [up, down] { b.bezelStyle = .texturedRounded; b.setButtonType(.momentaryPushIn) }
+            let row = NSStackView(views: [check, up, down])
+            row.spacing = 6
+            widgetList.addArrangedSubview(row)
+        }
+    }
+
+    @objc private func widgetToggled(_ sender: NSButton) {
+        guard widgetOrder.indices.contains(sender.tag) else { return }
+        widgetOrder[sender.tag].1 = sender.state == .on
+    }
+
+    @objc private func widgetMoved(_ sender: NSButton) {
+        let i = sender.tag / 2, down = sender.tag % 2 == 1
+        let j = down ? i + 1 : i - 1
+        guard widgetOrder.indices.contains(i), widgetOrder.indices.contains(j) else { return }
+        widgetOrder.swapAt(i, j)
+        rebuildWidgetRows()
+    }
+
     private func barBoxes() -> [NSView] {
         barCheck = NSButton(checkboxWithTitle: "Show status bar at the top of each screen", target: nil, action: nil)
         barHeightField = NSTextField(string: "28")
@@ -355,15 +393,9 @@ final class ConfigWindow: NSObject {
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .secondaryLabelColor
         hint.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
-        barBatteryCheck = NSButton(checkboxWithTitle: "Battery", target: nil, action: nil)
         barDesktopAppsCheck = NSButton(checkboxWithTitle: "App icons per desktop", target: nil, action: nil)
         barBatteryPercentCheck = NSButton(checkboxWithTitle: "with percentage", target: nil, action: nil)
-        barWifiCheck = NSButton(checkboxWithTitle: "Wi-Fi signal", target: nil, action: nil)
         barCatCheck = NSButton(checkboxWithTitle: "Pixel cat", target: nil, action: nil)
-        barCpuCheck = NSButton(checkboxWithTitle: "CPU", target: nil, action: nil)
-        barMemoryCheck = NSButton(checkboxWithTitle: "Memory", target: nil, action: nil)
-        barDiskCheck = NSButton(checkboxWithTitle: "Free disk", target: nil, action: nil)
-        barInputCheck = NSButton(checkboxWithTitle: "Keyboard layout", target: nil, action: nil)
         barCatSheets = NSTextView()
         barCatSheets.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         barCatSheets.isRichText = false
@@ -390,8 +422,7 @@ final class ConfigWindow: NSObject {
         sheetHint.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
         let general = box("Status Bar", rows: [
             [label("Bar"), barCheck],
-            [label("Show"), NSStackView(views: [barBatteryCheck, barBatteryPercentCheck, barWifiCheck, barCatCheck, barDesktopAppsCheck])],
-            [NSView(), NSStackView(views: [barCpuCheck, barMemoryCheck, barDiskCheck, barInputCheck])],
+            [label("Show"), NSStackView(views: [barCatCheck, barDesktopAppsCheck, barBatteryPercentCheck])],
             [label("Cats"), sheetsScroll],
             [NSView(), sheetButtons],
             [NSView(), sheetHint],
@@ -400,7 +431,6 @@ final class ConfigWindow: NSObject {
             [NSView(), hint],
         ])
 
-        barWeatherCheck = NSButton(checkboxWithTitle: "Show weather", target: nil, action: nil)
         barFahrenheit = NSButton(checkboxWithTitle: "Fahrenheit", target: nil, action: nil)
         barLocationAuto = NSButton(radioButtonWithTitle: "Use Location Services", target: self, action: #selector(locationModeChanged))
         barLocationFixed = NSButton(radioButtonWithTitle: "Fixed coordinates", target: self, action: #selector(locationModeChanged))
@@ -408,7 +438,7 @@ final class ConfigWindow: NSObject {
         barLocationField.placeholderString = "latitude, longitude"
         barLocationField.widthAnchor.constraint(equalToConstant: 180).isActive = true
         let weather = box("Weather (Open-Meteo)", rows: [
-            [label("Weather"), NSStackView(views: [barWeatherCheck, barFahrenheit])],
+            [label("Units"), barFahrenheit],
             [label("Location"), barLocationAuto],
             [NSView(), NSStackView(views: [barLocationFixed, barLocationField])],
         ])
@@ -589,16 +619,11 @@ final class ConfigWindow: NSObject {
         barCheck.state = config.bar ? .on : .off
         barHeightField.stringValue = String(Int(config.barHeight))
         barClockField.stringValue = config.barClockFormat
-        barWeatherCheck.state = config.barWeather ? .on : .off
-        barBatteryCheck.state = config.barBattery ? .on : .off
         barDesktopAppsCheck.state = config.barDesktopApps ? .on : .off
         barBatteryPercentCheck.state = config.barBatteryPercent ? .on : .off
-        barWifiCheck.state = config.barWifi ? .on : .off
         barCatCheck.state = config.barCat ? .on : .off
-        barCpuCheck.state = config.barCpu ? .on : .off
-        barMemoryCheck.state = config.barMemory ? .on : .off
-        barDiskCheck.state = config.barDisk ? .on : .off
-        barInputCheck.state = config.barInputSource ? .on : .off
+        widgetOrder = config.barWidgets.map { ($0, true) } + Config.BarWidget.allCases.filter { !config.barWidgets.contains($0) }.map { ($0, false) }
+        rebuildWidgetRows()
         barCatSheets.string = config.barCatSheets.joined(separator: "\n")
         barFahrenheit.state = config.barWeatherFahrenheit ? .on : .off
         let auto = config.barWeatherLocation.lowercased() == "auto"
@@ -672,16 +697,10 @@ final class ConfigWindow: NSObject {
         config.bar = barCheck.state == .on
         config.barHeight = CGFloat(Double(barHeightField.stringValue) ?? 28)
         config.barClockFormat = barClockField.stringValue.isEmpty ? "EEE d MMM  HH:mm" : barClockField.stringValue
-        config.barWeather = barWeatherCheck.state == .on
-        config.barBattery = barBatteryCheck.state == .on
         config.barDesktopApps = barDesktopAppsCheck.state == .on
         config.barBatteryPercent = barBatteryPercentCheck.state == .on
-        config.barWifi = barWifiCheck.state == .on
         config.barCat = barCatCheck.state == .on
-        config.barCpu = barCpuCheck.state == .on
-        config.barMemory = barMemoryCheck.state == .on
-        config.barDisk = barDiskCheck.state == .on
-        config.barInputSource = barInputCheck.state == .on
+        config.barWidgets = widgetOrder.filter(\.1).map(\.0)
         config.barCatSheets = barCatSheets.string.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         config.barWeatherFahrenheit = barFahrenheit.state == .on
         config.barWeatherLocation = barLocationAuto.state == .on ? "auto" : barLocationField.stringValue.trimmingCharacters(in: .whitespaces)

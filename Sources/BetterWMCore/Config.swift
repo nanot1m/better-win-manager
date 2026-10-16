@@ -63,19 +63,49 @@ public struct Config {
     public var bar: Bool = false
     public var barHeight: CGFloat = 28
     public var barClockFormat: String = "EEE d MMM  HH:mm"
-    public var barWeather: Bool = true
-    public var barBattery: Bool = true
+    /// Right-side widgets of the bar, in display order. The per-widget booleans below are views onto this list,
+    /// kept so older config files (and older app versions reading new ones) keep working.
+    public enum BarWidget: String, CaseIterable {
+        case weather, cpu, memory, disk, keyboard, wifi, battery, clock
+        public var title: String {
+            switch self {
+            case .weather: return "Weather"
+            case .cpu: return "CPU load"
+            case .memory: return "Memory used"
+            case .disk: return "Free disk"
+            case .keyboard: return "Keyboard layout"
+            case .wifi: return "Wi-Fi signal"
+            case .battery: return "Battery"
+            case .clock: return "Clock"
+            }
+        }
+    }
+    public var barWidgets: [BarWidget] = BarWidget.allCases
+    private mutating func setWidget(_ w: BarWidget, _ on: Bool) {
+        if on, !barWidgets.contains(w) {
+            // Slot it where the default order would have it, after the nearest enabled predecessor.
+            let all = BarWidget.allCases
+            let before = all[..<all.firstIndex(of: w)!]
+            let at = before.reversed().compactMap { barWidgets.firstIndex(of: $0) }.first.map { $0 + 1 } ?? 0
+            barWidgets.insert(w, at: at)
+        } else if !on {
+            barWidgets.removeAll { $0 == w }
+        }
+    }
+    public var barWeather: Bool { get { barWidgets.contains(.weather) } set { setWidget(.weather, newValue) } }
+    public var barBattery: Bool { get { barWidgets.contains(.battery) } set { setWidget(.battery, newValue) } }
+    public var barWifi: Bool { get { barWidgets.contains(.wifi) } set { setWidget(.wifi, newValue) } }
+    public var barInputSource: Bool { get { barWidgets.contains(.keyboard) } set { setWidget(.keyboard, newValue) } }
+    public var barCpu: Bool { get { barWidgets.contains(.cpu) } set { setWidget(.cpu, newValue) } }
+    public var barMemory: Bool { get { barWidgets.contains(.memory) } set { setWidget(.memory, newValue) } }
+    public var barDisk: Bool { get { barWidgets.contains(.disk) } set { setWidget(.disk, newValue) } }
+    public var barClock: Bool { get { barWidgets.contains(.clock) } set { setWidget(.clock, newValue) } }
     public var barDesktopApps: Bool = true
     public var barBatteryPercent: Bool = true
     /// A pixel cat wandering the empty part of the bar.
     public var barCat: Bool = true
     /// One cat per entry: a path to a "Pixel Cats 64x64" sheet (Last tick's layout) or "builtin". Empty = one built-in cat.
     public var barCatSheets: [String] = []
-    public var barWifi: Bool = true
-    public var barInputSource: Bool = true
-    public var barCpu: Bool = true
-    public var barMemory: Bool = true
-    public var barDisk: Bool = true
     public var barWeatherFahrenheit: Bool = false
     /// "auto" uses Location Services; otherwise "lat,lon".
     public var barWeatherLocation: String = "auto"
@@ -217,6 +247,9 @@ public struct Config {
         barHeight = \(num(barHeight))
         # Unicode date format pattern for the clock.
         barClockFormat = \(barClockFormat)
+        # Right-side widgets in display order: weather, cpu, memory, disk, keyboard, wifi, battery, clock.
+        # Leave one out to hide it. (The barWeather/barBattery/... flags below mirror this list for older versions.)
+        barWidgets = \(barWidgets.map(\.rawValue).joined(separator: ", "))
         barWeather = \(barWeather)
         barBattery = \(barBattery)
         # Icons of the apps open on each desktop next to its number.
@@ -338,6 +371,7 @@ public struct Config {
             case "barCat": cfg.barCat = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barBatteryPercent": cfg.barBatteryPercent = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barBattery": cfg.barBattery = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "barWidgets": cfg.barWidgets = value.split(separator: ",").compactMap { BarWidget(rawValue: $0.trimmingCharacters(in: .whitespaces).lowercased()) }
             case "barDesktopApps": cfg.barDesktopApps = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barCpu": cfg.barCpu = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barMemory": cfg.barMemory = ["true", "yes", "1", "on"].contains(value.lowercased())

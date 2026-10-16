@@ -14,6 +14,7 @@ final class VirtualWorkspaces {
     /// windows keep their real frames, so nothing peeks out of a screen corner.
     private var hiddenByPid: [pid_t: Set<WindowID>] = [:]
     var knownWindows: [WindowID] { Array(membership.keys) }
+    var hiddenPids: [pid_t] { Array(hiddenByPid.keys) }
     /// Last workspace each app had a window in, kept after the window is gone: an app that recreates its only
     /// window (Unity on scene reload or Play mode) has no siblings to follow, but it still has a home.
     private(set) var homeByPid: [pid_t: Int] = [:]

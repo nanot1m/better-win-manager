@@ -376,6 +376,13 @@ final class WindowManager {
             let current = Spaces.current(for: NSScreen.screens.first ?? NSScreen.main!)
             saved = layout.migrated(currentSpace: current)
             lastSaved = saved
+            // A previous run that was killed left its hidden apps hidden; bring them back before parking decides anew.
+            for pid in saved.hiddenPids {
+                if let app = NSRunningApplication(processIdentifier: pid), app.isHidden {
+                    app.unhide()
+                    Log.write("park", "unhide app \(pid) left hidden by the previous run")
+                }
+            }
         }
         configureWorkspaces()
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
@@ -609,6 +616,7 @@ final class WindowManager {
         let captured = Set(layout.spaces.map(\.id))
         layout.spaces += lastSaved.spaces.filter { !activeSpaces.contains($0.id) && !captured.contains($0.id) }
         layout.spaces.sort { $0.id < $1.id }
+        layout.hiddenPids = (virtualSets?.values.flatMap(\.hiddenPids) ?? []).sorted()
         guard layout != lastSaved else { return }
         lastSaved = layout
         let enc = JSONEncoder()
@@ -806,13 +814,26 @@ final class WindowManager {
         apply()
     }
 
+    /// A floating window can always be "moved": the move tiles it first, where it sits, then applies.
     func canMoveFocused(_ dir: Move) -> Bool {
-        guard let w = AXWindow.focused, let id = id(w), let space = state.space(containing: id) else { return false }
+        guard let w = AXWindow.focused, let id = id(w) else { return false }
+        guard let space = state.space(containing: id) else { return true }
         return state.grid(for: space).canMove(id, dir)
     }
 
     func moveFocused(_ dir: Move) {
-        guard let w = AXWindow.focused, let id = id(w), let space = state.space(containing: id) else { return }
+        guard let w = AXWindow.focused, let id = id(w) else { return }
+        if !state.isTiled(id) {
+            tile(w)
+            guard let space = state.space(containing: id) else { return }
+            if state.grid(for: space).canMove(id, dir) {
+                Log.write("layout", "move \(describe(w)) \(dir) (tiled first)")
+                state.mutate(space) { $0.move(id, dir) }
+                apply()
+            }
+            return
+        }
+        guard let space = state.space(containing: id) else { return }
         Log.write("layout", "move \(describe(w)) \(dir)")
         state.mutate(space) { $0.move(id, dir) }
         apply()

@@ -189,7 +189,7 @@ private final class ActionView: NSView {
         let center = cell(2, 1)
         (tiled ? NSColor.controlAccentColor : NSColor.secondaryLabelColor).withAlphaComponent(0.25).setFill()
         NSBezierPath(roundedRect: center, xRadius: 8, yRadius: 8).fill()
-        draw(tiled ? "Focused" : "Not tiled\n(T to tile)", in: center, color: .labelColor, size: 12, bold: true)
+        draw(tiled ? "Focused" : "Floating\n(a move tiles it)", in: center, color: .labelColor, size: 12, bold: true)
 
         for a in Self.actions {
             let on = enabled[a.dir] ?? false

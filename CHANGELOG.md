@@ -4,6 +4,19 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.10] - 2026-10-16
+
+### Added
+- Status bar widgets have their own Settings tab: tick to show, arrows to reorder. The order is stored as `barWidgets` (comma-separated: weather, cpu, memory, disk, keyboard, wifi, battery, clock); the old `barWeather`/`barCpu`/… flags are still read and written so older configs and older versions keep working. The clock can now be hidden too.
+- Cats are interactive: hover the empty part of the bar and they run over to catch the pointer, sitting side by side when they get there; click a cat to pet it (it grooms or lies down, with a heart).
+- Cats cross the notch through a pair of Portal-style portals, blue on the left and orange on the right, lit only while a cat is passing. The part of the cat that has gone into one edge comes out of the other, so it never disappears.
+
+### Changed
+- Move Left/Right/Up/Down and Merge now work on a floating window: it is tiled where it sits first, then moved. The popup and menu no longer grey these out for floating windows.
+
+### Fixed
+- Apps hidden for inactive workspaces stayed hidden when BetterWM was killed (SIGTERM, as `pkill` or `make run` do) rather than quit. SIGTERM now runs the normal quit path, and the set of hidden apps is saved so a launch after a crash unhides them first.
+
 ## [0.11.9] - 2026-10-16
 
 ### Changed

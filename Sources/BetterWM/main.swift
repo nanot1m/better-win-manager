@@ -20,6 +20,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ n: Notification) { manager.prepareForQuit() }
 
+    /// `pkill`/`kill` send SIGTERM, which never reaches `applicationWillTerminate`; route it through a normal quit
+    /// so hidden apps are unhidden and parked windows restored.
+    private var sigterm: DispatchSourceSignal?
+    private func handleSigterm() {
+        signal(SIGTERM, SIG_IGN)
+        let src = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        src.setEventHandler { NSApp.terminate(nil) }
+        src.resume()
+        sigterm = src
+    }
+
     func applicationDidFinishLaunching(_ n: Notification) {
         let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         guard AXIsProcessTrustedWithOptions(opts) else {
@@ -37,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func boot() {
+        handleSigterm()
         let config = Config.load()
         manager = WindowManager(config: config)
         popup = ActionPopup(manager: manager)

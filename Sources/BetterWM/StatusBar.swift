@@ -118,7 +118,7 @@ final class StatusBar {
             apps: config.barDesktopApps ? desktopApps() : [:],
             app: app,
             title: title,
-            clock: formatter.string(from: Date()),
+            clock: config.barClock ? formatter.string(from: Date()) : nil,
             weather: weather.reading.map { r in
                 (String(format: "%.0f°", r.temperature), r.symbol)
             },
@@ -170,6 +170,7 @@ final class BarWindow: NSPanel {
         hasShadow = false
         // Behind all app windows: tiled ones start below the bar anyway, floating ones may cover it.
         level = .normal
+        acceptsMouseMovedEvents = true
         animationBehavior = .none
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         contentView = view
@@ -240,7 +241,7 @@ final class BarView: NSView {
         var apps: [Int: [pid_t]]
         var app: String
         var title: String
-        var clock: String
+        var clock: String?
         var weather: (String, String)?
         var battery: SystemStatus.Battery?
         var batteryPercent: Bool
@@ -278,6 +279,8 @@ final class BarView: NSView {
     private let batteryLabel = NSTextField(labelWithString: "")
     private let clockLabel = NSTextField(labelWithString: "")
     private let cat = BarCat(frame: .zero)
+    /// One container per right-side widget; `apply` arranges them in the configured order.
+    private var widgetViews: [Config.BarWidget: NSStackView] = [:]
     private var chips: [ChipView] = []
     private var leftLeading: NSLayoutConstraint!
     private var leftTrailing: NSLayoutConstraint!
@@ -322,28 +325,27 @@ final class BarView: NSView {
         right.orientation = .horizontal
         right.spacing = 8
         right.alignment = .centerY
-        right.addArrangedSubview(weatherIcon)
-        right.addArrangedSubview(weatherLabel)
-        for (icon, label) in [(cpuIcon, cpuLabel), (memIcon, memLabel), (diskIcon, diskLabel)] {
-            right.addArrangedSubview(icon)
-            right.addArrangedSubview(label)
-            right.setCustomSpacing(3, after: icon)
-            right.setCustomSpacing(12, after: label)
+        func widget(_ w: Config.BarWidget, _ views: [NSView], spacing: CGFloat = 3) {
+            let st = NSStackView(views: views)
+            st.orientation = .horizontal
+            st.alignment = .centerY
+            st.spacing = spacing
+            widgetViews[w] = st
         }
+        widget(.weather, [weatherIcon, weatherLabel])
+        widget(.cpu, [cpuIcon, cpuLabel])
+        widget(.memory, [memIcon, memLabel])
+        widget(.disk, [diskIcon, diskLabel])
         inputLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         inputLabel.wantsLayer = true
         inputLabel.layer?.cornerRadius = 4
         inputLabel.alignment = .center
         inputLabel.widthAnchor.constraint(equalToConstant: 26).isActive = true
-        right.addArrangedSubview(inputLabel)
-        right.setCustomSpacing(12, after: inputLabel)
-        right.addArrangedSubview(wifiIcon)
-        right.addArrangedSubview(batteryIcon)
-        right.addArrangedSubview(batteryLabel)
-        right.setCustomSpacing(4, after: batteryIcon)
-        right.addArrangedSubview(clockLabel)
-        right.setCustomSpacing(14, after: weatherLabel)
-        right.setCustomSpacing(14, after: batteryLabel)
+        widget(.keyboard, [inputLabel])
+        widget(.wifi, [wifiIcon])
+        widget(.battery, [batteryIcon, batteryLabel], spacing: 4)
+        widget(.clock, [clockLabel])
+        right.spacing = 12
         for v in [left, right] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
         cat.translatesAutoresizingMaskIntoConstraints = false
         addSubview(cat)
@@ -390,6 +392,8 @@ final class BarView: NSView {
         for icon in [weatherIcon, cpuIcon, memIcon, diskIcon, wifiIcon, batteryIcon] { icon.contentTintColor = textColor }
         cat.isHidden = !config.barCat
         cat.configure(sheets: config.barCatSheets, color: textColor, barHeight: config.barHeight)
+        right.arrangedSubviews.forEach { right.removeArrangedSubview($0); $0.removeFromSuperview() }
+        for w in config.barWidgets { if let v = widgetViews[w] { right.addArrangedSubview(v) } }
         needsLayout = true
     }
 
@@ -403,11 +407,16 @@ final class BarView: NSView {
             leftTrailing.constant = -padding
             rightLeading.constant = padding
         }
-        // The cat roams whatever is free between the left content and the right content (or the notch).
+        // The cats roam whatever is free between the left content and the right content; the notch in between is
+        // crossed through portals rather than avoided.
         let freeStart = left.frame.maxX + 16
-        var freeEnd = right.frame.minX - 16
-        if avoidNotch, let l = screen.auxiliaryTopLeftArea { freeEnd = min(freeEnd, l.maxX - screen.frame.minX - 8) }
+        let freeEnd = right.frame.minX - 16
         cat.roam = freeStart...max(freeStart, freeEnd)
+        if avoidNotch, let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea {
+            cat.gap = (l.maxX - screen.frame.minX - 8)...(r.minX - screen.frame.minX + 8)
+        } else {
+            cat.gap = nil
+        }
     }
 
     func render(_ m: Model) {
@@ -437,42 +446,35 @@ final class BarView: NSView {
         }
         appLabel.stringValue = m.app
         titleLabel.stringValue = m.title.isEmpty || m.title == m.app ? "" : "— " + m.title
+        func show(_ w: Config.BarWidget, _ visible: Bool) { widgetViews[w]?.isHidden = !visible }
+        show(.weather, m.weather != nil)
         if let (text, symbol) = m.weather {
-            weatherIcon.isHidden = false
-            weatherLabel.isHidden = false
             weatherIcon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
             weatherLabel.stringValue = text
-        } else {
-            weatherIcon.isHidden = true
-            weatherLabel.isHidden = true
         }
-        func show(_ icon: NSImageView, _ label: NSTextField, _ text: String?) {
-            icon.isHidden = text == nil
-            label.isHidden = text == nil
+        func value(_ w: Config.BarWidget, _ label: NSTextField, _ text: String?) {
+            show(w, text != nil)
             if let text { label.stringValue = text }
         }
-        show(cpuIcon, cpuLabel, m.cpu.map { BarView.percent($0 * 100) })
-        show(memIcon, memLabel, m.memory.map { BarView.percent($0 * 100) })
-        show(diskIcon, diskLabel, m.disk.map(SystemStatus.formatBytes))
-        inputLabel.isHidden = m.inputSource == nil
-        inputLabel.stringValue = m.inputSource ?? ""
-        wifiIcon.isHidden = !m.showWifi
+        value(.cpu, cpuLabel, m.cpu.map { BarView.percent($0 * 100) })
+        value(.memory, memLabel, m.memory.map { BarView.percent($0 * 100) })
+        value(.disk, diskLabel, m.disk.map(SystemStatus.formatBytes))
+        value(.keyboard, inputLabel, m.inputSource)
+        show(.wifi, m.showWifi)
         if m.showWifi {
             wifiIcon.image = m.wifi.map { NSImage(systemSymbolName: "wifi", variableValue: $0, accessibilityDescription: nil) }
                 ?? NSImage(systemSymbolName: "wifi.slash", accessibilityDescription: nil)
         }
+        show(.battery, m.battery != nil)
         if let b = m.battery {
-            batteryIcon.isHidden = false
             batteryLabel.isHidden = !m.batteryPercent
             batteryIcon.image = NSImage(systemSymbolName: b.symbol, accessibilityDescription: nil)
             batteryLabel.stringValue = BarView.percent(Double(b.percent))
             batteryIcon.toolTip = "\(b.percent)%"
             batteryIcon.contentTintColor = b.percent <= 15 && !b.charging ? .systemRed : textColor
-        } else {
-            batteryIcon.isHidden = true
-            batteryLabel.isHidden = true
         }
-        clockLabel.stringValue = m.clock
+        show(.clock, m.clock != nil)
+        clockLabel.stringValue = m.clock ?? ""
     }
 
     /// Two digits minimum, padded with a figure space so the monospaced labels keep a stable width.
