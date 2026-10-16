@@ -4,6 +4,23 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.12] - 2026-10-16
+
+Config schema is now version 3 (adds the menu widget to saved widget lists); older files are migrated on load.
+
+### Fixed
+- Retile (ctrl+alt+r, Tile All Windows in the menu) tiles hand-floated windows on that screen again; since 0.11.8 they were skipped as deliberately floating.
+
+### Added
+- Status bar: the notch portals are a setting (`barNotchPortals`, Settings › Bar); off, cats stay left of the notch. A long window title no longer runs up to the notch and traps the cats there: room is reserved for them, and if there is none they live right of the notch.
+- Status bar: a BetterWM menu widget (grid icon, last on the right by default) that opens the app menu on click. Toggle or move it in Settings › Widgets.
+- Focus ring: a separate colour for a focused floating (untiled) window (`focusRingFloatingColor`, default "same"; Settings › General › Focus Ring › Floating).
+
+### Changed
+- Cats have drives and personalities. Energy, boredom and affection move slowly with what each cat does and decide its next pose instead of a dice roll: tired cats nap (longer if lazy), bored playful cats run or start a chase, petted cats groom and seek company. Each cat's temperament is seeded from its sprite sheet, so the same cat behaves the same every launch. Two-cat scenes are now started by a cat and pick the nearest partner, with the kind of scene following the mood: cuddle when tired, grooming when affectionate, chase when bored.
+- Hunting the pointer is by interest: playful or well-petted cats join, others carry on (one always humours you), and interest fades after a while. When the pointer leaves, interested cats stroll to where it was and look for it.
+- Petting: a sleeping cat wakes and looks around; three pets in a row make it lie down purring; too many and it walks off, a little offended.
+
 ## [0.11.11] - 2026-10-16
 
 ### Fixed

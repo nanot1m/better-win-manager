@@ -2,7 +2,7 @@ import Foundation
 
 public struct Config {
     /// Bumped whenever a key is renamed or its meaning changes; `parse` migrates older files.
-    public static let schemaVersion = 2
+    public static let schemaVersion = 3
     public init() {}
     public var gap: CGFloat = 16
     public var outerGap: CGFloat = 16
@@ -59,6 +59,8 @@ public struct Config {
     /// Measure each window's real corner radius once and match it; `focusRingRadius` is the fallback.
     public var focusRingAutoRadius: Bool = true
     public var focusRingColor: String = "4C8BF5"
+    /// Ring colour for a focused window that is floating (untiled); "same" uses focusRingColor.
+    public var focusRingFloatingColor: String = "same"
     public var ignoreApps: [String] = Config.defaultIgnoreApps
     public var bar: Bool = false
     public var barHeight: CGFloat = 28
@@ -66,7 +68,7 @@ public struct Config {
     /// Right-side widgets of the bar, in display order. The per-widget booleans below are views onto this list,
     /// kept so older config files (and older app versions reading new ones) keep working.
     public enum BarWidget: String, CaseIterable {
-        case weather, cpu, memory, disk, keyboard, wifi, battery, clock
+        case weather, cpu, memory, disk, keyboard, wifi, battery, clock, menu
         public var title: String {
             switch self {
             case .weather: return "Weather"
@@ -77,6 +79,7 @@ public struct Config {
             case .wifi: return "Wi-Fi signal"
             case .battery: return "Battery"
             case .clock: return "Clock"
+            case .menu: return "BetterWM menu button"
             }
         }
     }
@@ -104,6 +107,8 @@ public struct Config {
     public var barBatteryPercent: Bool = true
     /// A pixel cat wandering the empty part of the bar.
     public var barCat: Bool = true
+    /// Cats cross the notch through portals; off, they stay left of it as the bar text does.
+    public var barNotchPortals: Bool = true
     /// One cat per entry: a path to a "Pixel Cats 64x64" sheet (Last tick's layout) or "builtin". Empty = one built-in cat.
     public var barCatSheets: [String] = []
     public var barWeatherFahrenheit: Bool = false
@@ -241,13 +246,15 @@ public struct Config {
         focusRingRadius = \(num(focusRingRadius))
         # Colours are hex RRGGBB or RRGGBBAA without a leading #.
         focusRingColor = \(focusRingColor)
+        # Colour for a focused floating (untiled) window, or "same".
+        focusRingFloatingColor = \(focusRingFloatingColor)
 
         # Status bar under the (auto-hidden) system menu bar: desktops, active window, weather, clock.
         bar = \(bar)
         barHeight = \(num(barHeight))
         # Unicode date format pattern for the clock.
         barClockFormat = \(barClockFormat)
-        # Right-side widgets in display order: weather, cpu, memory, disk, keyboard, wifi, battery, clock.
+        # Right-side widgets in display order: weather, cpu, memory, disk, keyboard, wifi, battery, clock, menu.
         # Leave one out to hide it. (The barWeather/barBattery/... flags below mirror this list for older versions.)
         barWidgets = \(barWidgets.map(\.rawValue).joined(separator: ", "))
         barWeather = \(barWeather)
@@ -256,6 +263,8 @@ public struct Config {
         barDesktopApps = \(barDesktopApps)
         barBatteryPercent = \(barBatteryPercent)
         barCat = \(barCat)
+        # Cats cross the notch through a pair of portals; false keeps them left of it.
+        barNotchPortals = \(barNotchPortals)
         # One cat per entry, comma separated: a path to a sheet in Last tick's "Pixel Cats 64x64" layout
         # (not bundled; download it yourself) or "builtin" for the hand-drawn cat. Two or more cats interact.
         barCatSheets = \(barCatSheets.joined(separator: ", "))
@@ -363,12 +372,14 @@ public struct Config {
             case "focusRingAutoRadius": cfg.focusRingAutoRadius = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRingRadius": cfg.focusRingRadius = Double(value).map { CGFloat($0) } ?? cfg.focusRingRadius
             case "focusRingColor": cfg.focusRingColor = value
+            case "focusRingFloatingColor": cfg.focusRingFloatingColor = value
             case "bar": cfg.bar = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barHeight": cfg.barHeight = Double(value).map { CGFloat($0) } ?? cfg.barHeight
             case "barClockFormat": cfg.barClockFormat = value
             case "barCatSheet": if !value.isEmpty { cfg.barCatSheets = [value] }  // v1 name, kept forever
             case "barCatSheets": cfg.barCatSheets = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             case "barCat": cfg.barCat = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "barNotchPortals": cfg.barNotchPortals = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barBatteryPercent": cfg.barBatteryPercent = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barBattery": cfg.barBattery = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barWidgets": cfg.barWidgets = value.split(separator: ",").compactMap { BarWidget(rawValue: $0.trimmingCharacters(in: .whitespaces).lowercased()) }
@@ -417,6 +428,10 @@ public struct Config {
             where cfg[keyPath: kp].hasPrefix("#") {
                 cfg[keyPath: kp].removeFirst()
             }
+        }
+        if version < 3 {
+            // v3 added the menu widget; files that already pinned an explicit widget order get it appended.
+            if !cfg.barWidgets.contains(.menu) { cfg.barWidgets.append(.menu) }
         }
         return cfg
     }

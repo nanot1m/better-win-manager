@@ -161,6 +161,38 @@ final class Cat {
     var direction: CGFloat = 1
     var x: CGFloat = 0
 
+    /// Stable per-cat multipliers (0.6…1.4), seeded from the sheet so the same cat behaves the same every launch.
+    struct Personality { var lazy: Double; var playful: Double; var clingy: Double }
+    var personality = Personality(lazy: 1, playful: 1, clingy: 1)
+    /// Slow-moving drives in 0…1 that pick the next pose instead of a flat dice roll.
+    var energy = 1.0
+    var boredom = 0.0
+    var affection = 0.0
+    /// Whether this cat cares about the pointer this time, and for how long.
+    var huntInterestUntil: Date?
+    var recentPets: [Date] = []
+
+    static func personality(seed: String) -> Personality {
+        var h: UInt64 = 1469598103934665603
+        for b in seed.utf8 { h = (h ^ UInt64(b)) &* 1099511628211 }
+        func pick() -> Double { h = h &* 6364136223846793005 &+ 1442695040888963407; return 0.6 + Double(h >> 40) / Double(1 << 24) * 0.8 }
+        return Personality(lazy: pick(), playful: pick(), clingy: pick())
+    }
+
+    /// One simulation tick (about 8 a second) of the drives, according to what the cat is doing.
+    func updateDrives(inScene: Bool) {
+        switch mode {
+        case .run: energy -= 0.004; boredom -= 0.004
+        case .walk: energy -= 0.0007; boredom += 0.0006 * personality.playful
+        case .sleep: energy += 0.0035 * personality.lazy; boredom += 0.0008 * personality.playful
+        case .sit, .lie, .stretch: energy += 0.0012; boredom += 0.0012 * personality.playful
+        case .groom: energy += 0.0008; boredom += 0.0006
+        }
+        if inScene { boredom -= 0.003 }
+        affection -= 0.0004
+        energy = min(1, max(0, energy)); boredom = min(1, max(0, boredom)); affection = min(1, max(0, affection))
+    }
+
     var size: NSSize { sheet?.spriteSize ?? Cat.builtinSize }
     static var builtinScale: CGFloat = 2
     static var builtinSize: NSSize { NSSize(width: 16 * builtinScale, height: 11 * builtinScale) }
@@ -310,7 +342,15 @@ final class BarCat: NSView {
     }
     private var scene: Scene = .free
     /// Pointer x in this view while it hovers the cats' strip; the cats run to catch it.
-    private var pointerX: CGFloat?
+    private var pointerX: CGFloat? {
+        didSet {
+            if pointerX != nil, oldValue == nil { pointerArrived() }
+            if pointerX == nil, let last = oldValue { lastPointerX = last; pointerLostAt = Date() }
+        }
+    }
+    /// Where the pointer was last seen; interested cats go and look there for a few seconds after it leaves.
+    private var lastPointerX: CGFloat?
+    private var pointerLostAt = Date.distantPast
     /// Cats being petted keep their pose until it ends, whatever the pointer does.
     private var pettedUntil: [ObjectIdentifier: Date] = [:]
 
@@ -371,6 +411,9 @@ final class BarCat: NSView {
                 if sheet == nil { print("Cat: could not load sprite sheet at \(entry); using the built-in cat.") }
             }
             let cat = Cat(sheet: sheet, color: color)
+            cat.personality = Cat.personality(seed: entry.lowercased() == "builtin" ? "builtin-\(cats.count)" : entry)
+            cat.energy = Double.random(in: 0.5...1)
+            cat.boredom = Double.random(in: 0...0.4)
             cat.x = CGFloat.random(in: roam.lowerBound...max(roam.lowerBound, roam.upperBound - cat.size.width))
             cat.direction = Bool.random() ? 1 : -1
             // Cats pass in front of the portals, so the oval frames the clipped edge rather than covering it.
@@ -485,7 +528,29 @@ final class BarCat: NSView {
     }
 
     private func pet(_ cat: Cat) {
-        cat.enter(cat.sheet == nil ? .groom : .lie, for: 3...5)
+        let now = Date()
+        cat.recentPets = cat.recentPets.filter { now.timeIntervalSince($0) < 8 } + [now]
+        let count = cat.recentPets.count
+        if cat.mode == .sleep {
+            // Woken up: a sit and a look around, no purring yet.
+            cat.enter(.sit, for: 2...3)
+            cat.direction = -cat.direction
+            cat.energy = min(1, cat.energy + 0.1)
+        } else if Double(count) > 5 * cat.personality.clingy {
+            // Enough. Walks off, slightly offended.
+            cat.affection = max(0, cat.affection - 0.15)
+            cat.enter(.walk)
+            cat.direction = Bool.random() ? 1 : -1
+            pettedUntil[ObjectIdentifier(cat)] = nil
+            return
+        } else if count >= 3 {
+            cat.enter(cat.sheet != nil ? .lie : .sit, for: 4...7)
+            showHeart(above: cat)
+        } else {
+            cat.enter(cat.sheet == nil ? .groom : .lie, for: 3...5)
+        }
+        cat.affection = min(1, cat.affection + 0.25 * cat.personality.clingy)
+        cat.boredom = max(0, cat.boredom - 0.2)
         pettedUntil[ObjectIdentifier(cat)] = cat.modeUntil
         showHeart(above: cat)
     }
@@ -516,7 +581,7 @@ final class BarCat: NSView {
     private func stepHunt(_ px: CGFloat) {
         // Each cat gets its own spot around the pointer so they sit side by side instead of on top of each other.
         let n = CGFloat(cats.count)
-        for (i, c) in cats.enumerated() where !isPetted(c) {
+        for (i, c) in cats.enumerated() where !isPetted(c) && isHunting(c) {
             var slot = px + (CGFloat(i) - (n - 1) / 2) * (c.size.width + 4)
             // Slots never sit in the notch: push them to the pointer's side of it.
             if let g = gap, slot + c.size.width / 2 > g.lowerBound, slot - c.size.width / 2 < g.upperBound {
@@ -539,9 +604,17 @@ final class BarCat: NSView {
     private func step() {
         guard !isHidden, !cats.isEmpty, roam.upperBound - roam.lowerBound > (cats.map { $0.size.width }.max() ?? 0) + 8 else { return }
         tick += 1
+        let inScene: Set<Int>
+        switch scene {
+        case .free: inScene = []
+        case let .meeting(a, b, _, _, _): inScene = [a, b]
+        case let .chase(a, b, _): inScene = [a, b]
+        }
+        for (i, c) in cats.enumerated() { c.updateDrives(inScene: inScene.contains(i)) }
         if let px = pointerX {
             if case .free = scene {} else { scene = .free }
             stepHunt(px)
+            for c in cats where !isHunting(c) && !isPetted(c) { stepFree(c) }
             for c in cats { c.render(tick: tick); place(c) }
             updatePortals()
             return
@@ -549,7 +622,6 @@ final class BarCat: NSView {
         switch scene {
         case .free:
             for c in cats { stepFree(c) }
-            if cats.count >= 2, Int.random(in: 0..<250) == 0 { startScene() }
         case let .meeting(a, b, hold, approaching, until):
             stepMeeting(a: a, b: b, hold: hold, approaching: approaching, until: until)
             for (i, c) in cats.enumerated() where i != a && i != b { stepFree(c) }
@@ -568,19 +640,61 @@ final class BarCat: NSView {
     private func stepFree(_ c: Cat) {
         // A hunt leaves cats parked in long sit/run poses; once the pointer is gone they wander again.
         if pointerX == nil, !isPetted(c), c.modeUntil.timeIntervalSinceNow > 30 { c.enter(.walk) }
+        // Looking for a pointer that just left: interested cats stroll to where it was and have a look.
+        if pointerX == nil, let last = lastPointerX, Date().timeIntervalSince(pointerLostAt) < 4, isHunting(c), c.mode == .walk {
+            if approach(c, to: last - c.size.width / 2, speed: 2) { c.enter(.sit, for: 2...3); c.huntInterestUntil = nil }
+            return
+        }
         if c.mode != .walk, c.mode != .run, Date() >= c.modeUntil { c.enter(.walk) }
         switch c.mode {
         case .walk, .run:
             move(c, by: c.mode == .run ? 5 : 2)
             let inGap = gap.map { c.x < $0.upperBound && c.x + c.size.width > $0.lowerBound } ?? false
-            if c.mode == .walk, !inGap, Int.random(in: 0..<90) == 0 {
-                var options: [Cat.Mode] = [.sit, .sit, .groom, .sleep, .run]
-                options.append(c.sheet == nil ? .stretch : .lie)
-                c.enter(options.randomElement()!)
-            } else if c.mode == .run, Date() >= c.modeUntil {
-                c.enter(.walk)
-            }
+            if c.mode == .walk, !inGap, tick % 8 == 0 { decide(c) }
+            else if c.mode == .run, Date() >= c.modeUntil { c.enter(.walk) }
         default: break
+        }
+    }
+
+    /// Picks what a walking cat does next from its drives: tired cats nap, bored playful cats run or start a
+    /// scene, cats that were petted groom. Evaluated about once a second.
+    private func decide(_ c: Cat) {
+        let p = c.personality
+        var options: [(weight: Double, act: () -> Void)] = [
+            (0.75, {}),  // keep walking
+            (pow(1 - c.energy, 2) * 1.2 * p.lazy, { c.enter(.sleep, for: (8 * p.lazy)...(20 * p.lazy)) }),
+            ((1 - c.energy) * 0.35 + 0.08, { c.enter(.sit) }),
+            (0.06 + c.affection * 0.3, { c.enter(.groom) }),
+            (0.05 + (1 - c.energy) * 0.1, { c.enter(c.sheet == nil ? .stretch : .lie) }),
+            (c.boredom * p.playful * 0.5 * c.energy, { c.enter(.run) }),
+        ]
+        if cats.count >= 2, case .free = scene {
+            options.append((c.boredom * p.playful * 0.45 + c.affection * p.clingy * 0.25, { self.startScene(from: c) }))
+        }
+        let total = options.reduce(0) { $0 + $1.weight }
+        var r = Double.random(in: 0..<total)
+        for o in options { r -= o.weight; if r < 0 { o.act(); return } }
+    }
+
+    private func isHunting(_ c: Cat) -> Bool {
+        guard let until = c.huntInterestUntil else { return false }
+        if Date() >= until { c.huntInterestUntil = nil; return false }
+        return true
+    }
+
+    /// The pointer just showed up: each cat decides whether it cares, by playfulness and affection, and for how long.
+    private func pointerArrived() {
+        for c in cats where !isPetted(c) {
+            let interest = c.personality.playful * 0.45 + c.affection * 0.5 + (c.mode == .sleep ? -0.4 : 0)
+            if Double.random(in: 0..<1) < interest {
+                c.huntInterestUntil = Date().addingTimeInterval(5 * c.personality.playful + 10 * c.affection + 2)
+            } else {
+                c.huntInterestUntil = nil
+            }
+        }
+        // Nobody cares? One cat always humours the user.
+        if !cats.contains(where: isHunting), let c = cats.max(by: { $0.personality.playful < $1.personality.playful }) {
+            c.huntInterestUntil = Date().addingTimeInterval(4)
         }
     }
 
@@ -603,18 +717,23 @@ final class BarCat: NSView {
         return false
     }
 
-    private func startScene() {
-        let idx = Array(cats.indices).shuffled()
-        let a = idx[0], b = idx[1]
-        switch Int.random(in: 0..<4) {
-        case 0: scene = .chase(chaser: a, runner: b, until: Date().addingTimeInterval(Double.random(in: 3...5)))
-                cats[a].enter(.run, for: 60...60); cats[b].enter(.run, for: 60...60)
-        case 1: scene = .meeting(a: a, b: b, hold: .sleep, approaching: true, until: .distantFuture)
-                cats[a].enter(.walk); cats[b].enter(.walk)
-        case 2: scene = .meeting(a: a, b: b, hold: .groom, approaching: true, until: .distantFuture)
-                cats[a].enter(.run, for: 60...60); cats[b].enter(.sit, for: 60...60)
-        default: scene = .meeting(a: a, b: b, hold: .sit, approaching: true, until: .distantFuture)
-                cats[a].enter(.run, for: 60...60); cats[b].enter(.sit, for: 60...60)
+    private func startScene(from initiator: Cat) {
+        guard let a = cats.firstIndex(where: { $0 === initiator }),
+              let b = cats.indices.filter({ $0 != a }).min(by: { abs(cats[$0].x - initiator.x) < abs(cats[$1].x - initiator.x) }) else { return }
+        let partner = cats[b]
+        // Tired cats cuddle, affectionate cats groom a friend, bored energetic cats chase; otherwise just visit.
+        if initiator.energy < 0.4 || partner.energy < 0.35 {
+            scene = .meeting(a: a, b: b, hold: .sleep, approaching: true, until: .distantFuture)
+            cats[a].enter(.walk); cats[b].enter(.walk)
+        } else if initiator.affection > 0.4 || initiator.personality.clingy > 1.15 {
+            scene = .meeting(a: a, b: b, hold: .groom, approaching: true, until: .distantFuture)
+            cats[a].enter(.run, for: 60...60); cats[b].enter(.sit, for: 60...60)
+        } else if initiator.boredom > 0.5 && partner.energy > 0.4 {
+            scene = .chase(chaser: a, runner: b, until: Date().addingTimeInterval(Double.random(in: 3...5)))
+            cats[a].enter(.run, for: 60...60); cats[b].enter(.run, for: 60...60)
+        } else {
+            scene = .meeting(a: a, b: b, hold: .sit, approaching: true, until: .distantFuture)
+            cats[a].enter(.run, for: 60...60); cats[b].enter(.sit, for: 60...60)
         }
     }
 

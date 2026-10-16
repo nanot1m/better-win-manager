@@ -370,6 +370,7 @@ final class WindowManager {
         focusRing = FocusRing(config: config)
         overlay = ZoneOverlay(screen: NSScreen.screens[0])
         focusRing.isTiled = { [unowned self] w in self.isTiled(w) }
+        focusRing.isTiledID = { [unowned self] id in self.state.isTiled(id) }
         focusRing.onReorder = { [unowned self] in self.stackHandles() }
         if config.restoreLayouts, let data = try? Data(contentsOf: Config.statePath),
            let layout = try? JSONDecoder().decode(SavedLayout.self, from: data) {
@@ -780,7 +781,12 @@ final class WindowManager {
         fresh.mode = state.grid(for: screen.space).mode
         state.grids[screen.space] = fresh
         state.seen[screen.space] = nil
+        // Retile is the "tile everything here" action: hand-floated windows on this screen are tiled too.
+        let here = system.lightSnapshot(tracked: Array(state.floating)).windows
+            .filter { screen.area.contains($0.frame.center) }.map(\.id)
+        state.floating.subtract(here)
         state.retileRequested.insert(screen.space)
+        Log.write("layout", "retile space \(screen.space), including \(here.count) floating window(s)")
         tick()
     }
 

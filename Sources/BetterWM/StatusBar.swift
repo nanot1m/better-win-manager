@@ -11,6 +11,8 @@ final class StatusBar {
     private var clock: Timer?
     private var inputSourceObserver: NSObjectProtocol?
     var onSelectDesktop: ((Int) -> Void)?
+    /// The menu widget was clicked; the app pops its menu at the given view.
+    var onMenuRequested: ((NSView) -> Void)?
     var desktopCount: () -> Int = { Spaces.desktops().count }
     var currentDesktop: () -> Int? = { Spaces.currentDesktopIndex() }
     var desktopApps: () -> [Int: [pid_t]] = { [:] }
@@ -79,6 +81,7 @@ final class StatusBar {
             let w = BarWindow(frame: frame, screen: screen)
             w.view.apply(config, avoidNotch: atScreenTop(screen))
             w.view.onSelectDesktop = { [weak self] i in self?.onSelectDesktop?(i) }
+            w.view.onMenuRequested = { [weak self] v in self?.onMenuRequested?(v) }
             windows.append(w)
             w.orderBack(nil)
         }
@@ -185,6 +188,11 @@ final class BarWindow: NSPanel {
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
+/// A non-key panel swallows the first click unless the control accepts it.
+private final class ChipButton: NSButton {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 /// Desktop number plus the icons of the apps open there. A non-key panel swallows the first click unless the
 /// view accepts it.
 private final class ChipView: NSView {
@@ -254,10 +262,13 @@ final class BarView: NSView {
     }
 
     var onSelectDesktop: ((Int) -> Void)?
+    var onMenuRequested: ((NSView) -> Void)?
     private let screen: NSScreen
     private let background = NSVisualEffectView()
     private let solid = NSView()
     private var avoidNotch = false
+    private var notchPortals = true
+    private var catsEnabled = true
     private var textColor: NSColor = .labelColor
     private var activeColor: NSColor = .controlAccentColor
     private var padding: CGFloat = 12
@@ -278,6 +289,7 @@ final class BarView: NSView {
     private let batteryIcon = NSImageView()
     private let batteryLabel = NSTextField(labelWithString: "")
     private let clockLabel = NSTextField(labelWithString: "")
+    private let menuButton = ChipButton(title: "", target: nil, action: nil)
     private let cat = BarCat(frame: .zero)
     /// One container per right-side widget; `apply` arranges them in the configured order.
     private var widgetViews: [Config.BarWidget: NSStackView] = [:]
@@ -345,6 +357,14 @@ final class BarView: NSView {
         widget(.wifi, [wifiIcon])
         widget(.battery, [batteryIcon, batteryLabel], spacing: 4)
         widget(.clock, [clockLabel])
+        menuButton.isBordered = false
+        menuButton.image = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: "BetterWM menu")
+        menuButton.imageScaling = .scaleProportionallyDown
+        menuButton.widthAnchor.constraint(equalToConstant: 18).isActive = true
+        menuButton.target = self
+        menuButton.action = #selector(menuPressed)
+        menuButton.toolTip = "BetterWM"
+        widget(.menu, [menuButton])
         right.spacing = 12
         for v in [left, right] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
         cat.translatesAutoresizingMaskIntoConstraints = false
@@ -390,7 +410,10 @@ final class BarView: NSView {
         inputLabel.layer?.backgroundColor = textColor.withAlphaComponent(0.12).cgColor
         titleLabel.textColor = textColor.withAlphaComponent(0.65)
         for icon in [weatherIcon, cpuIcon, memIcon, diskIcon, wifiIcon, batteryIcon] { icon.contentTintColor = textColor }
+        menuButton.contentTintColor = textColor
         cat.isHidden = !config.barCat
+        catsEnabled = config.barCat
+        notchPortals = config.barNotchPortals
         cat.configure(sheets: config.barCatSheets, color: textColor, barHeight: config.barHeight)
         right.arrangedSubviews.forEach { right.removeArrangedSubview($0); $0.removeFromSuperview() }
         for w in config.barWidgets { if let v = widgetViews[w] { right.addArrangedSubview(v) } }
@@ -401,7 +424,9 @@ final class BarView: NSView {
         super.layout()
         // Keep content out of the notch: the auxiliary areas are the usable strips either side of it.
         if avoidNotch, let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea {
-            leftTrailing.constant = -(bounds.width - (l.maxX - screen.frame.minX)) - 8
+            // A long title would otherwise run right up to the notch and leave the cats nowhere to stand.
+            let catRoom: CGFloat = catsEnabled ? 110 : 0
+            leftTrailing.constant = -(bounds.width - (l.maxX - screen.frame.minX)) - 8 - catRoom
             rightLeading.constant = (r.minX - screen.frame.minX) + 8
         } else {
             leftTrailing.constant = -padding
@@ -409,14 +434,24 @@ final class BarView: NSView {
         }
         // The cats roam whatever is free between the left content and the right content; the notch in between is
         // crossed through portals rather than avoided.
-        let freeStart = left.frame.maxX + 16
-        let freeEnd = right.frame.minX - 16
-        cat.roam = freeStart...max(freeStart, freeEnd)
+        var freeStart = left.frame.maxX + 16
+        var freeEnd = right.frame.minX - 16
         if avoidNotch, let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea {
-            cat.gap = (l.maxX - screen.frame.minX - 8)...(r.minX - screen.frame.minX + 8)
+            let notchLeft = l.maxX - screen.frame.minX - 8, notchRight = r.minX - screen.frame.minX + 8
+            if notchPortals, freeStart < notchLeft - 70 {
+                cat.gap = notchLeft...notchRight
+            } else if notchPortals {
+                // No room left of the notch at all: the cats live on the right of it.
+                cat.gap = nil
+                freeStart = max(freeStart, notchRight)
+            } else {
+                cat.gap = nil
+                freeEnd = min(freeEnd, notchLeft)
+            }
         } else {
             cat.gap = nil
         }
+        cat.roam = freeStart...max(freeStart, freeEnd)
     }
 
     func render(_ m: Model) {
@@ -476,6 +511,8 @@ final class BarView: NSView {
         show(.clock, m.clock != nil)
         clockLabel.stringValue = m.clock ?? ""
     }
+
+    @objc private func menuPressed() { onMenuRequested?(menuButton) }
 
     /// Two digits minimum, padded with a figure space so the monospaced labels keep a stable width.
     static func percent(_ value: Double) -> String {

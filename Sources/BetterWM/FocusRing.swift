@@ -13,6 +13,8 @@ final class FocusRing {
     private var radiusCache: [CGWindowID: CGFloat] = [:]
     /// Floating windows get a ring only when `focusRingFloating` is set; skipping them keeps drags cheap.
     var isTiled: (AXWindow) -> Bool = { _ in true }
+    /// Same question by window ID, for callers that only have one (workspace switches, re-measures).
+    var isTiledID: (CGWindowID) -> Bool = { _ in true }
     /// Fired after the ring window is (re)ordered so dependants like the gap handles can stack above it.
     var onReorder: (() -> Void)?
     var windowNumber: Int? { window.isVisible ? window.windowNumber : nil }
@@ -137,17 +139,20 @@ final class FocusRing {
             window.orderOut(nil)
             return
         }
-        present(id: id, frame: WindowServerEvents.bounds(of: id) ?? w.frame)
+        present(id: id, frame: WindowServerEvents.bounds(of: id) ?? w.frame, floating: !isTiled(w))
     }
 
-    private func present(id: CGWindowID, frame: CGRect) {
+    private func present(id: CGWindowID, frame: CGRect, floating: Bool? = nil) {
+        let floating = floating ?? !isTiledID(id)
         let wasHidden = !window.isVisible
         let targetChanged = current != id
         if current != id {
             current = id
             events.watch([id])
         }
-        let color = NSColor(hex: config.focusRingColor) ?? .controlAccentColor
+        let tiledColor = NSColor(hex: config.focusRingColor) ?? .controlAccentColor
+        let color = floating && config.focusRingFloatingColor.lowercased() != "same"
+            ? (NSColor(hex: config.focusRingFloatingColor) ?? tiledColor) : tiledColor
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         layer.cornerRadius = radius(for: id) + pad

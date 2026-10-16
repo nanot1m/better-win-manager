@@ -57,6 +57,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.system.topInset = { [weak self] screen in self?.bar.inset(for: screen) ?? 0 }
         bar.onLayoutChange = { [weak self] in self?.manager.apply() }
         bar.onSelectDesktop = { [weak self] in self?.manager.switchDesktop($0) }
+        bar.onMenuRequested = { [weak self] view in
+            guard let self else { return }
+            let menu = self.buildMenu()
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.bounds.minY - 4), in: view)
+        }
         bar.desktopCount = { [weak self] in self?.manager.desktopCount ?? 0 }
         bar.currentDesktop = { [weak self] in self?.manager.currentDesktop }
         bar.desktopApps = { [weak self] in self?.manager.appsByDesktop() ?? [:] }

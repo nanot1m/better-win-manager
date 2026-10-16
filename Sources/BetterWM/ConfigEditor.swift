@@ -54,6 +54,8 @@ final class ConfigWindow: NSObject {
     private var ringCheck: NSButton!
     private var ringStyle: NSPopUpButton!
     private var ringColor: NSColorWell!
+    private var ringFloatingSame: NSButton!
+    private var ringFloatingColor: NSColorWell!
     private var ringWidth: NSSlider!
     private var ringWidthLabel: NSTextField!
     private var ringRadius: NSSlider!
@@ -68,6 +70,7 @@ final class ConfigWindow: NSObject {
     private let widgetList = NSStackView()
     private var barBatteryPercentCheck: NSButton!
     private var barCatCheck: NSButton!
+    private var barNotchPortalsCheck: NSButton!
     private var barCatSheets: NSTextView!
     private var barFahrenheit: NSButton!
     private var barLocationAuto: NSButton!
@@ -254,6 +257,10 @@ final class ConfigWindow: NSObject {
         ringColor = NSColorWell()
         ringColor.widthAnchor.constraint(equalToConstant: 60).isActive = true
         ringColor.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        ringFloatingSame = NSButton(checkboxWithTitle: "Same colour for floating windows", target: self, action: #selector(floatingColorModeChanged))
+        ringFloatingColor = NSColorWell()
+        ringFloatingColor.widthAnchor.constraint(equalToConstant: 60).isActive = true
+        ringFloatingColor.heightAnchor.constraint(equalToConstant: 24).isActive = true
         ringWidth = NSSlider(value: 3, minValue: 1, maxValue: 12, target: self, action: #selector(ringSliderChanged(_:)))
         ringWidth.widthAnchor.constraint(equalToConstant: 200).isActive = true
         ringWidthLabel = NSTextField(labelWithString: "3 pt")
@@ -270,6 +277,7 @@ final class ConfigWindow: NSObject {
             [NSView(), ringFloating],
             [label("Style"), ringStyle],
             [label("Color"), ringColor],
+            [label("Floating"), NSStackView(views: [ringFloatingColor, ringFloatingSame])],
             [label("Thickness"), NSStackView(views: [ringWidth, ringWidthLabel])],
             [label("Corners"), ringAutoRadius],
             [label("Fallback radius"), NSStackView(views: [ringRadius, ringRadiusLabel])],
@@ -287,6 +295,10 @@ final class ConfigWindow: NSObject {
 
     @objc private func autoRadiusChanged() {
         ringRadius.isEnabled = ringAutoRadius.state == .off
+    }
+
+    @objc private func floatingColorModeChanged() {
+        ringFloatingColor.isEnabled = ringFloatingSame.state == .off
     }
 
     @objc private func ringSliderChanged(_ s: NSSlider) {
@@ -396,6 +408,7 @@ final class ConfigWindow: NSObject {
         barDesktopAppsCheck = NSButton(checkboxWithTitle: "App icons per desktop", target: nil, action: nil)
         barBatteryPercentCheck = NSButton(checkboxWithTitle: "with percentage", target: nil, action: nil)
         barCatCheck = NSButton(checkboxWithTitle: "Pixel cat", target: nil, action: nil)
+        barNotchPortalsCheck = NSButton(checkboxWithTitle: "Cats cross the notch through portals", target: nil, action: nil)
         barCatSheets = NSTextView()
         barCatSheets.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         barCatSheets.isRichText = false
@@ -423,6 +436,7 @@ final class ConfigWindow: NSObject {
         let general = box("Status Bar", rows: [
             [label("Bar"), barCheck],
             [label("Show"), NSStackView(views: [barCatCheck, barDesktopAppsCheck, barBatteryPercentCheck])],
+            [NSView(), barNotchPortalsCheck],
             [label("Cats"), sheetsScroll],
             [NSView(), sheetButtons],
             [NSView(), sheetHint],
@@ -610,6 +624,10 @@ final class ConfigWindow: NSObject {
         ringFloating.state = config.focusRingFloating ? .on : .off
         ringStyle.selectItem(at: Config.FocusRingStyle.allCases.firstIndex(of: config.focusRingStyle) ?? 0)
         ringColor.color = NSColor(hex: config.focusRingColor) ?? .controlAccentColor
+        let sameFloating = config.focusRingFloatingColor.lowercased() == "same"
+        ringFloatingSame.state = sameFloating ? .on : .off
+        ringFloatingColor.color = sameFloating ? ringColor.color : (NSColor(hex: config.focusRingFloatingColor) ?? ringColor.color)
+        floatingColorModeChanged()
         ringWidth.doubleValue = Double(config.focusRingWidth)
         ringRadius.doubleValue = Double(config.focusRingRadius)
         ringAutoRadius.state = config.focusRingAutoRadius ? .on : .off
@@ -622,6 +640,7 @@ final class ConfigWindow: NSObject {
         barDesktopAppsCheck.state = config.barDesktopApps ? .on : .off
         barBatteryPercentCheck.state = config.barBatteryPercent ? .on : .off
         barCatCheck.state = config.barCat ? .on : .off
+        barNotchPortalsCheck.state = config.barNotchPortals ? .on : .off
         widgetOrder = config.barWidgets.map { ($0, true) } + Config.BarWidget.allCases.filter { !config.barWidgets.contains($0) }.map { ($0, false) }
         rebuildWidgetRows()
         barCatSheets.string = config.barCatSheets.joined(separator: "\n")
@@ -691,6 +710,7 @@ final class ConfigWindow: NSObject {
             config.focusRingStyle = st
         }
         config.focusRingColor = ringColor.color.hexString
+        config.focusRingFloatingColor = ringFloatingSame.state == .on ? "same" : ringFloatingColor.color.hexString
         config.focusRingWidth = CGFloat(ringWidth.doubleValue.rounded())
         config.focusRingRadius = CGFloat(ringRadius.doubleValue.rounded())
         config.focusRingAutoRadius = ringAutoRadius.state == .on
@@ -700,6 +720,7 @@ final class ConfigWindow: NSObject {
         config.barDesktopApps = barDesktopAppsCheck.state == .on
         config.barBatteryPercent = barBatteryPercentCheck.state == .on
         config.barCat = barCatCheck.state == .on
+        config.barNotchPortals = barNotchPortalsCheck.state == .on
         config.barWidgets = widgetOrder.filter(\.1).map(\.0)
         config.barCatSheets = barCatSheets.string.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         config.barWeatherFahrenheit = barFahrenheit.state == .on
