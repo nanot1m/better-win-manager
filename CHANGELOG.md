@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.11] - 2026-10-16
+
+### Fixed
+- Notch portals were drawn over the cats; cats now pass in front of the portal ovals.
+
 ## [0.11.10] - 2026-10-16
 
 ### Added

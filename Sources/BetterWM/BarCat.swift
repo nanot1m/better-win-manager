@@ -373,8 +373,9 @@ final class BarCat: NSView {
             let cat = Cat(sheet: sheet, color: color)
             cat.x = CGFloat.random(in: roam.lowerBound...max(roam.lowerBound, roam.upperBound - cat.size.width))
             cat.direction = Bool.random() ? 1 : -1
-            addSubview(cat.sprite, positioned: .below, relativeTo: portalLeft)
-            addSubview(cat.ghost, positioned: .below, relativeTo: portalLeft)
+            // Cats pass in front of the portals, so the oval frames the clipped edge rather than covering it.
+            addSubview(cat.sprite, positioned: .above, relativeTo: portalRight)
+            addSubview(cat.ghost, positioned: .above, relativeTo: portalRight)
             cats.append(cat)
         }
         clampAll()
