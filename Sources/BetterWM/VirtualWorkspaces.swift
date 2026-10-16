@@ -10,6 +10,10 @@ final class VirtualWorkspaces {
     /// Real frames of floating windows while parked, restored when their workspace returns.
     private var parkedFrames: [WindowID: CGRect] = [:]
     private var parked: Set<WindowID> = []
+    /// Apps hidden with the native Hide because every window they have lives on an inactive workspace; hidden
+    /// windows keep their real frames, so nothing peeks out of a screen corner.
+    private var hiddenByPid: [pid_t: Set<WindowID>] = [:]
+    var knownWindows: [WindowID] { Array(membership.keys) }
     /// Last workspace each app had a window in, kept after the window is gone: an app that recreates its only
     /// window (Unity on scene reload or Play mode) has no siblings to follow, but it still has a home.
     private(set) var homeByPid: [pid_t: Int] = [:]
@@ -75,29 +79,64 @@ final class VirtualWorkspaces {
         }
     }
 
-    /// Restores every parked floating window's real frame and forgets the parking state.
-    func unparkAll(setFrame: (WindowID, CGRect) -> Void) {
+    /// Restores every parked floating window's real frame, unhides hidden apps, and forgets the parking state.
+    func unparkAll(setFrame: (WindowID, CGRect) -> Void, unhide: (pid_t) -> Void) {
         for (w, f) in parkedFrames { setFrame(w, f) }
+        for pid in hiddenByPid.keys { unhide(pid) }
+        hiddenByPid.removeAll()
         parkedFrames.removeAll()
         parked.removeAll()
     }
 
-    /// Park/unpark according to membership. `frame(of:)` reads the current frame; `setFrame` writes one.
-    /// Tiled windows are not restored here: their grid is laid out by the reconciler once the workspace is active.
-    func apply(windows: [WindowID], isTiled: (WindowID) -> Bool, frame: (WindowID) -> CGRect?,
-               setFrame: (WindowID, CGRect) -> Void, parkOrigin: (CGRect) -> CGPoint) {
-        for w in windows {
-            adopt(w)
-            let shouldPark = workspace(of: w) != active
-            if shouldPark, !parked.contains(w), let f = frame(w) {
-                if !isTiled(w) { parkedFrames[w] = f }
-                setFrame(w, CGRect(origin: parkOrigin(f), size: f.size))
-                parked.insert(w)
-                Log.write("park", "park #\(w) (workspace \(workspace(of: w) + 1), active \(active + 1))")
-            } else if !shouldPark, parked.contains(w) {
-                parked.remove(w)
-                Log.write("park", "unpark #\(w)")
-                if let f = parkedFrames.removeValue(forKey: w) { setFrame(w, f) }
+    /// Park/unpark according to membership. An app whose windows are all on inactive workspaces (and nowhere
+    /// else, per `hideable`) is hidden natively; otherwise its inactive windows go to the corner. `frame(of:)`
+    /// reads the current frame; `setFrame` writes one. Tiled windows are not restored here: their grid is laid
+    /// out by the reconciler once the workspace is active.
+    func apply(windows: [WindowID], pid: (WindowID) -> pid_t?, hideable: (pid_t) -> Bool,
+               isTiled: (WindowID) -> Bool, frame: (WindowID) -> CGRect?,
+               setFrame: (WindowID, CGRect) -> Void, parkOrigin: (CGRect) -> CGPoint,
+               hide: (pid_t) -> Void, unhide: (pid_t) -> Void) {
+        for w in windows { adopt(w) }
+        // Hidden apps come back as soon as one of their windows is on the active workspace, whether or not
+        // that window is in this snapshot (floating windows of a hidden app are not on screen).
+        for (p, ws) in hiddenByPid where ws.contains(where: { workspace(of: $0) == active }) {
+            unhide(p)
+            hiddenByPid[p] = nil
+            ws.forEach { parked.remove($0) }
+            Log.write("park", "unhide app \(p)")
+        }
+        var byPid: [pid_t: [WindowID]] = [:]
+        for w in windows { if let p = pid(w) { byPid[p, default: []].append(w) } }
+        for (p, group) in byPid {
+            let allInactive = group.allSatisfy { workspace(of: $0) != active }
+            if allInactive, hideable(p) {
+                if hiddenByPid[p] == nil {
+                    // Anything already in the corner goes back to its real frame first; hidden is invisible anyway.
+                    for w in group { if let f = parkedFrames.removeValue(forKey: w) { setFrame(w, f) } }
+                    hide(p)
+                    Log.write("park", "hide app \(p) (\(group.count) window(s), all on inactive workspaces)")
+                }
+                hiddenByPid[p] = Set(group)
+                parked.formUnion(group)
+                continue
+            }
+            if let ws = hiddenByPid.removeValue(forKey: p) {
+                unhide(p)
+                ws.forEach { parked.remove($0) }
+                Log.write("park", "unhide app \(p)")
+            }
+            for w in group {
+                let shouldPark = workspace(of: w) != active
+                if shouldPark, !parked.contains(w), let f = frame(w) {
+                    if !isTiled(w) { parkedFrames[w] = f }
+                    setFrame(w, CGRect(origin: parkOrigin(f), size: f.size))
+                    parked.insert(w)
+                    Log.write("park", "park #\(w) (workspace \(workspace(of: w) + 1), active \(active + 1))")
+                } else if !shouldPark, parked.contains(w) {
+                    parked.remove(w)
+                    Log.write("park", "unpark #\(w)")
+                    if let f = parkedFrames.removeValue(forKey: w) { setFrame(w, f) }
+                }
             }
         }
     }

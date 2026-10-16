@@ -4,6 +4,14 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.9] - 2026-10-16
+
+### Changed
+- Virtual workspaces: an app whose windows all live on inactive workspaces is now hidden with the native Hide instead of being moved to the screen corner, where a sliver of each window stayed visible. Only apps with windows on several workspaces of the same desktop still park the inactive ones in the corner. Hidden windows keep their real frames, stay in the ⌥Tab switcher and the desktop chips, and the app is unhidden the moment one of its windows' workspaces becomes active. Quitting unhides everything.
+
+### Fixed
+- Idle CPU (about 2%): a full Accessibility snapshot of every window ran once a second, and the focus ring re-resolved focus once a second, whether or not anything had changed. Both now react to WindowServer and Accessibility events, with 5-second safety timers. Idle main-thread work dropped by about two thirds in sampling; what remains is mostly the pixel cat animation (`barCat = false` removes it).
+
 ## [0.11.8] - 2026-10-16
 
 ### Fixed

@@ -12,6 +12,8 @@ final class SystemObserver {
     var spaceOverride: ((NSScreen) -> SpaceID)?
     var windowSpacesOverride: ((WindowID) -> [SpaceID])?
 
+    func pid(of id: WindowID) -> pid_t? { ax[id]?.pid ?? lastInfo[id]?.pid }
+
     func axWindow(_ id: WindowID) -> AXWindow? {
         if let w = ax[id], w.isValid { return w }
         ax[id] = nil

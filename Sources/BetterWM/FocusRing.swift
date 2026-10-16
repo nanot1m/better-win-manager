@@ -76,7 +76,7 @@ final class FocusRing {
         let nc = NSWorkspace.shared.notificationCenter
         nc.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in self?.update() }
         // Safety net only; WindowServer events do the real work.
-        timer = Timer.scheduledTimer(withTimeInterval: WindowServerEvents.available ? 1.0 : 0.1, repeats: true) { [weak self] _ in self?.update() }
+        timer = Timer.scheduledTimer(withTimeInterval: WindowServerEvents.available ? 5.0 : 0.1, repeats: true) { [weak self] _ in self?.update() }
         update()
     }
 

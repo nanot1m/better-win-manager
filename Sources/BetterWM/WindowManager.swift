@@ -128,13 +128,14 @@ final class WindowManager {
             for id in v.parkedWindows where state.isTiled(id) {
                 if let f = targetFrame(of: id) { system.execute([.setFrame(id, f)]) }
             }
-            v.unparkAll { self.system.execute([.setFrame($0, $1)]) }
+            v.unparkAll(setFrame: { self.system.execute([.setFrame($0, $1)]) },
+                        unhide: { NSRunningApplication(processIdentifier: $0)?.unhide() })
         }
     }
 
     /// Virtual → native: unpark everything; workspace 1 of each desktop becomes that desktop's grid, the rest float.
     private func migrateToNative(from sets: [VirtualWorkspaces]) {
-        for v in sets { v.unparkAll { self.system.execute([.setFrame($0, $1)]) } }
+        for v in sets { v.unparkAll(setFrame: { self.system.execute([.setFrame($0, $1)]) }, unhide: { NSRunningApplication(processIdentifier: $0)?.unhide() }) }
         var newState = DesiredState()
         for (space, grid) in state.grids {
             guard let d = VirtualWorkspaces.decode(space), d.workspace == 0 else { continue }
@@ -151,8 +152,15 @@ final class WindowManager {
         var byDesktop: [Int: [AXWindow]] = [:]
         if let v = virtualWS {
             // Only this macOS desktop's set: windows on other desktops belong to their own sets.
+            var listed = Set<WindowID>()
             for w in Spaces.visibleWindows() {
                 guard let id = id(w), virtualSet(ofWindow: id) === v else { continue }
+                listed.insert(id)
+                byDesktop[v.workspace(of: id), default: []].append(w)
+            }
+            // Windows of hidden apps are not on screen but still belong to their workspace.
+            for id in v.knownWindows where !listed.contains(id) && v.isParked(id) {
+                guard let w = system.axWindow(id), w.isValid, w.isStandard else { continue }
                 byDesktop[v.workspace(of: id), default: []].append(w)
             }
         } else {
@@ -192,6 +200,13 @@ final class WindowManager {
                 desktop = d
             }
             if !(out[desktop]?.contains(pid) ?? false) { out[desktop, default: []].append(pid) }
+        }
+        if let v = virtualWS {
+            for id in v.knownWindows where v.isParked(id) {
+                guard let pid = system.pid(of: id) else { continue }
+                let d = v.workspace(of: id)
+                if !(out[d]?.contains(pid) ?? false) { out[d, default: []].append(pid) }
+            }
         }
         return out
     }
@@ -325,13 +340,22 @@ final class WindowManager {
         for w in snap.windows { if let v = virtualSet(ofWindow: w.id) { bySet[v.realSpace, default: []].append(w.id) } }
         for (real, ids) in bySet {
             guard let v = sets[real] ?? virtualSets?[real] else { continue }
-            v.apply(windows: ids, isTiled: { self.state.isTiled($0) }, frame: { snap.window($0)?.frame },
+            v.apply(windows: ids,
+                pid: { snap.window($0)?.pid },
+                // Hiding is app-wide: only when every window the app has anywhere belongs to this set.
+                hideable: { p in
+                    guard let app = NSRunningApplication(processIdentifier: p), app.activationPolicy == .regular else { return false }
+                    return snap.windows.filter { $0.pid == p }.allSatisfy { self.virtualSet(ofWindow: $0.id) === v }
+                },
+                isTiled: { self.state.isTiled($0) }, frame: { snap.window($0)?.frame },
                 setFrame: { self.system.execute([.setFrame($0, $1)]) }, parkOrigin: { f in
                     // Bottom-right corner of the screen the window is on, leaving two points visible.
                     let screen = NSScreen.screens.first { $0.frame.toCocoa().contains(f.center) } ?? NSScreen.screens[0]
                     let r = screen.frame.toCocoa()
                     return CGPoint(x: r.maxX - 2, y: r.maxY - 2)
-                })
+                },
+                hide: { NSRunningApplication(processIdentifier: $0)?.hide() },
+                unhide: { NSRunningApplication(processIdentifier: $0)?.unhide() })
         }
     }
 
@@ -376,7 +400,11 @@ final class WindowManager {
         }
         // WindowServer reports a new front window before Accessibility does; stacked screens re-fan on it.
         wsEvents.onEvent = { [weak self] event, _ in
-            if event == .frontChange || event == .windowReorder { self?.refanStackedScreens() }
+            switch event {
+            case .frontChange, .windowReorder: self?.refanStackedScreens()
+            case .windowCreate, .windowDestroy: self?.scheduleTick()
+            default: break
+            }
         }
         axObserver = WindowObserver(onNewWindow: { [weak self] _ in self?.tick() },
                                     onFocusChange: { [weak self] in
@@ -389,10 +417,24 @@ final class WindowManager {
                                     onGeometryChange: { [weak self] in
                                         guard let self, !self.interacting else { return }
                                         self.focusRing.scheduleUpdate()
+                                        self.scheduleTick()
                                     },
                                     onTitleChange: { [weak self] in self?.onFocusChange?() })
         tick()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in self?.tick() }
+        // Window creation, destruction, focus and Space changes all arrive as events; the timer is a safety net.
+        // A full snapshot walks every window through Accessibility, so once a second was measurable idle CPU.
+        timer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in self?.tick() }
+    }
+
+    private var tickScheduled = false
+    /// Events come in bursts (an app opening three windows, a Space switch); one tick per burst is enough.
+    func scheduleTick() {
+        guard !tickScheduled else { return }
+        tickScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.tickScheduled = false
+            self?.tick()
+        }
     }
 
     // MARK: Reconcile loop
