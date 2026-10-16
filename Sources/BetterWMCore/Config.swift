@@ -65,6 +65,7 @@ public struct Config {
     public var barClockFormat: String = "EEE d MMM  HH:mm"
     public var barWeather: Bool = true
     public var barBattery: Bool = true
+    public var barDesktopApps: Bool = true
     public var barBatteryPercent: Bool = true
     /// A pixel cat wandering the empty part of the bar.
     public var barCat: Bool = true
@@ -218,6 +219,8 @@ public struct Config {
         barClockFormat = \(barClockFormat)
         barWeather = \(barWeather)
         barBattery = \(barBattery)
+        # Icons of the apps open on each desktop next to its number.
+        barDesktopApps = \(barDesktopApps)
         barBatteryPercent = \(barBatteryPercent)
         barCat = \(barCat)
         # One cat per entry, comma separated: a path to a sheet in Last tick's "Pixel Cats 64x64" layout
@@ -335,6 +338,7 @@ public struct Config {
             case "barCat": cfg.barCat = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barBatteryPercent": cfg.barBatteryPercent = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barBattery": cfg.barBattery = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "barDesktopApps": cfg.barDesktopApps = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barCpu": cfg.barCpu = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barMemory": cfg.barMemory = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barDisk": cfg.barDisk = ["true", "yes", "1", "on"].contains(value.lowercased())

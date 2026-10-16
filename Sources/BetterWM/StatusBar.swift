@@ -13,6 +13,7 @@ final class StatusBar {
     var onSelectDesktop: ((Int) -> Void)?
     var desktopCount: () -> Int = { Spaces.desktops().count }
     var currentDesktop: () -> Int? = { Spaces.currentDesktopIndex() }
+    var desktopApps: () -> [Int: [pid_t]] = { [:] }
     /// Called whenever the bar is shown or hidden so the layout can reserve space.
     var onLayoutChange: (() -> Void)?
 
@@ -100,6 +101,7 @@ final class StatusBar {
         let model = BarView.Model(
             desktops: desktopCount(),
             current: currentDesktop(),
+            apps: config.barDesktopApps ? desktopApps() : [:],
             app: app,
             title: title,
             clock: formatter.string(from: Date()),
@@ -168,15 +170,60 @@ final class BarWindow: NSPanel {
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
-/// A non-key panel swallows the first click unless the control accepts it.
-private final class ChipButton: NSButton {
+/// Desktop number plus the icons of the apps open there. A non-key panel swallows the first click unless the
+/// view accepts it.
+private final class ChipView: NSView {
+    var onClick: (() -> Void)?
+    let number = NSTextField(labelWithString: "")
+    private let stack = NSStackView()
+    private var icons: [NSImageView] = []
+    private static var iconCache: [pid_t: NSImage] = [:]
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 5
+        stack.orientation = .horizontal
+        stack.spacing = 3
+        stack.edgeInsets = NSEdgeInsets(top: 0, left: 6, bottom: 0, right: 6)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(number)
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor), stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor), stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            heightAnchor.constraint(equalToConstant: 18), widthAnchor.constraint(greaterThanOrEqualToConstant: 22),
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    func setApps(_ pids: [pid_t]) {
+        while icons.count < pids.count {
+            let v = NSImageView()
+            v.imageScaling = .scaleProportionallyUpOrDown
+            v.widthAnchor.constraint(equalToConstant: 14).isActive = true
+            v.heightAnchor.constraint(equalToConstant: 14).isActive = true
+            icons.append(v)
+            stack.addArrangedSubview(v)
+        }
+        for (i, v) in icons.enumerated() {
+            v.isHidden = i >= pids.count
+            guard i < pids.count else { continue }
+            let pid = pids[i]
+            if ChipView.iconCache[pid] == nil, let icon = NSRunningApplication(processIdentifier: pid)?.icon { ChipView.iconCache[pid] = icon }
+            v.image = ChipView.iconCache[pid]
+        }
+    }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) { onClick?() }
 }
 
 final class BarView: NSView {
     struct Model {
         var desktops: Int
         var current: Int?
+        var apps: [Int: [pid_t]]
         var app: String
         var title: String
         var clock: String
@@ -217,7 +264,7 @@ final class BarView: NSView {
     private let batteryLabel = NSTextField(labelWithString: "")
     private let clockLabel = NSTextField(labelWithString: "")
     private let cat = BarCat(frame: .zero)
-    private var chips: [NSButton] = []
+    private var chips: [ChipView] = []
     private var leftLeading: NSLayoutConstraint!
     private var leftTrailing: NSLayoutConstraint!
     private var rightTrailing: NSLayoutConstraint!
@@ -351,25 +398,21 @@ final class BarView: NSView {
 
     func render(_ m: Model) {
         while chips.count < m.desktops {
-            let b = ChipButton(title: "", target: self, action: #selector(chipPressed(_:)))
-            b.isBordered = false
-            b.font = .systemFont(ofSize: 11, weight: .semibold)
-            b.wantsLayer = true
-            b.layer?.cornerRadius = 5
-            b.widthAnchor.constraint(equalToConstant: 22).isActive = true
-            b.heightAnchor.constraint(equalToConstant: 18).isActive = true
-            chips.append(b)
-            left.insertArrangedSubview(b, at: chips.count - 1)
+            let c = ChipView()
+            let i = chips.count
+            c.onClick = { [weak self] in self?.onSelectDesktop?(i) }
+            chips.append(c)
+            left.insertArrangedSubview(c, at: chips.count - 1)
         }
-        for (i, b) in chips.enumerated() {
-            b.isHidden = i >= m.desktops
-            b.tag = i
+        for (i, c) in chips.enumerated() {
+            c.isHidden = i >= m.desktops
             let current = i == m.current
-            b.attributedTitle = NSAttributedString(string: "\(i + 1)", attributes: [
+            c.number.attributedStringValue = NSAttributedString(string: "\(i + 1)", attributes: [
                 .foregroundColor: current ? activeColor.contrastingText : textColor.withAlphaComponent(0.7),
                 .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
             ])
-            b.layer?.backgroundColor = current ? activeColor.cgColor : textColor.withAlphaComponent(0.1).cgColor
+            c.layer?.backgroundColor = current ? activeColor.cgColor : textColor.withAlphaComponent(0.1).cgColor
+            c.setApps(m.apps[i] ?? [])
         }
         if appLabel.superview == nil {
             let sep = NSBox(); sep.boxType = .separator
@@ -424,7 +467,6 @@ final class BarView: NSView {
         return (n < 10 ? "\u{2007}" : "") + "\(n)%"
     }
 
-    @objc private func chipPressed(_ sender: NSButton) { onSelectDesktop?(sender.tag) }
 }
 
 extension NSColor {

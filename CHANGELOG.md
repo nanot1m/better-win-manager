@@ -4,6 +4,12 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.7] - 2026-10-16
+
+### Added
+- Toggling tiling off for the focused window puts it back where it floated before it was tiled by hand (⌥-drop or the toggleTile action).
+- Status bar: each desktop chip shows the icons of the apps open there (`barDesktopApps`, on by default; toggle in Settings › Bar).
+
 ## [0.11.6] - 2026-10-15
 
 ### Fixed

@@ -65,6 +65,7 @@ final class ConfigWindow: NSObject {
     private var barClockField: NSTextField!
     private var barWeatherCheck: NSButton!
     private var barBatteryCheck: NSButton!
+    private var barDesktopAppsCheck: NSButton!
     private var barBatteryPercentCheck: NSButton!
     private var barWifiCheck: NSButton!
     private var barCatCheck: NSButton!
@@ -355,6 +356,7 @@ final class ConfigWindow: NSObject {
         hint.textColor = .secondaryLabelColor
         hint.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
         barBatteryCheck = NSButton(checkboxWithTitle: "Battery", target: nil, action: nil)
+        barDesktopAppsCheck = NSButton(checkboxWithTitle: "App icons per desktop", target: nil, action: nil)
         barBatteryPercentCheck = NSButton(checkboxWithTitle: "with percentage", target: nil, action: nil)
         barWifiCheck = NSButton(checkboxWithTitle: "Wi-Fi signal", target: nil, action: nil)
         barCatCheck = NSButton(checkboxWithTitle: "Pixel cat", target: nil, action: nil)
@@ -388,7 +390,7 @@ final class ConfigWindow: NSObject {
         sheetHint.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
         let general = box("Status Bar", rows: [
             [label("Bar"), barCheck],
-            [label("Show"), NSStackView(views: [barBatteryCheck, barBatteryPercentCheck, barWifiCheck, barCatCheck])],
+            [label("Show"), NSStackView(views: [barBatteryCheck, barBatteryPercentCheck, barWifiCheck, barCatCheck, barDesktopAppsCheck])],
             [NSView(), NSStackView(views: [barCpuCheck, barMemoryCheck, barDiskCheck, barInputCheck])],
             [label("Cats"), sheetsScroll],
             [NSView(), sheetButtons],
@@ -589,6 +591,7 @@ final class ConfigWindow: NSObject {
         barClockField.stringValue = config.barClockFormat
         barWeatherCheck.state = config.barWeather ? .on : .off
         barBatteryCheck.state = config.barBattery ? .on : .off
+        barDesktopAppsCheck.state = config.barDesktopApps ? .on : .off
         barBatteryPercentCheck.state = config.barBatteryPercent ? .on : .off
         barWifiCheck.state = config.barWifi ? .on : .off
         barCatCheck.state = config.barCat ? .on : .off
@@ -671,6 +674,7 @@ final class ConfigWindow: NSObject {
         config.barClockFormat = barClockField.stringValue.isEmpty ? "EEE d MMM  HH:mm" : barClockField.stringValue
         config.barWeather = barWeatherCheck.state == .on
         config.barBattery = barBatteryCheck.state == .on
+        config.barDesktopApps = barDesktopAppsCheck.state == .on
         config.barBatteryPercent = barBatteryPercentCheck.state == .on
         config.barWifi = barWifiCheck.state == .on
         config.barCat = barCatCheck.state == .on

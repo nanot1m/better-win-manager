@@ -55,6 +55,8 @@ final class WindowManager {
     /// Set while the user drags a window or a gap handle; reconciling mid-gesture would fight it.
     var interacting = false
     var onFocusChange: (() -> Void)?
+    var onWindowsChange: (() -> Void)?
+    private var lastWindowIDs: Set<WindowID> = []
     var onDesktopChange: (() -> Void)?
 
     var config: Config {
@@ -148,6 +150,16 @@ final class WindowManager {
         return byDesktop.keys.sorted { a, b in a == current ? true : b == current ? false : a < b }.map { d in
             (d, byDesktop[d]!.sorted { sortKey($0) < sortKey($1) })
         }
+    }
+
+    /// Apps with a window on each desktop, in reading order of their first window, one entry per app.
+    func appsByDesktop() -> [Int: [pid_t]] {
+        var out: [Int: [pid_t]] = [:]
+        for (d, windows) in windowsByDesktop() {
+            var seen: Set<pid_t> = []
+            out[d] = windows.map(\.pid).filter { seen.insert($0).inserted }
+        }
+        return out
     }
 
     /// Where a window sits on its own desktop: its grid slot if tiled, its remembered frame if parked, else as is.
@@ -362,6 +374,8 @@ final class WindowManager {
             let (next, commands) = reconciler.reconcile(state, snap)
             state = next
             logReconcileChanges(from: before, to: next)
+            let ids = Set(snap.windows.map(\.id))
+            if ids != lastWindowIDs { lastWindowIDs = ids; onWindowsChange?() }
             scheduleSave(snap)
             applyVirtualParking(snap)
             guard !commands.isEmpty else { break }
@@ -560,9 +574,17 @@ final class WindowManager {
 
     // MARK: Mutations
 
+    /// Where each window floated before it was tiled by hand, so toggling tiling off puts it back.
+    private var floatingFrames: [WindowID: CGRect] = [:]
+    private func rememberFloatingFrame(_ w: AXWindow, _ id: WindowID) {
+        guard !state.isTiled(id), !(virtualSet(ofWindow: id)?.isParked(id) ?? false) else { return }
+        floatingFrames[id] = w.frame
+    }
+
     func drop(_ w: AXWindow, into zone: DropZone, at p: CGPoint) {
         guard let id = id(w), let screen = screen(at: p) else { return }
         Log.write("tile", "drop \(describe(w)) into \(zone) on space \(screen.space)")
+        rememberFloatingFrame(w, id)
         virtualSet(ofWindow: id)?.claimForActive(id)
         for space in state.grids.keys where space != screen.space { state.grids[space]?.remove(id) }
         state.mutate(screen.space) { $0.apply(zone, to: id) }
@@ -580,6 +602,7 @@ final class WindowManager {
     func tile(_ w: AXWindow) {
         guard let id = id(w), !state.isTiled(id) else { return }
         Log.write("tile", "tile \(describe(w))")
+        rememberFloatingFrame(w, id)
         // A parked window sits in the screen corner; claim it first so it belongs here and can be placed.
         virtualSet(ofWindow: id)?.claimForActive(id)
         guard let screen = screen(at: w.frame.center) else { return }
@@ -591,7 +614,17 @@ final class WindowManager {
 
     func toggleFocused() {
         guard let w = AXWindow.focused else { return }
-        if isTiled(w) { untile(w); apply() } else { tile(w) }
+        if isTiled(w) {
+            untile(w)
+            apply()
+            if let id = id(w), let frame = floatingFrames.removeValue(forKey: id),
+               NSScreen.screens.contains(where: { $0.visibleFrame.toCocoa().contains(frame.center) }) {
+                w.frame = frame
+                Log.write("tile", "restore \(describe(w)) to its floating frame \(frame)")
+            }
+        } else {
+            tile(w)
+        }
     }
 
     /// Called on mouse-up: anything moved or resized by hand leaves the grid and floats.

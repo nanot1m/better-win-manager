@@ -45,6 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onSelectDesktop = { [weak self] in self?.manager.switchDesktop($0) }
         bar.desktopCount = { [weak self] in self?.manager.desktopCount ?? 0 }
         bar.currentDesktop = { [weak self] in self?.manager.currentDesktop }
+        bar.desktopApps = { [weak self] in self?.manager.appsByDesktop() ?? [:] }
+        manager.onWindowsChange = { [weak self] in self?.bar.focusChanged() }
         manager.onDesktopChange = { [weak self] in self?.bar.focusChanged() }
         manager.onFocusChange = { [weak self] in self?.bar.focusChanged() }
         systemReveal.onChange = { [weak self] active in
