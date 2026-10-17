@@ -183,7 +183,23 @@ final class WindowManager {
 
     /// Apps with a window on each desktop, front to back, one entry per app. Built from the window list alone:
     /// the bar asks for this often and an Accessibility pass over every window would stall the event tap.
+    /// Order shown on the chips, per desktop: apps keep their slot while they have a window there; newcomers
+    /// go to the end. Built from z-order alone the icons would shuffle on every focus change.
+    private var chipOrder: [Int: [pid_t]] = [:]
+
     func appsByDesktop() -> [Int: [pid_t]] {
+        var out = currentAppsByDesktop()
+        for (desktop, pids) in out {
+            var order = chipOrder[desktop]?.filter { pids.contains($0) } ?? []
+            order += pids.filter { !order.contains($0) }
+            chipOrder[desktop] = order
+            out[desktop] = order
+        }
+        for desktop in chipOrder.keys where out[desktop] == nil { chipOrder[desktop] = nil }
+        return out
+    }
+
+    private func currentAppsByDesktop() -> [Int: [pid_t]] {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return [:] }
         var out: [Int: [pid_t]] = [:]
         let desktops = isVirtual ? [] : Spaces.desktops()

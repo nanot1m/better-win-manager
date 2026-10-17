@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.15] - 2026-10-17
+
+### Fixed
+- App icons on the desktop chips shuffled whenever focus changed, because they followed window z-order. Each desktop now keeps a stable order: apps hold their slot while they have a window there and new ones append.
+
 ## [0.11.14] - 2026-10-16
 
 ### Added
