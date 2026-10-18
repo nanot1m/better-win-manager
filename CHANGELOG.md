@@ -17,8 +17,6 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 ### Fixed
 - Tiled windows were dropped from their grid ("detached") whenever a snapshot could not read them through Accessibility while they still existed: an app hidden for an inactive workspace being unhidden, a hung app in its cooldown, a locked screen. The snapshot now keeps the last known state of any tracked window WindowServer still lists, so a transient read failure no longer untiles it. Thanks to @clbagrat for the diagnostics.
 
-### Added
-
 ## [0.11.15] - 2026-10-17
 
 ### Fixed
