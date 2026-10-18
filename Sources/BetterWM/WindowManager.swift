@@ -187,21 +187,30 @@ final class WindowManager {
     /// go to the end. Built from z-order alone the icons would shuffle on every focus change.
     private var chipOrder: [Int: [pid_t]] = [:]
 
-    func appsByDesktop() -> [Int: [pid_t]] {
-        var out = currentAppsByDesktop()
-        for (desktop, pids) in out {
+    /// Apps per desktop in a stable order, each with how many windows it has there.
+    func appsByDesktop() -> [Int: [(pid: pid_t, windows: Int)]] {
+        let counts = currentAppsByDesktop()
+        var out: [Int: [(pid: pid_t, windows: Int)]] = [:]
+        for (desktop, apps) in counts {
+            let pids = apps.map(\.pid)
             var order = chipOrder[desktop]?.filter { pids.contains($0) } ?? []
             order += pids.filter { !order.contains($0) }
             chipOrder[desktop] = order
-            out[desktop] = order
+            out[desktop] = order.map { pid in (pid, apps.first { $0.pid == pid }?.windows ?? 1) }
         }
         for desktop in chipOrder.keys where out[desktop] == nil { chipOrder[desktop] = nil }
         return out
     }
 
-    private func currentAppsByDesktop() -> [Int: [pid_t]] {
+    private func currentAppsByDesktop() -> [Int: [(pid: pid_t, windows: Int)]] {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return [:] }
-        var out: [Int: [pid_t]] = [:]
+        var out: [Int: [(pid: pid_t, windows: Int)]] = [:]
+        var counted = Set<WindowID>()
+        func add(_ pid: pid_t, _ id: WindowID, to desktop: Int) {
+            guard counted.insert(id).inserted else { return }
+            if let i = out[desktop]?.firstIndex(where: { $0.pid == pid }) { out[desktop]![i].windows += 1 }
+            else { out[desktop, default: []].append((pid, 1)) }
+        }
         let desktops = isVirtual ? [] : Spaces.desktops()
         for info in list {
             guard (info[kCGWindowLayer as String] as? Int) == 0,
@@ -215,13 +224,12 @@ final class WindowManager {
                 guard let space = Spaces.spaces(of: id).first, let d = desktops.firstIndex(of: space) else { continue }
                 desktop = d
             }
-            if !(out[desktop]?.contains(pid) ?? false) { out[desktop, default: []].append(pid) }
+            add(pid, id, to: desktop)
         }
         if let v = virtualWS {
             for id in v.knownWindows where v.isParked(id) {
                 guard let pid = system.pid(of: id) else { continue }
-                let d = v.workspace(of: id)
-                if !(out[d]?.contains(pid) ?? false) { out[d, default: []].append(pid) }
+                add(pid, id, to: v.workspace(of: id))
             }
         }
         return out

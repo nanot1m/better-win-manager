@@ -6,6 +6,7 @@ final class SystemObserver {
     private var ax: [WindowID: AXWindow] = [:]
     /// Last good info per window: a hung app's windows keep their place in the model instead of being dropped.
     private var lastInfo: [WindowID: WindowInfo] = [:]
+    private var keptFromCache: Set<WindowID> = []
     /// Space to keep free at the top of each screen (the status bar), in points.
     var topInset: (NSScreen) -> CGFloat = { _ in 0 }
     /// Virtual workspaces: overrides the Space a screen shows and the Spaces a window belongs to.
@@ -50,13 +51,31 @@ final class SystemObserver {
             seen.insert(id)
             infos.append(info(id, w))
         }
+        // Window IDs WindowServer still knows, hidden or off screen included; computed only if needed.
+        var aliveCache: Set<WindowID>?
+        func alive(_ id: WindowID) -> Bool {
+            if aliveCache == nil {
+                let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
+                aliveCache = Set(list.compactMap { $0[kCGWindowNumber as String] as? CGWindowID })
+            }
+            return aliveCache!.contains(id)
+        }
         for id in tracked where !seen.contains(id) {
             if let w = ax[id], AXResponsiveness.isUnresponsive(w.pid), let cached = lastInfo[id] {
                 infos.append(cached)
                 continue
             }
-            guard let w = axWindow(id), w.isStandard else { continue }
-            infos.append(info(id, w))
+            if let w = axWindow(id), w.isStandard {
+                infos.append(info(id, w))
+                keptFromCache.remove(id)
+                continue
+            }
+            // Accessibility can fail for a window that still exists: the app is hidden, mid-launch, hung, or the
+            // screen is locked. Dropping it here would untile it, so keep the last known picture while it lives.
+            if let cached = lastInfo[id], alive(id) {
+                infos.append(cached)
+                if keptFromCache.insert(id).inserted { Log.write("snapshot", "#\(id) unreadable via Accessibility but alive; keeping last known state") }
+            }
         }
         for i in infos { lastInfo[i.id] = i }
         return Snapshot(screens: screens(), windows: infos, focused: AXWindow.focused.flatMap { self.id(of: $0) })
