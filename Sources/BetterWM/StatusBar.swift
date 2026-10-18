@@ -207,7 +207,6 @@ private final class ChipView: NSView {
     let number = NSTextField(labelWithString: "")
     private let stack = NSStackView()
     private var icons: [NSImageView] = []
-    private var badges: [NSTextField] = []
     private static var iconCache: [pid_t: NSImage] = [:]
 
     override init(frame: NSRect) {
@@ -228,39 +227,23 @@ private final class ChipView: NSView {
     }
     required init?(coder: NSCoder) { fatalError() }
 
+    /// One icon per window, so two Chrome windows show two Chrome icons.
     func setApps(_ apps: [(pid: pid_t, windows: Int)]) {
-        while icons.count < apps.count {
+        let pids = apps.flatMap { Array(repeating: $0.pid, count: max(1, $0.windows)) }
+        while icons.count < pids.count {
             let v = NSImageView()
             v.imageScaling = .scaleProportionallyUpOrDown
             v.widthAnchor.constraint(equalToConstant: 14).isActive = true
             v.heightAnchor.constraint(equalToConstant: 14).isActive = true
-            // Window count, bottom-right of the icon, only when there is more than one.
-            let badge = NSTextField(labelWithString: "")
-            badge.font = .systemFont(ofSize: 7, weight: .bold)
-            badge.alignment = .center
-            badge.wantsLayer = true
-            badge.layer?.cornerRadius = 4
-            badge.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.75).cgColor
-            badge.textColor = .white
-            badge.translatesAutoresizingMaskIntoConstraints = false
-            v.addSubview(badge)
-            NSLayoutConstraint.activate([
-                badge.trailingAnchor.constraint(equalTo: v.trailingAnchor, constant: 2),
-                badge.bottomAnchor.constraint(equalTo: v.bottomAnchor, constant: 2),
-                badge.heightAnchor.constraint(equalToConstant: 8), badge.widthAnchor.constraint(greaterThanOrEqualToConstant: 8),
-            ])
             icons.append(v)
-            badges.append(badge)
             stack.addArrangedSubview(v)
         }
         for (i, v) in icons.enumerated() {
-            v.isHidden = i >= apps.count
-            guard i < apps.count else { continue }
-            let (pid, windows) = apps[i]
+            v.isHidden = i >= pids.count
+            guard i < pids.count else { continue }
+            let pid = pids[i]
             if ChipView.iconCache[pid] == nil, let icon = NSRunningApplication(processIdentifier: pid)?.icon { ChipView.iconCache[pid] = icon }
             v.image = ChipView.iconCache[pid]
-            badges[i].isHidden = windows < 2
-            badges[i].stringValue = windows > 9 ? "9+" : "\(windows)"
         }
     }
 

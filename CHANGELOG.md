@@ -4,13 +4,20 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.17] - 2026-10-18
+
+### Changed
+- Desktop chips show one icon per window, so an app with two windows on a desktop shows its icon twice (replaces the count badge from 0.11.16).
+
 ## [0.11.16] - 2026-10-18
+
+### Added
+- Desktop chips show a small count on an app's icon when it has more than one window on that desktop.
 
 ### Fixed
 - Tiled windows were dropped from their grid ("detached") whenever a snapshot could not read them through Accessibility while they still existed: an app hidden for an inactive workspace being unhidden, a hung app in its cooldown, a locked screen. The snapshot now keeps the last known state of any tracked window WindowServer still lists, so a transient read failure no longer untiles it. Thanks to @clbagrat for the diagnostics.
 
 ### Added
-- Desktop chips show a small count on an app's icon when it has more than one window on that desktop.
 
 ## [0.11.15] - 2026-10-17
 
