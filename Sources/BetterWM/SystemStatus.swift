@@ -50,6 +50,10 @@ enum SystemStatus {
         let user = UInt64(t.0), system = UInt64(t.1), idle = UInt64(t.2), nice = UInt64(t.3)
         let busy = user + system + nice, total = busy + idle
         guard let last = lastCPU else { lastCPU = (busy, total); return nil }
+        guard total >= last.total, busy >= last.busy else {
+            lastCPU = (busy, total)
+            return lastCPUValue
+        }
         guard total - last.total >= 50 else { return lastCPUValue }
         lastCPU = (busy, total)
         lastCPUValue = Double(busy - last.busy) / Double(total - last.total)

@@ -19,7 +19,10 @@ final class WindowManager {
     private var virtualSets: [SpaceID: VirtualWorkspaces] = [:]
 
     /// The set for the desktop currently shown on the main screen.
-    private var virtualWS: VirtualWorkspaces { virtualSet(for: NSScreen.screens.first ?? NSScreen.main!) }
+    private var virtualWS: VirtualWorkspaces {
+        let screen = NSScreen.screens.first ?? NSScreen.main ?? NSScreen()
+        return virtualSet(for: screen)
+    }
 
     private func virtualSet(for screen: NSScreen) -> VirtualWorkspaces { virtualSet(realSpace: Spaces.current(for: screen)) }
 
@@ -370,7 +373,8 @@ final class WindowManager {
                     func corner(_ s: NSScreen) -> CGPoint { let r = s.frame.toCocoa(); return CGPoint(x: r.maxX - 2, y: r.maxY - 2) }
                     let screen = NSScreen.screens.first { $0.frame.toCocoa().contains(f.center) }
                         ?? NSScreen.screens.min { hypot(corner($0).x - f.minX, corner($0).y - f.minY) < hypot(corner($1).x - f.minX, corner($1).y - f.minY) }
-                        ?? NSScreen.screens[0]
+                        ?? NSScreen.screens.first ?? NSScreen.main
+                    guard let screen else { return .zero }
                     return corner(screen)
                 },
                 isInCorner: { f in
@@ -403,13 +407,15 @@ final class WindowManager {
         self.config = config
         reconciler = Reconciler(config: config)
         focusRing = FocusRing(config: config)
-        overlay = ZoneOverlay(screen: NSScreen.screens[0])
+        let primaryScreen = NSScreen.screens.first ?? NSScreen.main ?? NSScreen()
+        overlay = ZoneOverlay(screen: primaryScreen)
         focusRing.isTiled = { [unowned self] w in self.isTiled(w) }
         focusRing.isTiledID = { [unowned self] id in self.state.isTiled(id) }
         focusRing.onReorder = { [unowned self] in self.stackHandles() }
         if config.restoreLayouts, let data = try? Data(contentsOf: Config.statePath),
            let layout = try? JSONDecoder().decode(SavedLayout.self, from: data) {
-            let current = Spaces.current(for: NSScreen.screens.first ?? NSScreen.main!)
+            let spaceScreen = NSScreen.screens.first ?? NSScreen.main
+            let current = spaceScreen.map { Spaces.current(for: $0) } ?? 0
             saved = layout.migrated(currentSpace: current)
             lastSaved = saved
             // A previous run that was killed left its hidden apps hidden; bring them back before parking decides anew.

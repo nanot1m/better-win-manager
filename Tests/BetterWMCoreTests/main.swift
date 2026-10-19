@@ -234,6 +234,13 @@ struct ReconcilerTests {
         g.move(1, .left)
         expect(abs(g.fraction(ofColumn: 0) - 1.0 / 3) < 0.001, #function, #line)
         expect(g.columns.map(\.windows) == [[1], [2]], #function, #line)
+
+        // Single column and out-of-bounds must not crash or produce NaN
+        var single = Grid()
+        single.columns = [Column([1])]
+        single.cycleEdgeWidth(ofColumn: 0)
+        expect(single.fraction(ofColumn: 0) == 1.0, #function, #line)
+        expect(single.fraction(ofColumn: 99) == 0, #function, #line)
     }
 
     func testConfigV1Migration() {
