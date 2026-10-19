@@ -7,6 +7,15 @@ final class SystemObserver {
     /// Last good info per window: a hung app's windows keep their place in the model instead of being dropped.
     private var lastInfo: [WindowID: WindowInfo] = [:]
     private var keptFromCache: Set<WindowID> = []
+    private var lastReadAt: [WindowID: Date] = [:]
+
+    private func hasExcuse(_ w: WindowInfo) -> Bool {
+        if let readAt = lastReadAt[w.id], Date().timeIntervalSince(readAt) < 2 { return true }
+        if AXResponsiveness.isUnresponsive(w.pid) { return true }
+        if NSRunningApplication(processIdentifier: w.pid)?.isHidden == true { return true }
+        if let session = CGSessionCopyCurrentDictionary() as? [String: Any], (session["CGSSessionScreenIsLocked"] as? Bool) == true { return true }
+        return false
+    }
     /// Space to keep free at the top of each screen (the status bar), in points.
     var topInset: (NSScreen) -> CGFloat = { _ in 0 }
     /// Virtual workspaces: overrides the Space a screen shows and the Spaces a window belongs to.
@@ -67,14 +76,18 @@ final class SystemObserver {
             }
             if let w = axWindow(id), w.isStandard {
                 infos.append(info(id, w))
+                lastReadAt[id] = Date()
                 keptFromCache.remove(id)
                 continue
             }
-            // Accessibility can fail for a window that still exists: the app is hidden, mid-launch, hung, or the
-            // screen is locked. Dropping it here would untile it, so keep the last known picture while it lives.
-            if let cached = lastInfo[id], alive(id) {
+            // Accessibility can fail for a window that still exists: the app is hidden or just unhiding, hung, or
+            // the screen is locked. Dropping it would untile it, so keep the last known picture while one of those
+            // holds. A window merely kept off screen by its app after the user closed it has no such excuse.
+            if let cached = lastInfo[id], alive(id), hasExcuse(cached) {
                 infos.append(cached)
                 if keptFromCache.insert(id).inserted { Log.write("snapshot", "#\(id) unreadable via Accessibility but alive; keeping last known state") }
+            } else {
+                keptFromCache.remove(id)
             }
         }
         for i in infos { lastInfo[i.id] = i }

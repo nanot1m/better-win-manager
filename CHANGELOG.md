@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.19] - 2026-10-19
+
+### Fixed
+- A window closed by the user but kept off screen by its app (ChatGPT does this) stayed in the grid and reserved its slot, since 0.11.16 treated any window WindowServer still lists as alive. A window that fails to read is now carried only while there is a reason: it was readable within the last two seconds, its app is hidden or unresponsive, or the screen is locked.
+
 ## [0.11.18] - 2026-10-19
 
 ### Fixed
