@@ -91,6 +91,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         print("BetterWM running. Hold ⌥ and drag a window.")
         if CommandLine.arguments.contains("--settings") {
             showSettings()
+            if let i = CommandLine.arguments.firstIndex(of: "--settings-section"), i + 1 < CommandLine.arguments.count, let n = Int(CommandLine.arguments[i + 1]) {
+                configWindow.selectSection(n)
+            }
             print("settings window:", configWindow.windowNumber ?? -1)
         }
         if let i = CommandLine.arguments.firstIndex(of: "--snapshot-popup"), i + 1 < CommandLine.arguments.count {

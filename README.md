@@ -10,6 +10,10 @@ Column-based tiling window manager for macOS. Tile windows by ⌥-dragging them 
 - Optional status bar under the auto-hidden menu bar: desktops, active window, weather, clock; notch-aware
 - Menu bar menu, keyboard popup, global hotkeys, settings window
 
+## Documentation
+
+The [docs](docs/README.md) folder covers everything in depth: [getting started](docs/getting-started.md), [concepts](docs/concepts.md), [actions and hotkeys](docs/actions.md), the [settings reference](docs/settings.md), the [status bar](docs/status-bar.md), [cats](docs/cats.md), [troubleshooting](docs/troubleshooting.md) and [internals](docs/internals.md).
+
 ## Install
 
 ### Homebrew

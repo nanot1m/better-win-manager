@@ -4,6 +4,14 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.12.2] - 2026-10-19
+
+### Changed
+- The Settings window follows System Settings: a sidebar of sections (General, Tiling, Focus Ring, Status Bar, Widgets, Cats, Apps, Hotkeys) and grouped rows with a plain title, a one-line explanation and the control on the right; switches instead of checkboxes; resizable. All settings and the import/export/save flow are unchanged.
+
+### Added
+- Documentation in `docs/`: getting started, concepts, actions and hotkeys, a full settings reference, status bar, cats, troubleshooting and internals.
+
 ## [0.12.1] - 2026-10-19
 
 ### Fixed
