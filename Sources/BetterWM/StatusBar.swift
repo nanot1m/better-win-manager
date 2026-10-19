@@ -16,8 +16,8 @@ final class StatusBar {
     var onReorderDesktop: ((Int, Int) -> Void)?
     /// The menu widget was clicked; the app pops its menu at the given view.
     var onMenuRequested: ((NSView) -> Void)?
-    var desktopCount: () -> Int = { Spaces.desktops().count }
-    var currentDesktop: () -> Int? = { Spaces.currentDesktopIndex() }
+    var desktopCount: () -> Int = { 0 }
+    var currentDesktop: () -> Int? = { nil }
     var desktopApps: () -> [Int: [(pid: pid_t, windows: Int)]] = { [:] }
     /// While the user drags a window the bar stays as it is; any work on the main thread stalls the event tap.
     var isInteracting: () -> Bool = { false }

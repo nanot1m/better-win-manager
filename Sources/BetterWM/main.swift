@@ -87,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.image = StatusIcon.make(paused: false)
         statusItem.menu = buildMenu()
         Log.enabled = config.debugLog
-        Log.write("app", "launched \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"), workspaces=\(config.workspaces.rawValue)")
+        Log.write("app", "launched \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")")
         print("BetterWM running. Hold ⌥ and drag a window.")
         if CommandLine.arguments.contains("--settings") {
             showSettings()

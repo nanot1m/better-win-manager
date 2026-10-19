@@ -40,14 +40,8 @@ public struct Config {
     public var switcher: Bool = true
     /// Show live window previews, or just app icons.
     public var switcherThumbnails: Bool = true
-    /// "native" uses macOS Spaces; "virtual" emulates desktops on one Space by parking other workspaces' windows off-screen.
-    public var workspaces: WorkspaceMode = .virtual
+    /// Workspaces per macOS desktop, emulated by parking or hiding the other workspaces' windows; more are created on demand.
     public var virtualWorkspaces: Int = 4
-
-    public enum WorkspaceMode: String, CaseIterable {
-        case native, virtual
-        public var title: String { self == .native ? "macOS desktops (Spaces)" : "Virtual workspaces on one desktop" }
-    }
     public var autoTile: Bool = true
     public var autoTileStrategy: AutoTileStrategy = .rightmost
     public var focusRing: Bool = true
@@ -186,7 +180,7 @@ public struct Config {
         ("retile", "Retile current screen"),
         ("equalize", "Equalize sizes"), ("pause", "Pause / resume tiling"), ("refreshRing", "Re-measure window corners for the focus ring"),
         ("desktopNext", "Next desktop"), ("desktopPrevious", "Previous desktop"),
-        ("desktopMoveLeft", "Move this desktop left (virtual workspaces)"), ("desktopMoveRight", "Move this desktop right (virtual workspaces)"),
+        ("desktopMoveLeft", "Move this desktop left"), ("desktopMoveRight", "Move this desktop right"),
         ("sendToNextDesktop", "Send focused window to next desktop"),
         ("sendToPreviousDesktop", "Send focused window to previous desktop"),
     ] + (1...9).map { ("desktop\($0)", "Switch to desktop \($0)") }
@@ -219,9 +213,8 @@ public struct Config {
         # ⌥Tab window switcher grouped by desktop; previews need Screen Recording permission, otherwise icons only.
         switcher = \(switcher)
         switcherThumbnails = \(switcherThumbnails)
-        # "virtual" (default): N workspaces emulated on a single desktop by parking the other workspaces'
-        # windows just off the bottom-right corner; switching is instant. "native": macOS desktops (Spaces).
-        workspaces = \(workspaces.rawValue)
+        # Workspaces per macOS desktop; the other workspaces' windows are hidden or parked off the bottom-right
+        # corner, so switching is instant. More are created on demand (sending a window to desktop 6).
         virtualWorkspaces = \(virtualWorkspaces)
         # Tile windows automatically when they open or arrive on a desktop.
         autoTile = \(autoTile)
@@ -358,7 +351,7 @@ public struct Config {
             case "outerGap": cfg.outerGap = Double(value).map { CGFloat($0) } ?? cfg.outerGap
             case "handleWidth": cfg.handleWidth = Double(value).map { CGFloat($0) } ?? cfg.handleWidth
             case "dragModifiers": cfg.dragModifiers = value
-            case "workspaces": cfg.workspaces = WorkspaceMode(rawValue: value.lowercased()) ?? cfg.workspaces
+            case "workspaces": break  // native Spaces mode was removed in 0.12; the key is accepted and ignored
             case "virtualWorkspaces": cfg.virtualWorkspaces = Int(value).map { max(1, min(9, $0)) } ?? cfg.virtualWorkspaces
             case "switcher": cfg.switcher = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "switcherThumbnails": cfg.switcherThumbnails = ["true", "yes", "1", "on"].contains(value.lowercased())

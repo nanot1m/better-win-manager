@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.12.0] - 2026-10-19
+
+### Removed
+- The native macOS Spaces mode (`workspaces = native`). Virtual workspaces are the only mode now; the `workspaces` config key is accepted and ignored, so older files load unchanged. Gone with it: synthetic Dock-swipe Space switching, the SkyLight window-move bridge vendored from WhichSpace, the title-bar-drag fallback for moving windows between Spaces, and the native/virtual migrations.
+
 ## [0.11.20] - 2026-10-19
 
 ### Fixed

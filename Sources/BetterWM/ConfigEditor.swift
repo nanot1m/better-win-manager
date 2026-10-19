@@ -42,7 +42,6 @@ final class ConfigWindow: NSObject {
     private var stackNarrowField: NSTextField!
     private var switcherThumbsCheck: NSButton!
     private var switcherCheck: NSButton!
-    private var workspacesPopup: NSPopUpButton!
     private var virtualCountField: NSTextField!
     private var overlayCheck: NSButton!
     private var sliders: [(KeyPath<Config, CGFloat>, WritableKeyPath<Config, CGFloat>, NSSlider, NSTextField)] = []
@@ -203,23 +202,15 @@ final class ConfigWindow: NSObject {
             modifierButtons[key] = b
             mods.addArrangedSubview(b)
         }
-        workspacesPopup = NSPopUpButton()
-        for m in Config.WorkspaceMode.allCases {
-            workspacesPopup.addItem(withTitle: m.title)
-            workspacesPopup.lastItem?.representedObject = m.rawValue
-        }
-        workspacesPopup.target = self
-        workspacesPopup.action = #selector(workspaceModeChanged)
         virtualCountField = NSTextField(string: "4")
         virtualCountField.widthAnchor.constraint(equalToConstant: 48).isActive = true
         virtualCountField.alignment = .right
-        let wsHint = NSTextField(wrappingLabelWithString: "Virtual workspaces live on one macOS desktop; windows of the other workspaces are parked just off the bottom-right corner, so switching is instant. They still show in ⌘Tab and Mission Control.")
+        let wsHint = NSTextField(wrappingLabelWithString: "Each macOS desktop gets this many workspaces; more are created on demand. Windows of the other workspaces are hidden, or parked just off the bottom-right corner when their app also has windows here, so switching is instant.")
         wsHint.font = .systemFont(ofSize: 11)
         wsHint.textColor = .secondaryLabelColor
         wsHint.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
         let workspaces = box("Desktops", rows: [
-            [label("Mode"), workspacesPopup],
-            [label("Virtual workspaces"), NSStackView(views: [virtualCountField, NSTextField(labelWithString: "1–9")])],
+            [label("Workspaces"), NSStackView(views: [virtualCountField, NSTextField(labelWithString: "1–9")])],
             [NSView(), wsHint],
         ])
         stackOffsetField = NSTextField(string: "48")
@@ -288,10 +279,6 @@ final class ConfigWindow: NSObject {
 
     @objc private func switcherChanged() {
         switcherThumbsCheck.isEnabled = switcherCheck.state == .on
-    }
-
-    @objc private func workspaceModeChanged() {
-        virtualCountField.isEnabled = (workspacesPopup.selectedItem?.representedObject as? String) == Config.WorkspaceMode.virtual.rawValue
     }
 
     @objc private func autoRadiusChanged() {
@@ -619,9 +606,7 @@ final class ConfigWindow: NSObject {
         switcherThumbsCheck.state = config.switcherThumbnails ? .on : .off
         switcherCheck.state = config.switcher ? .on : .off
         switcherChanged()
-        workspacesPopup.selectItem(at: Config.WorkspaceMode.allCases.firstIndex(of: config.workspaces) ?? 0)
         virtualCountField.stringValue = String(config.virtualWorkspaces)
-        workspaceModeChanged()
         overlayCheck.state = config.actionOverlay ? .on : .off
         strategyPopup.selectItem(at: Config.AutoTileStrategy.allCases.firstIndex(of: config.autoTileStrategy) ?? 0)
         let mods = config.dragModifiers.lowercased().split(separator: "+").map(String.init)
@@ -701,9 +686,6 @@ final class ConfigWindow: NSObject {
         config.stackScreensNarrowerThan = CGFloat(Double(stackNarrowField.stringValue) ?? 0)
         config.switcherThumbnails = switcherThumbsCheck.state == .on
         config.switcher = switcherCheck.state == .on
-        if let raw = workspacesPopup.selectedItem?.representedObject as? String, let m = Config.WorkspaceMode(rawValue: raw) {
-            config.workspaces = m
-        }
         config.virtualWorkspaces = max(1, min(9, Int(virtualCountField.stringValue) ?? 4))
         config.actionOverlay = overlayCheck.state == .on
         if let raw = strategyPopup.selectedItem?.representedObject as? String, let st = Config.AutoTileStrategy(rawValue: raw) {

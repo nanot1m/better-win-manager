@@ -5,11 +5,10 @@ let package = Package(
     name: "BetterWM",
     platforms: [.macOS(.v13)],
     targets: [
-        .target(name: "SkyLightBridge", path: "Sources/SkyLightBridge"),
         .target(name: "BetterWMCore", path: "Sources/BetterWMCore"),
         .executableTarget(
             name: "BetterWM",
-            dependencies: ["SkyLightBridge", "BetterWMCore"],
+            dependencies: ["BetterWMCore"],
             path: "Sources/BetterWM",
             linkerSettings: [.linkedFramework("Cocoa"), .linkedFramework("ApplicationServices"), .linkedFramework("CoreLocation"), .linkedFramework("CoreWLAN"), .linkedFramework("IOKit")]
         ),

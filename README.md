@@ -3,7 +3,7 @@
 Column-based tiling window manager for macOS. Tile windows by ⌥-dragging them into place; everything else stays a normal, freely movable window.
 
 - Columns across the screen, windows stacked within a column
-- Virtual workspaces on a single desktop by default, or one grid per macOS desktop (Space)
+- Virtual workspaces per macOS desktop: instant switching, reorderable, created on demand
 - Drop zones highlighted while dragging, draggable gap handles to resize
 - Auto-tiling of new windows with several placement strategies
 - Instant desktop switching that skips the slide animation
@@ -69,7 +69,7 @@ Per screen, as an alternative to columns: every tiled window gets almost the who
 
 ### Virtual workspaces
 
-By default (`workspaces = virtual`, Settings › General › Desktops) every macOS desktop gets its own independent set of `virtualWorkspaces` workspaces, with its own active workspace, window membership and grids; nothing crosses between macOS desktops. Windows of inactive workspaces are parked just off the bottom-right corner of their screen, like AeroSpace does, so switching is instant and needs no Mission Control tricks. All desktop actions, the popup, hotkeys, the ⌥Tab switcher and the bar chips refer to the current macOS desktop's workspaces. Set `workspaces = native` to tile per macOS desktop without virtual workspaces. Parked windows still appear in ⌘Tab and Mission Control.
+Every macOS desktop gets its own independent set of `virtualWorkspaces` workspaces (Settings › General › Desktops), with its own active workspace, window membership and grids; nothing crosses between macOS desktops. Switching is instant and needs no Mission Control tricks: an app whose windows all live on inactive workspaces is hidden, and an app with windows on several workspaces has the inactive ones parked just off the bottom-right corner of the screen, like AeroSpace does. Workspaces beyond the configured count are created when you send a window there and trimmed when empty; drag a chip in the status bar or use Move This Desktop Left/Right to reorder them. All desktop actions, the popup, hotkeys, the ⌥Tab switcher and the bar chips refer to the current macOS desktop's workspaces. Hidden and parked windows still appear in ⌘Tab.
 
 ### Status bar
 
@@ -125,7 +125,7 @@ Placement strategies:
 ## How it works
 
 - Windows are read and moved through the Accessibility API; a CGEvent tap catches ⌥-drags and ⌥-scroll.
-- Desktop identity and ordering come from SkyLight private functions loaded with `dlsym`. Desktop switching posts the same Dock-swipe event sequence a three-finger trackpad swipe produces, which is why it is instant. Sending a window to another desktop uses SkyLight's bridged move operation via code vendored from [WhichSpace](https://github.com/gechr/WhichSpace) (MIT); the exported APIs for this stopped working with SIP enabled. All of these are undocumented and may need updating on new macOS releases.
+- Identifying the current macOS desktop and the desktop a window is on uses SkyLight private functions loaded with `dlsym`; nothing is switched or moved through them. Workspace switching hides apps and parks windows with ordinary Accessibility calls. The private functions are undocumented and may need updating on new macOS releases.
 - The focus ring is a layer-backed click-through overlay driven by WindowServer move/resize/front-change notifications (the SkyLight mechanism JankyBorders uses), with frames read via `SLSGetWindowBounds`; no polling beyond a slow safety net.
 - Windows that ignore a requested size are remembered as minimums and the layout distributes space around them.
 
@@ -153,4 +153,4 @@ See [CHANGELOG.md](CHANGELOG.md); release notes on GitHub are taken from it.
 
 ## License
 
-MIT. The SkyLight bridge in `Sources/SkyLightBridge` is vendored from [WhichSpace](https://github.com/gechr/WhichSpace), also MIT; see its license file there.
+MIT.
