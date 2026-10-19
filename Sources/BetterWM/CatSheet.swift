@@ -3,16 +3,25 @@ import Cocoa
 /// Frames cut from a user-supplied sprite sheet laid out like Last tick's "Pixel Cats 64x64" pack
 /// (14 columns of 64x64 cells, one animation per row). The art is never bundled; only the path is configured.
 struct CatSheet {
-    struct Row { let index: Int; let frames: Int }
-    /// Rows for side-view animations, ordered by on-screen facing (right, then left). Only the walk
-    /// rows are labelled the other way round in the pack.
-    static let walk = (Row(index: 5, frames: 6), Row(index: 4, frames: 6))
-    static let run = (Row(index: 10, frames: 5), Row(index: 11, frames: 5))
-    static let sit = (Row(index: 22, frames: 5), Row(index: 21, frames: 5))
-    static let groom = (Row(index: 41, frames: 11), Row(index: 39, frames: 11))
-    static let lie = (Row(index: 28, frames: 3), Row(index: 27, frames: 3))
-    static let sleep = (Row(index: 51, frames: 2), Row(index: 50, frames: 2))
-    /// Body region shared by every side-view row, so sprites keep a common baseline.
+    /// Animations by name, as (row facing right, row facing left) indices in the pack. Front-facing animations
+    /// use the same row for both. Frame counts are read off the sheet by looking for empty cells.
+    /// Only the walk rows are labelled the other way round in the pack.
+    static let rows: [String: (right: Int, left: Int)] = [
+        "walk": (5, 4), "run": (10, 11),
+        "sit": (22, 21),              // tail wag, sitting
+        "alert": (26, 25),            // tail wag, standing
+        "lie": (28, 27),              // tail wag, lying
+        "groom": (41, 39),            // left paw swipe, sitting
+        "groom2": (42, 40),           // right paw swipe, sitting
+        "swipe": (34, 32),            // paw swipe, standing
+        "scratch": (18, 17),
+        "sleep1": (45, 44), "sleep2": (49, 48), "sleep3": (51, 50), "sleep4": (53, 52), "sleep5": (55, 54),
+        "eat": (59, 58),
+        "hiss": (61, 60),
+        "jump": (64, 63),
+        "lick": (12, 12), "lickLie": (13, 13), "meow": (14, 14), "meowStand": (16, 16), "yawn": (43, 43), "hind": (65, 65),
+    ]
+    /// Body region shared by every row, so sprites keep a common baseline.
     static let crop = CGRect(x: 4, y: 8, width: 56, height: 40)
     static let cell: CGFloat = 64
 
@@ -20,17 +29,37 @@ struct CatSheet {
     let spriteSize: NSSize
 
     func frames(_ name: String, right: Bool) -> [NSImage] { frames[name + (right ? "R" : "L")] ?? [] }
+    func has(_ name: String) -> Bool { !(frames[name + "R"] ?? []).isEmpty }
 
     init?(path: String, scale: CGFloat) {
         guard let img = NSImage(contentsOfFile: path), let rep = img.representations.first as? NSBitmapImageRep else { return nil }
-        let rowsInSheet = rep.pixelsHigh / Int(CatSheet.cell)
+        let cellPx = Int(CatSheet.cell)
+        let rowsInSheet = rep.pixelsHigh / cellPx, colsInSheet = rep.pixelsWide / cellPx
         spriteSize = NSSize(width: CatSheet.crop.width * scale, height: CatSheet.crop.height * scale)
-        func cut(_ row: Row) -> [NSImage]? {
-            guard row.index < rowsInSheet else { return nil }
-            return (0..<row.frames).map { i in
+        // A cell with any opaque pixel is a frame; the first empty cell ends the row's animation.
+        func frameCount(_ row: Int) -> Int {
+            var n = 0
+            columns: for col in 0..<colsInSheet {
+                var opaque = false
+                for y in stride(from: row * cellPx, to: (row + 1) * cellPx, by: 4) {
+                    for x in stride(from: col * cellPx, to: (col + 1) * cellPx, by: 4) where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.05 {
+                        opaque = true; break
+                    }
+                    if opaque { break }
+                }
+                if !opaque { break columns }
+                n += 1
+            }
+            return n
+        }
+        func cut(_ row: Int) -> [NSImage]? {
+            guard row < rowsInSheet else { return nil }
+            let count = frameCount(row)
+            guard count > 0 else { return nil }
+            return (0..<count).map { i in
                 // Image coordinates are bottom-left; sheet rows are counted from the top.
                 let src = CGRect(x: CGFloat(i) * CatSheet.cell + CatSheet.crop.minX,
-                                 y: CGFloat(rep.pixelsHigh) - CGFloat(row.index + 1) * CatSheet.cell + (CatSheet.cell - CatSheet.crop.maxY),
+                                 y: CGFloat(rep.pixelsHigh) - CGFloat(row + 1) * CatSheet.cell + (CatSheet.cell - CatSheet.crop.maxY),
                                  width: CatSheet.crop.width, height: CatSheet.crop.height)
                 return NSImage(size: spriteSize, flipped: false) { dst in
                     NSGraphicsContext.current?.imageInterpolation = .none
@@ -39,11 +68,13 @@ struct CatSheet {
                 }
             }
         }
-        for (name, rows) in [("walk", CatSheet.walk), ("run", CatSheet.run), ("sit", CatSheet.sit),
-                             ("groom", CatSheet.groom), ("lie", CatSheet.lie), ("sleep", CatSheet.sleep)] {
-            guard let r = cut(rows.0), let l = cut(rows.1) else { return nil }
+        for (name, rows) in CatSheet.rows {
+            // The six core animations are required; the rest are optional extras a shorter sheet may lack.
+            let required = ["walk", "run", "sit", "groom", "lie", "sleep3"].contains(name)
+            guard let r = cut(rows.right), let l = cut(rows.left) else { if required { return nil } else { continue } }
             frames[name + "R"] = r
             frames[name + "L"] = l
         }
+        frames["sleepR"] = frames["sleep3R"]; frames["sleepL"] = frames["sleep3L"]
     }
 }

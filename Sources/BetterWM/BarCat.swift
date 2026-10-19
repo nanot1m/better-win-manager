@@ -148,7 +148,7 @@ enum BuiltinCatArt {
 
 /// One cat: sprite, position and current animation. Movement is driven by the herd.
 final class Cat {
-    enum Mode { case walk, run, sit, groom, sleep, stretch, lie }
+    enum Mode { case walk, run, sit, groom, sleep, stretch, lie, alert, swipe, scratch, eat, hiss, jump, meow, yawn, hind }
 
     let sprite = NSImageView()
     /// Second copy of the sprite, shown only while the cat is half-way through a portal.
@@ -171,6 +171,10 @@ final class Cat {
     /// Whether this cat cares about the pointer this time, and for how long.
     var huntInterestUntil: Date?
     var recentPets: [Date] = []
+    /// Which of the pack's sleeping poses this nap uses; chosen when the cat lies down.
+    var napStyle = "sleep3"
+    /// Which grooming animation this session uses.
+    var groomStyle = "groom"
 
     static func personality(seed: String) -> Personality {
         var h: UInt64 = 1469598103934665603
@@ -182,11 +186,12 @@ final class Cat {
     /// One simulation tick (about 8 a second) of the drives, according to what the cat is doing.
     func updateDrives(inScene: Bool) {
         switch mode {
-        case .run: energy -= 0.004; boredom -= 0.004
+        case .run, .jump: energy -= 0.004; boredom -= 0.004
         case .walk: energy -= 0.0007; boredom += 0.0006 * personality.playful
         case .sleep: energy += 0.0035 * personality.lazy; boredom += 0.0008 * personality.playful
-        case .sit, .lie, .stretch: energy += 0.0012; boredom += 0.0012 * personality.playful
-        case .groom: energy += 0.0008; boredom += 0.0006
+        case .sit, .lie, .stretch, .alert, .yawn, .hind: energy += 0.0012; boredom += 0.0012 * personality.playful
+        case .groom, .scratch, .eat, .meow: energy += 0.0008; boredom += 0.0006
+        case .swipe, .hiss: boredom -= 0.003
         }
         if inScene { boredom -= 0.003 }
         affection -= 0.0004
@@ -259,9 +264,27 @@ final class Cat {
         case .sleep: range = 8...20
         case .stretch: range = 1.2...1.2
         case .lie: range = 4...9
+        case .alert: range = 1.5...3
+        case .swipe: range = 1.0...1.6
+        case .scratch: range = 2...3.5
+        case .eat: range = 4...7
+        case .hiss: range = 0.8...1.2
+        case .jump: range = 0.7...0.7
+        case .meow: range = 0.9...1.2
+        case .yawn: range = 1.2...1.6
+        case .hind: range = 1.0...2.0
         }
         let r = seconds ?? range
         modeUntil = Date().addingTimeInterval(Double.random(in: r))
+        if m == .sleep, let sheet {
+            // Lazy cats sprawl; the others curl up. Each nap picks anew.
+            let sprawled = ["sleep4", "sleep5"], curled = ["sleep1", "sleep2", "sleep3"]
+            let pool = (Double.random(in: 0..<1) < (personality.lazy - 0.6) ? sprawled : curled).filter(sheet.has)
+            napStyle = pool.randomElement() ?? "sleep3"
+        }
+        if m == .groom, let sheet {
+            groomStyle = ["groom", "groom2", "lick", "lick"].filter(sheet.has).randomElement() ?? "groom"
+        }
     }
 
     func render(tick: Int) {
@@ -275,8 +298,24 @@ final class Cat {
         case .sleep: (name, every) = ("sleep", 8)
         case .lie: (name, every) = (sheet == nil ? "sit" : "lie", 6)
         case .stretch: (name, every) = (sheet == nil ? "stretch" : "lie", 6)
+        case .alert: (name, every) = (sheet == nil ? "sit" : "alert", 3)
+        case .swipe: (name, every) = (sheet == nil ? "groom" : "swipe", 1)
+        case .scratch: (name, every) = (sheet == nil ? "groom" : "scratch", 2)
+        case .eat: (name, every) = (sheet == nil ? "sit" : "eat", 2)
+        case .hiss: (name, every) = (sheet == nil ? "sit" : "hiss", 3)
+        case .jump: (name, every) = (sheet == nil ? "walk" : "jump", 1)
+        case .meow: (name, every) = (sheet == nil ? "sit" : "meow", 3)
+        case .yawn: (name, every) = (sheet == nil ? "stretch" : "yawn", 2)
+        case .hind: (name, every) = (sheet == nil ? "sit" : "hind", 3)
         }
-        sprite.image = frame(name, tick: tick, every: every)
+        // Extras a sheet lacks fall back to the nearest core animation.
+        var resolved = name
+        if let sheet, !sheet.has(name) {
+            resolved = ["alert": "sit", "swipe": "groom", "scratch": "groom", "eat": "sit", "hiss": "sit", "jump": "run", "meow": "sit", "yawn": "lie", "hind": "sit", "lick": "groom", "lickLie": "lie", "groom2": "groom"][name] ?? "sit"
+        }
+        if mode == .sleep, let sheet, sheet.has(napStyle) { resolved = napStyle }
+        if mode == .groom, let sheet, sheet.has(groomStyle) { resolved = groomStyle }
+        sprite.image = frame(resolved, tick: tick, every: every)
         ghost.image = sprite.image
         // Built-in art faces right and is mirrored when facing left (about its own width; the layer anchor stays at the origin).
         let mirror = sheet == nil && direction < 0
@@ -339,8 +378,56 @@ final class BarCat: NSView {
         /// One cat approaches the other, then both hold a pose facing each other.
         case meeting(a: Int, b: Int, hold: Cat.Mode, approaching: Bool, until: Date)
         case chase(chaser: Int, runner: Int, until: Date)
+        /// Everyone goes to `x` and holds `hold` there (a huddle by the battery, a glance at a new desktop).
+        case gather(x: CGFloat, hold: Cat.Mode, until: Date)
+        /// The others trail behind the leader, who just walks.
+        case follow(leader: Int, until: Date)
     }
     private var scene: Scene = .free
+
+    /// Things in the bar the cats notice.
+    enum Reaction {
+        /// The active desktop changed; `towardX` is the new chip's centre in this view.
+        case desktopSwitched(towardX: CGFloat)
+        /// The battery is running low; `x` is the battery icon's centre. Cats huddle up next to it.
+        case batteryLow(x: CGFloat)
+        /// The machine is working hard; cats stop and stare at the gauges on the right.
+        case load
+        /// The charger went in after the battery ran low; `x` is the battery icon's centre.
+        case charging(x: CGFloat)
+    }
+
+    func react(_ r: Reaction) {
+        guard !cats.isEmpty, pointerX == nil else { return }
+        switch r {
+        case .desktopSwitched(let x):
+            // A glance, not a migration: only the cats that are awake and not busy turn toward it, and a
+            // playful one trots a little way over before losing interest.
+            for c in cats where c.mode != .sleep && !isPetted(c) {
+                c.direction = x >= c.x + c.size.width / 2 ? 1 : -1
+                if c.mode == .walk || c.mode == .run {
+                    if Double.random(in: 0..<1) < c.personality.playful * 0.35 {
+                        c.enter(.run, for: 0.6...1.0)
+                    } else {
+                        c.enter(.alert, for: 0.8...1.5)
+                    }
+                }
+            }
+        case .batteryLow(let x):
+            if case .gather = scene { return }
+            scene = .gather(x: x - 40, hold: cats.first?.sheet == nil ? .sit : .lie, until: Date().addingTimeInterval(25))
+            for c in cats { c.enter(.walk) }
+        case .load:
+            if case .gather = scene { return }
+            scene = .gather(x: roam.upperBound - 20, hold: .alert, until: Date().addingTimeInterval(8))
+            for c in cats { c.enter(.walk) }
+        case .charging(let x):
+            // Plugged in after running low: dinner is served by the battery icon.
+            if case .gather = scene { return }
+            scene = .gather(x: x - 40, hold: .eat, until: Date().addingTimeInterval(12))
+            for c in cats { c.enter(.walk) }
+        }
+    }
     /// Pointer x in this view while it hovers the cats' strip; the cats run to catch it.
     private var pointerX: CGFloat? {
         didSet {
@@ -443,6 +530,13 @@ final class BarCat: NSView {
     /// Positions sprites, splitting a cat that is part-way through the portals across both edges.
     private func place(_ c: Cat) {
         let y = baseline(for: c), w = c.size.width
+        // Crossing a portal is a leap.
+        if let g = gap, c.sheet != nil, (c.mode == .walk || c.mode == .run), c.x < g.upperBound, c.x + w > g.lowerBound {
+            c.mode = .jump
+        } else if c.mode == .jump, Date() >= c.modeUntil, gap.map({ c.x >= $0.upperBound || c.x + w <= $0.lowerBound }) ?? true {
+            c.mode = .walk
+            c.modeUntil = .distantFuture
+        }
         // Entirely inside the notch (a slot or a layout change put it there): it has effectively crossed.
         if let g = gap, c.x >= g.lowerBound, c.x + w <= g.upperBound { settleOutsideGap(c) }
         c.sprite.frame.origin = NSPoint(x: c.x, y: y)
@@ -537,15 +631,23 @@ final class BarCat: NSView {
             cat.direction = -cat.direction
             cat.energy = min(1, cat.energy + 0.1)
         } else if Double(count) > 5 * cat.personality.clingy {
-            // Enough. Walks off, slightly offended.
+            // Enough. A hiss, then it walks off, slightly offended.
             cat.affection = max(0, cat.affection - 0.15)
-            cat.enter(.walk)
+            cat.enter(.hiss)
             cat.direction = Bool.random() ? 1 : -1
-            pettedUntil[ObjectIdentifier(cat)] = nil
+            pettedUntil[ObjectIdentifier(cat)] = cat.modeUntil
             return
         } else if count >= 3 {
-            cat.enter(cat.sheet != nil ? .lie : .sit, for: 4...7)
+            // Delighted: a little jump, then it flops down purring.
+            cat.enter(.jump)
             showHeart(above: cat)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self, weak cat] in
+                guard let self, let cat, cat.mode == .jump else { return }
+                cat.enter(cat.sheet != nil ? .lie : .sit, for: 4...7)
+                self.pettedUntil[ObjectIdentifier(cat)] = cat.modeUntil
+            }
+        } else if count == 1 {
+            cat.enter(.meow)
         } else {
             cat.enter(cat.sheet == nil ? .groom : .lie, for: 3...5)
         }
@@ -590,11 +692,15 @@ final class BarCat: NSView {
             let target = slot - c.size.width / 2
             let centre = c.x + c.size.width / 2
             if abs(centre - slot) <= 6 {
-                if c.mode != .sit { c.enter(.sit, for: 60...60) }
+                let overMe = abs(px - centre) < c.size.width / 2
+                if overMe, c.mode != .hind { c.enter(.hind, for: 60...60) }
+                else if !overMe, c.mode == .hind || c.mode == .run { c.enter(.swipe, for: 1.2...1.8) }
+                else if c.mode != .sit, c.mode != .swipe, c.mode != .hind { c.enter(.sit, for: 60...60) }
+                else if c.mode == .swipe, Date() >= c.modeUntil { c.enter(.sit, for: 60...60) }
                 c.direction = px >= centre ? 1 : -1
             } else {
                 if c.mode != .run { c.enter(.run, for: 60...60) }
-                if approach(c, to: target, speed: 6) { c.enter(.sit, for: 60...60) }
+                if approach(c, to: target, speed: 6) { c.enter(.swipe, for: 1.2...1.8) }
             }
         }
     }
@@ -609,6 +715,8 @@ final class BarCat: NSView {
         case .free: inScene = []
         case let .meeting(a, b, _, _, _): inScene = [a, b]
         case let .chase(a, b, _): inScene = [a, b]
+        case .gather: inScene = Set(cats.indices)
+        case let .follow(leader, _): inScene = Set(cats.indices).subtracting([leader])
         }
         for (i, c) in cats.enumerated() { c.updateDrives(inScene: inScene.contains(i)) }
         if let px = pointerX {
@@ -628,6 +736,10 @@ final class BarCat: NSView {
         case let .chase(chaser, runner, until):
             stepChase(chaser: chaser, runner: runner, until: until)
             for (i, c) in cats.enumerated() where i != chaser && i != runner { stepFree(c) }
+        case let .gather(x, hold, until):
+            stepGather(x: x, hold: hold, until: until)
+        case let .follow(leader, until):
+            stepFollow(leader: leader, until: until)
         }
         for c in cats {
             if c.mode != .walk, c.mode != .run { settleOutsideGap(c) }
@@ -645,7 +757,12 @@ final class BarCat: NSView {
             if approach(c, to: last - c.size.width / 2, speed: 2) { c.enter(.sit, for: 2...3); c.huntInterestUntil = nil }
             return
         }
-        if c.mode != .walk, c.mode != .run, Date() >= c.modeUntil { c.enter(.walk) }
+        if c.mode != .walk, c.mode != .run, Date() >= c.modeUntil {
+            // Waking up takes a yawn first.
+            if c.mode == .sleep, c.sheet != nil { c.enter(.yawn); return }
+            c.enter(.walk)
+        }
+        if stepPoke(c) { return }
         switch c.mode {
         case .walk, .run:
             move(c, by: c.mode == .run ? 5 : 2)
@@ -656,20 +773,98 @@ final class BarCat: NSView {
         }
     }
 
+    /// Portal poking: (turns left, resting x). The cat darts a little way into the portal and back out.
+    private var pokes: [ObjectIdentifier: (turns: Int, home: CGFloat)] = [:]
+    private func stepPoke(_ c: Cat) -> Bool {
+        guard let g = gap, var poke = pokes[ObjectIdentifier(c)] else { return false }
+        let depth: CGFloat = 14
+        let intoLeft = c.direction > 0 && c.x + c.size.width <= g.lowerBound + depth && c.x + c.size.width > g.lowerBound - 2
+        let intoRight = c.direction < 0 && c.x >= g.upperBound - depth && c.x < g.upperBound + 2
+        if c.mode != .run, c.mode != .swipe { c.enter(.swipe, for: 0.9...0.9); return true }
+        if c.mode == .swipe { if Date() >= c.modeUntil { c.enter(.run, for: 60...60) } else { return true } }
+        if intoLeft || intoRight {
+            // Head is in: turn around and come back out.
+            c.direction = -c.direction
+            poke.turns -= 1
+        }
+        let backHome = (c.direction > 0 && c.x > poke.home + 1) || (c.direction < 0 && c.x < poke.home - 1)
+        if poke.turns <= 0 && backHome {
+            pokes[ObjectIdentifier(c)] = nil
+            c.enter(.sit, for: 1...2)
+            c.direction = -c.direction
+            c.boredom = max(0, c.boredom - 0.3)
+            return true
+        }
+        if backHome { c.direction = -c.direction }
+        c.x += c.direction * 4
+        pokes[ObjectIdentifier(c)] = poke
+        return true
+    }
+
+    private func startFollow(leader: Cat) {
+        guard let i = cats.firstIndex(where: { $0 === leader }) else { return }
+        scene = .follow(leader: i, until: Date().addingTimeInterval(Double.random(in: 6...10)))
+        leader.enter(.walk)
+        for c in cats where c !== leader { c.enter(.walk) }
+    }
+
+    private func stepFollow(leader: Int, until: Date) {
+        let l = cats[leader]
+        if l.mode != .walk { l.enter(.walk) }
+        move(l, by: 2)
+        var slot = l.x
+        for (i, c) in cats.enumerated() where i != leader {
+            slot -= (c.size.width + 6) * l.direction
+            if approach(c, to: slot, speed: 3) { c.direction = l.direction }
+        }
+        if Date() >= until { scene = .free }
+    }
+
+    private func stepGather(x: CGFloat, hold: Cat.Mode, until: Date) {
+        if Date() >= until {
+            scene = .free
+            for c in cats { c.enter(.walk) }
+            return
+        }
+        let n = CGFloat(cats.count)
+        for (i, c) in cats.enumerated() where !isPetted(c) {
+            let target = x + (CGFloat(i) - (n - 1) / 2) * (c.size.width + 2) - c.size.width / 2
+            if c.mode == hold { c.modeUntil = until; continue }
+            if c.mode != .walk { c.enter(.walk) }
+            if approach(c, to: target, speed: 3) {
+                c.enter(hold, for: 60...60)
+                c.direction = x >= c.x + c.size.width / 2 ? 1 : -1
+            }
+        }
+    }
+
     /// Picks what a walking cat does next from its drives: tired cats nap, bored playful cats run or start a
     /// scene, cats that were petted groom. Evaluated about once a second.
     private func decide(_ c: Cat) {
         let p = c.personality
+        // Cats keep a daily rhythm: sleepy after lunch, lively in the morning.
+        let hour = Calendar.current.component(.hour, from: Date())
+        let sleepy: Double = (13...16).contains(hour) ? 1.6 : (8...11).contains(hour) ? 0.6 : 1
         var options: [(weight: Double, act: () -> Void)] = [
             (0.75, {}),  // keep walking
-            (pow(1 - c.energy, 2) * 1.2 * p.lazy, { c.enter(.sleep, for: (8 * p.lazy)...(20 * p.lazy)) }),
+            (pow(1 - c.energy, 2) * 1.2 * p.lazy * sleepy, { c.enter(.sleep, for: (8 * p.lazy)...(20 * p.lazy)) }),
             ((1 - c.energy) * 0.35 + 0.08, { c.enter(.sit) }),
             (0.06 + c.affection * 0.3, { c.enter(.groom) }),
+            (0.04 + c.boredom * 0.15, { c.enter(.scratch) }),
             (0.05 + (1 - c.energy) * 0.1, { c.enter(c.sheet == nil ? .stretch : .lie) }),
             (c.boredom * p.playful * 0.5 * c.energy, { c.enter(.run) }),
         ]
         if cats.count >= 2, case .free = scene {
             options.append((c.boredom * p.playful * 0.45 + c.affection * p.clingy * 0.25, { self.startScene(from: c) }))
+        }
+        if cats.count >= 3, case .free = scene {
+            options.append((c.affection * p.clingy * 0.2 + 0.03, { self.startFollow(leader: c) }))
+        }
+        if let g = gap, p.playful > 1.05, c.boredom > 0.3 {
+            // A playful cat near a portal pokes its head in and out a few times before going through.
+            let nearLeft = abs(c.x + c.size.width - g.lowerBound) < 30 && c.direction > 0
+            let nearRight = abs(c.x - g.upperBound) < 30 && c.direction < 0
+            if nearLeft || nearRight { options.append((0.9 * p.playful, { self.pokes[ObjectIdentifier(c)] = (3, c.x) })) }
         }
         let total = options.reduce(0) { $0 + $1.weight }
         var r = Double.random(in: 0..<total)
@@ -727,19 +922,30 @@ final class BarCat: NSView {
             cats[a].enter(.walk); cats[b].enter(.walk)
         } else if initiator.affection > 0.4 || initiator.personality.clingy > 1.15 {
             scene = .meeting(a: a, b: b, hold: .groom, approaching: true, until: .distantFuture)
-            cats[a].enter(.run, for: 60...60); cats[b].enter(.sit, for: 60...60)
+            look(initiator, at: partner); cats[b].enter(.sit, for: 60...60)
         } else if initiator.boredom > 0.5 && partner.energy > 0.4 {
             scene = .chase(chaser: a, runner: b, until: Date().addingTimeInterval(Double.random(in: 3...5)))
             cats[a].enter(.run, for: 60...60); cats[b].enter(.run, for: 60...60)
         } else {
             scene = .meeting(a: a, b: b, hold: .sit, approaching: true, until: .distantFuture)
-            cats[a].enter(.run, for: 60...60); cats[b].enter(.sit, for: 60...60)
+            look(initiator, at: partner); cats[b].enter(.sit, for: 60...60)
         }
+    }
+
+    /// Before heading over, a cat stops and looks at the one it means to visit.
+    private func look(_ c: Cat, at other: Cat) {
+        c.direction = other.x >= c.x ? 1 : -1
+        c.enter(.sit, for: 0.7...1.1)
     }
 
     private func stepMeeting(a: Int, b: Int, hold: Cat.Mode, approaching: Bool, until: Date) {
         let ca = cats[a], cb = cats[b]
         if approaching {
+            // Still looking? Wait, then set off.
+            if ca.mode == .sit, hold != .sleep {
+                guard Date() >= ca.modeUntil else { return }
+                ca.enter(.run, for: 60...60)
+            }
             // Meet where b is: a comes to sit right beside b, both facing each other.
             let gap: CGFloat = 4
             let target = cb.x > ca.x ? cb.x - ca.size.width - gap : cb.x + cb.size.width + gap
@@ -781,8 +987,8 @@ final class BarCat: NSView {
         if cornered || Date() >= until {
             r.direction = -r.direction
             c.direction = -r.direction
-            r.enter(.sit, for: 2...4)
-            c.enter(.sit, for: 2...4)
+            r.enter(cornered ? .hiss : .sit, for: 2...4)
+            c.enter(cornered ? .swipe : .sit, for: 2...4)
             scene = .meeting(a: chaser, b: runner, hold: .sit, approaching: false, until: Date().addingTimeInterval(2))
         }
     }
