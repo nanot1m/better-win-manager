@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.20] - 2026-10-19
+
+### Fixed
+- Unplugging a monitor left things in a mess: windows parked in the old screen's corner were pulled onto the remaining screen and re-parked in a loop, floating windows came back with the old screen's size, and windows of apps that had been hidden for a while were dropped from their grid when unhidden because the two-second read grace had long expired. Frames remembered on a vanished screen are now fitted to the current one, re-parking gives up after three attempts, and the grace window is kept open for as long as a window is carried for a known reason. When a tracked window does leave the snapshot the log now records why.
+
 ## [0.11.19] - 2026-10-19
 
 ### Fixed

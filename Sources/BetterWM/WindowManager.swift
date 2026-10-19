@@ -390,6 +390,21 @@ final class WindowManager {
         system.execute([.raise(id)])
     }
 
+    /// Moves and shrinks a frame so it lies within the visible area of the screen nearest to it; frames
+    /// remembered on a monitor that has since been unplugged would otherwise come back off screen or oversized.
+    func fitToScreen(_ f: CGRect) -> CGRect {
+        let screens = system.screens()
+        guard let screen = screens.first(where: { $0.area.contains(f.center) })
+            ?? screens.min(by: { hypot($0.area.midX - f.midX, $0.area.midY - f.midY) < hypot($1.area.midX - f.midX, $1.area.midY - f.midY) }) else { return f }
+        let a = screen.area
+        var r = f
+        r.size.width = min(r.width, a.width)
+        r.size.height = min(r.height, a.height)
+        r.origin.x = min(max(r.minX, a.minX), a.maxX - r.width)
+        r.origin.y = min(max(r.minY, a.minY), a.maxY - r.height)
+        return r
+    }
+
     /// Parks windows of inactive workspaces and restores returning floating ones; tiled ones follow their grid.
     private func applyVirtualParking(_ snap: Snapshot) {
         guard let sets = virtualSets else { return }
@@ -420,6 +435,7 @@ final class WindowManager {
                         return abs(f.minX - (r.maxX - 2)) <= 100 && abs(f.minY - (r.maxY - 2)) <= 100
                     }
                 },
+                fit: { self.fitToScreen($0) },
                 hide: { pid in
                     // Hiding the frontmost app lets macOS pick the next one (usually Finder, with no window);
                     // hand focus to the destination workspace's top app first, or to ourselves if it is empty.
@@ -622,7 +638,7 @@ final class WindowManager {
                 for (id, frame) in layout.restoreFloating(space: savedSpace.id, candidates: candidates, exactTitle: !atLaunch) {
                     v.move(id, to: d.workspace)
                     state.floating.insert(id)
-                    system.execute([.setFrame(id, frame)])
+                    system.execute([.setFrame(id, fitToScreen(frame))])
                     pool.removeAll { $0.id == id }
                     Log.write("restore", "\(describe(id)) floats on workspace \(d.workspace + 1) at \(frame)")
                     placed = true

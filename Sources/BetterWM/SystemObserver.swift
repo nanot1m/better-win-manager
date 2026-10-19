@@ -85,9 +85,17 @@ final class SystemObserver {
             // holds. A window merely kept off screen by its app after the user closed it has no such excuse.
             if let cached = lastInfo[id], alive(id), hasExcuse(cached) {
                 infos.append(cached)
+                // The excuse keeps the grace window open, so an app that was hidden for an hour still gets the
+                // two seconds it needs to become readable after unhiding.
+                lastReadAt[id] = Date()
                 if keptFromCache.insert(id).inserted { Log.write("snapshot", "#\(id) unreadable via Accessibility but alive; keeping last known state") }
             } else {
                 keptFromCache.remove(id)
+                if let cached = lastInfo[id] {
+                    let app = NSRunningApplication(processIdentifier: cached.pid)
+                    let age = lastReadAt[id].map { Int(Date().timeIntervalSince($0)) } ?? -1
+                    Log.write("snapshot", "#\(id) \(cached.bundleID ?? "?") left the snapshot: alive=\(alive(id)) hidden=\(app?.isHidden ?? false) unresponsive=\(AXResponsiveness.isUnresponsive(cached.pid)) lastRead=\(age)s ago")
+                }
             }
         }
         for i in infos { lastInfo[i.id] = i }
