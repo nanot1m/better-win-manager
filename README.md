@@ -12,6 +12,14 @@ Column-based tiling window manager for macOS. Tile windows by ⌥-dragging them 
 
 ## Install
 
+### Homebrew
+
+```sh
+brew install --cask --no-quarantine nanot1m/tap/betterwm
+```
+
+`--no-quarantine` skips Gatekeeper's block on the ad-hoc signed app (see below). The cask lives in [nanot1m/homebrew-tap](https://github.com/nanot1m/homebrew-tap) and is updated by the release workflow.
+
 ### From a release
 
 Download `BetterWM-x.y.z.zip` from [Releases](https://github.com/nanot1m/better-win-manager/releases), unzip, and move `BetterWM.app` to Applications.

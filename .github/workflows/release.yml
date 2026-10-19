@@ -28,3 +28,17 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" dist/*.zip --generate-notes --title "BetterWM $v"
           fi
+      - name: Update Homebrew tap
+        # Needs a TAP_TOKEN secret: a fine-grained PAT with contents read/write on nanot1m/homebrew-tap.
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then echo "TAP_TOKEN not set; skipping tap update"; exit 0; fi
+          v="${GITHUB_REF_NAME#v}"
+          sha=$(shasum -a 256 dist/BetterWM-"$v".zip | cut -d' ' -f1)
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/nanot1m/homebrew-tap.git" tap
+          sed -i '' -E "s/^  version \".*\"/  version \"$v\"/; s/^  sha256 \".*\"/  sha256 \"$sha\"/" tap/Casks/betterwm.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "betterwm $v" && git push
