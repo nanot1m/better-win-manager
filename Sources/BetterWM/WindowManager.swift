@@ -279,6 +279,30 @@ final class WindowManager {
         }
     }
 
+    /// Reorders virtual workspaces (native Spaces offer no API for it): everything keyed by workspace follows.
+    func moveDesktop(from: Int, to: Int) {
+        guard let v = virtualWS else { return }
+        let map = v.moveWorkspace(from: from, to: to)
+        guard !map.isEmpty else { return }
+        func remap(_ id: SpaceID) -> SpaceID {
+            guard let d = VirtualWorkspaces.decode(id), d.real == v.realSpace, let ws = map[d.workspace] else { return id }
+            return v.spaceID(workspace: ws, screenIndex: d.screenIndex)
+        }
+        state.grids = Dictionary(uniqueKeysWithValues: state.grids.map { (remap($0.key), $0.value) })
+        state.seen = Dictionary(uniqueKeysWithValues: state.seen.map { (remap($0.key), $0.value) })
+        state.retileRequested = Set(state.retileRequested.map(remap))
+        for i in lastSaved.spaces.indices { lastSaved.spaces[i].id = remap(lastSaved.spaces[i].id) }
+        chipOrder = Dictionary(uniqueKeysWithValues: chipOrder.compactMap { k, order in map[k].map { ($0, order) } })
+        Log.write("desktop", "move workspace \(from + 1) to position \(to + 1)")
+        tick()
+        onDesktopChange?()
+    }
+
+    func moveCurrentDesktop(left: Bool) {
+        guard let v = virtualWS else { return }
+        moveDesktop(from: v.active, to: v.active + (left ? -1 : 1))
+    }
+
     func switchDesktop(next: Bool) {
         if let v = virtualWS {
             switchDesktop(v.active + (next ? 1 : -1))
@@ -382,10 +406,19 @@ final class WindowManager {
                 },
                 isTiled: { self.state.isTiled($0) }, frame: { snap.window($0)?.frame },
                 setFrame: { self.system.execute([.setFrame($0, $1)]) }, parkOrigin: { f in
-                    // Bottom-right corner of the screen the window is on, leaving two points visible.
-                    let screen = NSScreen.screens.first { $0.frame.toCocoa().contains(f.center) } ?? NSScreen.screens[0]
-                    let r = screen.frame.toCocoa()
-                    return CGPoint(x: r.maxX - 2, y: r.maxY - 2)
+                    // Bottom-right corner of the screen the window is on, leaving two points visible. A window
+                    // already parked has its centre off every screen; keep it with the nearest corner.
+                    func corner(_ s: NSScreen) -> CGPoint { let r = s.frame.toCocoa(); return CGPoint(x: r.maxX - 2, y: r.maxY - 2) }
+                    let screen = NSScreen.screens.first { $0.frame.toCocoa().contains(f.center) }
+                        ?? NSScreen.screens.min { hypot(corner($0).x - f.minX, corner($0).y - f.minY) < hypot(corner($1).x - f.minX, corner($1).y - f.minY) }
+                        ?? NSScreen.screens[0]
+                    return corner(screen)
+                },
+                isInCorner: { f in
+                    NSScreen.screens.contains { s in
+                        let r = s.frame.toCocoa()
+                        return abs(f.minX - (r.maxX - 2)) <= 100 && abs(f.minY - (r.maxY - 2)) <= 100
+                    }
                 },
                 hide: { pid in
                     // Hiding the frontmost app lets macOS pick the next one (usually Finder, with no window);
@@ -393,7 +426,11 @@ final class WindowManager {
                     if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { self.activateTopApp(in: v) }
                     NSRunningApplication(processIdentifier: pid)?.hide()
                 },
-                unhide: { NSRunningApplication(processIdentifier: $0)?.unhide() })
+                unhide: { [weak self] pid in
+                    NSRunningApplication(processIdentifier: pid)?.unhide()
+                    // Frames set while an app is still unhiding can be lost; look again shortly after.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self?.scheduleTick() }
+                })
         }
     }
 

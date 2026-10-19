@@ -4,6 +4,15 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.11.18] - 2026-10-19
+
+### Fixed
+- Desktops created on demand (sending a window to desktop 5 with four configured) were not recreated at launch; their saved windows ended up on the last configured desktop. Restoring a window to a higher desktop now creates it.
+- Switching to a workspace holding one window of an app whose other windows live elsewhere sometimes showed all of them: the corner move issued while the app was still unhiding was lost. Parked windows found away from the corner are parked again, and a follow-up pass runs shortly after every unhide.
+
+### Added
+- Virtual workspaces can be reordered: drag a desktop chip in the status bar to a new slot, or use the Move This Desktop Left/Right menu items and the `desktopMoveLeft`/`desktopMoveRight` actions (unbound by default). Grids, floating windows and saved layouts follow the desktop. Native macOS Spaces cannot be reordered this way.
+
 ## [0.11.17] - 2026-10-18
 
 ### Changed

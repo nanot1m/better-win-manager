@@ -12,6 +12,8 @@ final class StatusBar {
     private let media = MediaService()
     private var inputSourceObserver: NSObjectProtocol?
     var onSelectDesktop: ((Int) -> Void)?
+    /// A desktop chip was dragged to a new position.
+    var onReorderDesktop: ((Int, Int) -> Void)?
     /// The menu widget was clicked; the app pops its menu at the given view.
     var onMenuRequested: ((NSView) -> Void)?
     var desktopCount: () -> Int = { Spaces.desktops().count }
@@ -85,6 +87,7 @@ final class StatusBar {
             let w = BarWindow(frame: frame, screen: screen)
             w.view.apply(config, avoidNotch: atScreenTop(screen))
             w.view.onSelectDesktop = { [weak self] i in self?.onSelectDesktop?(i) }
+            w.view.onReorderDesktop = { [weak self] from, to in self?.onReorderDesktop?(from, to) }
             w.view.onMenuRequested = { [weak self] v in self?.onMenuRequested?(v) }
             w.view.onPlayPause = { [weak self] in self?.media.togglePlayPause() }
             windows.append(w)
@@ -204,6 +207,8 @@ private final class ChipButton: NSButton {
 /// view accepts it.
 private final class ChipView: NSView {
     var onClick: (() -> Void)?
+    /// Called with the chip's centre x (in the superview) after it was dragged and released.
+    var onDrop: ((CGFloat) -> Void)?
     let number = NSTextField(labelWithString: "")
     private let stack = NSStackView()
     private var icons: [NSImageView] = []
@@ -248,7 +253,28 @@ private final class ChipView: NSView {
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func mouseDown(with event: NSEvent) { onClick?() }
+
+    /// A click selects the desktop; a drag past a few points slides the chip along and drops it in a new slot.
+    override func mouseDown(with event: NSEvent) {
+        guard let window else { return }
+        let start = event.locationInWindow.x
+        var dragging = false
+        var dx: CGFloat = 0
+        while let e = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+            dx = e.locationInWindow.x - start
+            if e.type == .leftMouseDragged {
+                if !dragging, abs(dx) > 4 { dragging = true; layer?.zPosition = 10; alphaValue = 0.85 }
+                if dragging { layer?.setAffineTransform(CGAffineTransform(translationX: dx, y: 0)) }
+            } else {
+                break
+            }
+        }
+        layer?.setAffineTransform(.identity)
+        layer?.zPosition = 0
+        alphaValue = 1
+        if dragging { onDrop?(frame.midX + dx) } else { onClick?() }
+        (window as? NSPanel)?.orderBack(nil)
+    }
 }
 
 final class BarView: NSView {
@@ -273,6 +299,7 @@ final class BarView: NSView {
     }
 
     var onSelectDesktop: ((Int) -> Void)?
+    var onReorderDesktop: ((Int, Int) -> Void)?
     var onMenuRequested: ((NSView) -> Void)?
     var onPlayPause: (() -> Void)?
     private let screen: NSScreen
@@ -488,6 +515,7 @@ final class BarView: NSView {
             let c = ChipView()
             let i = chips.count
             c.onClick = { [weak self] in self?.onSelectDesktop?(i) }
+            c.onDrop = { [weak self] midX in self?.dropChip(i, at: midX) }
             chips.append(c)
             left.insertArrangedSubview(c, at: chips.count - 1)
         }
@@ -545,6 +573,13 @@ final class BarView: NSView {
         }
         show(.clock, m.clock != nil)
         clockLabel.stringValue = m.clock ?? ""
+    }
+
+    /// The dropped chip's new index is the number of other visible chips whose centre lies left of the drop point.
+    private func dropChip(_ index: Int, at midX: CGFloat) {
+        let others = chips.enumerated().filter { !$0.element.isHidden && $0.offset != index }
+        let target = others.filter { $0.element.frame.midX < midX }.count
+        if target != index { onReorderDesktop?(index, target) }
     }
 
     @objc private func menuPressed() { onMenuRequested?(menuButton) }

@@ -63,7 +63,27 @@ final class VirtualWorkspaces {
         for w in windows { if let ws = membership[w.id] { homeByPid[w.pid] = ws } }
     }
     func forget(_ w: WindowID) { membership[w] = nil; parkedFrames[w] = nil; parked.remove(w) }
-    func move(_ w: WindowID, to ws: Int) { membership[w] = max(0, min(count - 1, ws)) }
+    /// A saved layout may name a workspace beyond the configured count (created on demand last time); it comes back.
+    func move(_ w: WindowID, to ws: Int) {
+        if ws >= count { setCount(ws + 1) }
+        membership[w] = max(0, ws)
+    }
+
+    /// Moves workspace `from` to position `to`, shifting the ones in between. Returns old → new index for
+    /// every workspace so callers can remap anything keyed by workspace.
+    @discardableResult
+    func moveWorkspace(from: Int, to: Int) -> [Int: Int] {
+        guard from != to, (0..<count).contains(from), (0..<count).contains(to) else { return [:] }
+        var order = Array(0..<count)
+        order.remove(at: from)
+        order.insert(from, at: to)
+        var map: [Int: Int] = [:]
+        for (newIndex, oldIndex) in order.enumerated() { map[oldIndex] = newIndex }
+        membership = membership.mapValues { map[$0] ?? $0 }
+        homeByPid = homeByPid.mapValues { map[$0] ?? $0 }
+        active = map[active] ?? active
+        return map
+    }
 
     /// Claims a window for the active workspace and drops any parking state so the layout can place it.
     func claimForActive(_ w: WindowID) {
@@ -95,7 +115,7 @@ final class VirtualWorkspaces {
     /// out by the reconciler once the workspace is active.
     func apply(windows: [WindowID], pid: (WindowID) -> pid_t?, hideable: (pid_t) -> Bool,
                isTiled: (WindowID) -> Bool, frame: (WindowID) -> CGRect?,
-               setFrame: (WindowID, CGRect) -> Void, parkOrigin: (CGRect) -> CGPoint,
+               setFrame: (WindowID, CGRect) -> Void, parkOrigin: (CGRect) -> CGPoint, isInCorner: (CGRect) -> Bool,
                hide: (pid_t) -> Void, unhide: (pid_t) -> Void) {
         for w in windows { adopt(w) }
         // Hidden apps come back as soon as one of their windows is on the active workspace, whether or not
@@ -137,6 +157,13 @@ final class VirtualWorkspaces {
                     parked.remove(w)
                     Log.write("park", "unpark #\(w)")
                     if let f = parkedFrames.removeValue(forKey: w) { setFrame(w, f) }
+                } else if shouldPark, parked.contains(w), let f = frame(w) {
+                    // Already parked but not in the corner: the move was lost (the app was mid-unhide, or it
+                    // repositioned itself). Park again rather than leave it in view.
+                    if !isInCorner(f) {
+                        setFrame(w, CGRect(origin: parkOrigin(f), size: f.size))
+                        Log.write("park", "re-park #\(w) (was at \(Int(f.minX)),\(Int(f.minY)))")
+                    }
                 }
             }
         }

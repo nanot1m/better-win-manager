@@ -57,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.system.topInset = { [weak self] screen in self?.bar.inset(for: screen) ?? 0 }
         bar.onLayoutChange = { [weak self] in self?.manager.apply() }
         bar.onSelectDesktop = { [weak self] in self?.manager.switchDesktop($0) }
+        bar.onReorderDesktop = { [weak self] from, to in self?.manager.moveDesktop(from: from, to: to) }
         bar.onMenuRequested = { [weak self] view in
             guard let self else { return }
             let menu = self.buildMenu()
@@ -201,6 +202,8 @@ extension AppDelegate {
         sendMenu.delegate = self
         menu.addItem(withTitle: "Send Focused Window to", action: nil, keyEquivalent: "").submenu = sendMenu
         add("Toggle Stacked Layout on This Screen", #selector(toggleStack), "s")
+        add("Move This Desktop Left", #selector(moveDesktopLeft), "")
+        add("Move This Desktop Right", #selector(moveDesktopRight), "")
         add("Retile Current Screen", #selector(retile), "r")
         add("Equalize Sizes", #selector(equalize), "e")
         menu.addItem(.separator())
@@ -278,6 +281,8 @@ extension AppDelegate {
             "equalize": { [weak self] in self?.manager.equalize() },
             "pause": { [weak self] in self?.togglePause() },
             "desktopNext": { [weak self] in self?.manager.switchDesktop(next: true) },
+            "desktopMoveLeft": { [weak self] in self?.manager.moveCurrentDesktop(left: true) },
+            "desktopMoveRight": { [weak self] in self?.manager.moveCurrentDesktop(left: false) },
             "sendToNextDesktop": { [weak self] in self?.manager.sendFocusedWindow(toNext: true) },
             "sendToPreviousDesktop": { [weak self] in self?.manager.sendFocusedWindow(toNext: false) },
             "desktopPrevious": { [weak self] in self?.manager.switchDesktop(next: false) },
@@ -319,6 +324,8 @@ extension AppDelegate {
         if let dir = sender.representedObject as? Move { manager.moveFocused(dir) }
     }
     @objc func retile() { manager.retileCurrentScreen() }
+    @objc func moveDesktopLeft() { manager.moveCurrentDesktop(left: true) }
+    @objc func moveDesktopRight() { manager.moveCurrentDesktop(left: false) }
     @objc func toggleStack() { manager.toggleStackedLayout() }
     @objc func equalize() { manager.equalize() }
     @objc func reloadConfig() {

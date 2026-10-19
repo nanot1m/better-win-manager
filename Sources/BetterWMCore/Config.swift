@@ -186,6 +186,7 @@ public struct Config {
         ("retile", "Retile current screen"),
         ("equalize", "Equalize sizes"), ("pause", "Pause / resume tiling"), ("refreshRing", "Re-measure window corners for the focus ring"),
         ("desktopNext", "Next desktop"), ("desktopPrevious", "Previous desktop"),
+        ("desktopMoveLeft", "Move this desktop left (virtual workspaces)"), ("desktopMoveRight", "Move this desktop right (virtual workspaces)"),
         ("sendToNextDesktop", "Send focused window to next desktop"),
         ("sendToPreviousDesktop", "Send focused window to previous desktop"),
     ] + (1...9).map { ("desktop\($0)", "Switch to desktop \($0)") }
