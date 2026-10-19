@@ -7,7 +7,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 ## [0.12.0] - 2026-10-19
 
 ### Added
-- Homebrew tap: `brew install --cask --no-quarantine nanot1m/tap/betterwm`. The release workflow updates the cask on every tag.
+- Homebrew tap: `brew install --cask nanot1m/tap/betterwm`, then clear the quarantine flag as for a downloaded zip. The release workflow updates the cask on every tag.
 
 ### Removed
 - The native macOS Spaces mode (`workspaces = native`). Virtual workspaces are the only mode now; the `workspaces` config key is accepted and ignored, so older files load unchanged. Gone with it: synthetic Dock-swipe Space switching, the SkyLight window-move bridge vendored from WhichSpace, the title-bar-drag fallback for moving windows between Spaces, and the native/virtual migrations.

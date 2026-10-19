@@ -15,10 +15,11 @@ Column-based tiling window manager for macOS. Tile windows by ⌥-dragging them 
 ### Homebrew
 
 ```sh
-brew install --cask --no-quarantine nanot1m/tap/betterwm
+brew install --cask nanot1m/tap/betterwm
+xattr -dr com.apple.quarantine /Applications/BetterWM.app
 ```
 
-`--no-quarantine` skips Gatekeeper's block on the ad-hoc signed app (see below). The cask lives in [nanot1m/homebrew-tap](https://github.com/nanot1m/homebrew-tap) and is updated by the release workflow.
+The second line clears Gatekeeper's block on the ad-hoc signed app (see below); current Homebrew no longer offers `--no-quarantine`. The cask lives in [nanot1m/homebrew-tap](https://github.com/nanot1m/homebrew-tap) and is updated by the release workflow.
 
 ### From a release
 
