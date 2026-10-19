@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.12.3] - 2026-10-19
+
+### Changed
+- Switching to the desktop that is already active (its hotkey, chip or menu item) cycles focus through its windows instead of doing nothing.
+
 ## [0.12.2] - 2026-10-19
 
 ### Changed

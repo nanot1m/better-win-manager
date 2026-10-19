@@ -204,7 +204,13 @@ final class WindowManager {
 
     func switchDesktop(_ index: Int) {
         let v = virtualWS
-        guard index != v.active, index >= 0 else { return }
+        guard index >= 0 else { return }
+        // Asking for the desktop you are already on cycles focus through its windows instead.
+        if index == v.active {
+            Log.write("desktop", "workspace \(index + 1) already active; focusing next window")
+            focusNext()
+            return
+        }
         // Workspaces are created on demand: asking for 6 with 4 configured makes 5 and 6.
         if index >= v.count { v.setCount(index + 1) }
         // Hide the ring during the switch so it doesn't linger on the parked window.
