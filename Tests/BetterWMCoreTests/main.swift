@@ -19,6 +19,7 @@ struct ReconcilerTests {
         c.gap = 0
         c.outerGap = 0
         c.floatSmallWindows = false
+        c.autoTile = true
         return c
     }
 
@@ -173,7 +174,7 @@ struct ReconcilerTests {
         expect(c.focusRingColor == "4C8BF5", #function, #line)  // v1 "#" stripped by migration
         expect(c.barBackground == "1E1E1ECC", #function, #line)
         expect(c.gap == 4, #function, #line)
-        expect(c.focusRingWidth == 3, #function, #line)
+        expect(c.focusRingWidth == Config().focusRingWidth, #function, #line)  // the commented line must not apply
     }
 
     func testSavedLayoutRoundTripAndMatching() {
@@ -251,7 +252,7 @@ struct ReconcilerTests {
     func testBarWidgetsCompatibility() {
         // Old files only have the flags: the list is derived from them in the default order.
         let old = Config.parse("version = 3\nbarWifi = false\nbarCpu = false\n")
-        expect(old.barWidgets == Config.BarWidget.allCases.filter { $0 != .wifi && $0 != .cpu }, #function, #line)
+        expect(old.barWidgets == Config().barWidgets.filter { $0 != .wifi && $0 != .cpu }, #function, #line)
         // New files carry the order; the flags mirror it for older versions reading the file.
         // A v2 file with an explicit list gains the menu widget added in v3; a v3 file is taken as is.
         let v2 = Config.parse("version = 2\nbarWidgets = clock, battery, weather\n")

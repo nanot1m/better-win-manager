@@ -4,6 +4,25 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.12.1] - 2026-10-19
+
+### Fixed
+- A config reload or any setting change folded on-demand desktops (5 and up) back into the last configured one, moving their windows there. The configured count is now a minimum; extra desktops go away only once empty.
+
+### Added
+- The active workspace of each desktop is remembered and restored at launch.
+
+### Removed
+- The workspace count setting (`virtualWorkspaces`): desktops are created on demand and trimmed when empty, so a fixed number served no purpose. The key is accepted and ignored.
+- The "glow underneath" focus ring style (`focusRingStyle`); the ring is always an outline. The key is accepted and ignored.
+
+### Changed
+- New defaults for fresh installs: status bar on with a black background, white text and orange accents, keyboard/Wi-Fi/battery/clock/menu widgets, app-only window title, 32pt bar with 24pt padding, orange focus ring (6pt, 24pt radius) with a teal ring for floating windows, auto-tiling off. Existing configs are untouched.
+- Switch to Desktop and Send to Desktop list all nine desktops; ones that do not exist yet are marked (new) and created when chosen.
+- The settings window no longer puts the cursor into the first text field when it opens or when you switch tabs.
+- The menu is grouped into Window, Screen, Desktops, Tiling and BetterWM sections, with the diagnostics items in a submenu.
+- Menu items, including the Move, Switch to Desktop and Send to Desktop submenus, show the hotkeys you configured instead of made-up ⌘ shortcuts that never worked from the menu bar.
+
 ## [0.12.0] - 2026-10-19
 
 ### Added

@@ -2,7 +2,7 @@ import BetterWMCore
 import Cocoa
 import UniformTypeIdentifiers
 
-final class ConfigWindow: NSObject {
+final class ConfigWindow: NSObject, NSTabViewDelegate {
     private var window: NSWindow?
     var windowNumber: Int? { window?.windowNumber }
 
@@ -42,7 +42,6 @@ final class ConfigWindow: NSObject {
     private var stackNarrowField: NSTextField!
     private var switcherThumbsCheck: NSButton!
     private var switcherCheck: NSButton!
-    private var virtualCountField: NSTextField!
     private var overlayCheck: NSButton!
     private var sliders: [(KeyPath<Config, CGFloat>, WritableKeyPath<Config, CGFloat>, NSSlider, NSTextField)] = []
     private var savedLabel: NSTextField!
@@ -51,7 +50,6 @@ final class ConfigWindow: NSObject {
     private var smallW: NSTextField!
     private var smallH: NSTextField!
     private var ringCheck: NSButton!
-    private var ringStyle: NSPopUpButton!
     private var ringColor: NSColorWell!
     private var ringFloatingSame: NSButton!
     private var ringFloatingColor: NSColorWell!
@@ -97,10 +95,17 @@ final class ConfigWindow: NSObject {
         window?.center()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        // Opening a settings window should not drop the cursor into the first text field.
+        window?.makeFirstResponder(nil)
+    }
+
+    func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        DispatchQueue.main.async { [weak self] in self?.window?.makeFirstResponder(nil) }
     }
 
     private func build() -> NSWindow {
         let tabs = NSTabView()
+        tabs.delegate = self
         tabs.tabViewType = .topTabsBezelBorder
         tabs.translatesAutoresizingMaskIntoConstraints = false
         tabs.heightAnchor.constraint(greaterThanOrEqualToConstant: 440).isActive = true
@@ -202,17 +207,6 @@ final class ConfigWindow: NSObject {
             modifierButtons[key] = b
             mods.addArrangedSubview(b)
         }
-        virtualCountField = NSTextField(string: "4")
-        virtualCountField.widthAnchor.constraint(equalToConstant: 48).isActive = true
-        virtualCountField.alignment = .right
-        let wsHint = NSTextField(wrappingLabelWithString: "Each macOS desktop gets this many workspaces; more are created on demand. Windows of the other workspaces are hidden, or parked just off the bottom-right corner when their app also has windows here, so switching is instant.")
-        wsHint.font = .systemFont(ofSize: 11)
-        wsHint.textColor = .secondaryLabelColor
-        wsHint.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
-        let workspaces = box("Desktops", rows: [
-            [label("Workspaces"), NSStackView(views: [virtualCountField, NSTextField(labelWithString: "1–9")])],
-            [NSView(), wsHint],
-        ])
         stackOffsetField = NSTextField(string: "48")
         stackOffsetField.widthAnchor.constraint(equalToConstant: 56).isActive = true
         stackOffsetField.alignment = .right
@@ -241,11 +235,6 @@ final class ConfigWindow: NSObject {
         ])
         ringCheck = NSButton(checkboxWithTitle: "Highlight the focused window", target: nil, action: nil)
         ringFloating = NSButton(checkboxWithTitle: "Also highlight floating (untiled) windows", target: nil, action: nil)
-        ringStyle = NSPopUpButton()
-        for st in Config.FocusRingStyle.allCases {
-            ringStyle.addItem(withTitle: st.title)
-            ringStyle.lastItem?.representedObject = st.rawValue
-        }
         ringColor = NSColorWell()
         ringColor.widthAnchor.constraint(equalToConstant: 60).isActive = true
         ringColor.heightAnchor.constraint(equalToConstant: 24).isActive = true
@@ -267,14 +256,13 @@ final class ConfigWindow: NSObject {
         let ring = box("Focus Ring", rows: [
             [label("Focused window"), ringCheck],
             [NSView(), ringFloating],
-            [label("Style"), ringStyle],
             [label("Color"), ringColor],
             [label("Floating"), NSStackView(views: [ringFloatingColor, ringFloatingSame])],
             [label("Thickness"), NSStackView(views: [ringWidth, ringWidthLabel])],
             [label("Corners"), ringAutoRadius],
             [label("Fallback radius"), NSStackView(views: [ringRadius, ringRadiusLabel])],
         ])
-        return [layout, tiling, stacked, workspaces, ring]
+        return [layout, tiling, stacked, ring]
     }
 
     @objc private func switcherChanged() {
@@ -606,7 +594,6 @@ final class ConfigWindow: NSObject {
         switcherThumbsCheck.state = config.switcherThumbnails ? .on : .off
         switcherCheck.state = config.switcher ? .on : .off
         switcherChanged()
-        virtualCountField.stringValue = String(config.virtualWorkspaces)
         overlayCheck.state = config.actionOverlay ? .on : .off
         strategyPopup.selectItem(at: Config.AutoTileStrategy.allCases.firstIndex(of: config.autoTileStrategy) ?? 0)
         let mods = config.dragModifiers.lowercased().split(separator: "+").map(String.init)
@@ -614,7 +601,6 @@ final class ConfigWindow: NSObject {
         for (k, r) in recorders { r.spec = config.hotkeys[k] }
         ringCheck.state = config.focusRing ? .on : .off
         ringFloating.state = config.focusRingFloating ? .on : .off
-        ringStyle.selectItem(at: Config.FocusRingStyle.allCases.firstIndex(of: config.focusRingStyle) ?? 0)
         ringColor.color = NSColor(hex: config.focusRingColor) ?? .controlAccentColor
         let sameFloating = config.focusRingFloatingColor.lowercased() == "same"
         ringFloatingSame.state = sameFloating ? .on : .off
@@ -686,7 +672,6 @@ final class ConfigWindow: NSObject {
         config.stackScreensNarrowerThan = CGFloat(Double(stackNarrowField.stringValue) ?? 0)
         config.switcherThumbnails = switcherThumbsCheck.state == .on
         config.switcher = switcherCheck.state == .on
-        config.virtualWorkspaces = max(1, min(9, Int(virtualCountField.stringValue) ?? 4))
         config.actionOverlay = overlayCheck.state == .on
         if let raw = strategyPopup.selectedItem?.representedObject as? String, let st = Config.AutoTileStrategy(rawValue: raw) {
             config.autoTileStrategy = st
@@ -696,9 +681,6 @@ final class ConfigWindow: NSObject {
         config.hotkeys = recorders.compactMapValues(\.spec)
         config.focusRing = ringCheck.state == .on
         config.focusRingFloating = ringFloating.state == .on
-        if let raw = ringStyle.selectedItem?.representedObject as? String, let st = Config.FocusRingStyle(rawValue: raw) {
-            config.focusRingStyle = st
-        }
         config.focusRingColor = ringColor.color.hexString
         config.focusRingFloatingColor = ringFloatingSame.state == .on ? "same" : ringFloatingColor.color.hexString
         config.focusRingWidth = CGFloat(ringWidth.doubleValue.rounded())
@@ -707,7 +689,7 @@ final class ConfigWindow: NSObject {
         config.bar = barCheck.state == .on
         config.barHeight = CGFloat(Double(barHeightField.stringValue) ?? 28)
         config.barClockFormat = barClockField.stringValue.isEmpty ? "EEE d MMM  HH:mm" : barClockField.stringValue
-        config.barTitleFormat = barTitleField.stringValue.isEmpty ? "{app} — {title}" : barTitleField.stringValue
+        config.barTitleFormat = barTitleField.stringValue.isEmpty ? "{app}" : barTitleField.stringValue
         config.barDesktopApps = barDesktopAppsCheck.state == .on
         config.barBatteryPercent = barBatteryPercentCheck.state == .on
         config.barCat = barCatCheck.state == .on

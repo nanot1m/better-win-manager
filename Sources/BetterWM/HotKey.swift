@@ -59,6 +59,32 @@ final class HotKey {
     ]
 
     /// CGEventFlags for a modifier-only spec such as "alt+cmd"; used for the drag gesture.
+    /// Shows a config hotkey spec on a menu item (display only; the global registration handles the key).
+    static func applyKeyEquivalent(_ spec: String, to item: NSMenuItem) {
+        var mask: NSEvent.ModifierFlags = []
+        var key = ""
+        for part in spec.lowercased().split(separator: "+").map(String.init) {
+            switch part {
+            case "cmd", "command": mask.insert(.command)
+            case "alt", "option", "opt": mask.insert(.option)
+            case "ctrl", "control": mask.insert(.control)
+            case "shift": mask.insert(.shift)
+            case "space": key = " "
+            case "return", "enter": key = "\r"
+            case "tab": key = "\t"
+            case "escape", "esc": key = "\u{1b}"
+            case "left": key = String(UnicodeScalar(NSLeftArrowFunctionKey)!)
+            case "right": key = String(UnicodeScalar(NSRightArrowFunctionKey)!)
+            case "up": key = String(UnicodeScalar(NSUpArrowFunctionKey)!)
+            case "down": key = String(UnicodeScalar(NSDownArrowFunctionKey)!)
+            default: key = part
+            }
+        }
+        guard !key.isEmpty else { return }
+        item.keyEquivalent = key
+        item.keyEquivalentModifierMask = mask
+    }
+
     static func eventFlags(_ spec: String) -> CGEventFlags {
         var flags: CGEventFlags = []
         for part in spec.lowercased().split(separator: "+").map({ $0.trimmingCharacters(in: .whitespaces) }) {

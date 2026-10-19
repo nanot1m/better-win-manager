@@ -25,7 +25,13 @@ final class WindowManager {
 
     private func virtualSet(realSpace: SpaceID) -> VirtualWorkspaces {
         if let v = virtualSets[realSpace] { return v }
-        let v = VirtualWorkspaces(realSpace: realSpace, count: config.virtualWorkspaces)
+        let v = VirtualWorkspaces(realSpace: realSpace, count: 1)
+        // Come back to the workspace that was active when the last run ended.
+        if config.restoreLayouts, let active = saved.activeWorkspaces[String(realSpace)], active > 0 {
+            if active >= v.count { v.setCount(active + 1) }
+            v.switchTo(active)
+            Log.write("restore", "desktop \(realSpace) resumes on workspace \(active + 1)")
+        }
         virtualSets[realSpace] = v
         return v
     }
@@ -70,7 +76,6 @@ final class WindowManager {
     }
 
     private func configureWorkspaces() {
-        virtualSets.values.forEach { $0.setCount(config.virtualWorkspaces) }
         tick()
     }
 
@@ -210,7 +215,7 @@ final class WindowManager {
         lastFocusedID = AXWindow.focused.flatMap(id)
         tick()
         revealRingAndFocusTop()
-        v.trimEmptyTrailing(minimum: config.virtualWorkspaces)
+        v.trimEmptyTrailing(minimum: 1)
         onDesktopChange?()
     }
 
@@ -660,6 +665,7 @@ final class WindowManager {
         layout.spaces += lastSaved.spaces.filter { !activeSpaces.contains($0.id) && !captured.contains($0.id) }
         layout.spaces.sort { $0.id < $1.id }
         layout.hiddenPids = virtualSets.values.flatMap(\.hiddenPids).sorted()
+        layout.activeWorkspaces = Dictionary(uniqueKeysWithValues: virtualSets.map { (String($0.key), $0.value.active) })
         guard layout != lastSaved else { return }
         lastSaved = layout
         let enc = JSONEncoder()

@@ -20,10 +20,11 @@ final class VirtualWorkspaces {
     /// window (Unity on scene reload or Play mode) has no siblings to follow, but it still has a home.
     private(set) var homeByPid: [pid_t: Int] = [:]
 
+    /// `n` is a floor: workspaces created on demand (and the active one) are never folded away by a config
+    /// reload; only `trimEmptyTrailing` removes them, once they are empty.
     func setCount(_ n: Int) {
-        count = max(1, n)
-        if active >= count { active = count - 1 }
-        for (w, ws) in membership where ws >= count { membership[w] = count - 1 }
+        let highestUsed = (membership.values.max() ?? -1) + 1
+        count = max(1, n, highestUsed, active + 1)
     }
 
     /// The macOS Space this set belongs to; every real desktop has its own independent set.

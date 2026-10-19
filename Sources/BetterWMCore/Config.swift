@@ -40,27 +40,24 @@ public struct Config {
     public var switcher: Bool = true
     /// Show live window previews, or just app icons.
     public var switcherThumbnails: Bool = true
-    /// Workspaces per macOS desktop, emulated by parking or hiding the other workspaces' windows; more are created on demand.
-    public var virtualWorkspaces: Int = 4
-    public var autoTile: Bool = true
+    public var autoTile: Bool = false
     public var autoTileStrategy: AutoTileStrategy = .rightmost
     public var focusRing: Bool = true
     public var actionOverlay: Bool = false
-    public var focusRingStyle: FocusRingStyle = .outline
     public var focusRingFloating: Bool = true
-    public var focusRingWidth: CGFloat = 3
-    public var focusRingRadius: CGFloat = 10
+    public var focusRingWidth: CGFloat = 6
+    public var focusRingRadius: CGFloat = 24
     /// Measure each window's real corner radius once and match it; `focusRingRadius` is the fallback.
     public var focusRingAutoRadius: Bool = true
-    public var focusRingColor: String = "4C8BF5"
+    public var focusRingColor: String = "FF9300"
     /// Ring colour for a focused window that is floating (untiled); "same" uses focusRingColor.
-    public var focusRingFloatingColor: String = "same"
+    public var focusRingFloatingColor: String = "009193"
     public var ignoreApps: [String] = Config.defaultIgnoreApps
-    public var bar: Bool = false
-    public var barHeight: CGFloat = 28
+    public var bar: Bool = true
+    public var barHeight: CGFloat = 32
     public var barClockFormat: String = "EEE d MMM  HH:mm"
     /// Active window label; {app} and {title} are replaced. The title part is dropped when the title is empty.
-    public var barTitleFormat: String = "{app} — {title}"
+    public var barTitleFormat: String = "{app}"
     /// Right-side widgets of the bar, in display order. The per-widget booleans below are views onto this list,
     /// kept so older config files (and older app versions reading new ones) keep working.
     public enum BarWidget: String, CaseIterable {
@@ -80,7 +77,7 @@ public struct Config {
             }
         }
     }
-    public var barWidgets: [BarWidget] = BarWidget.allCases
+    public var barWidgets: [BarWidget] = [.keyboard, .wifi, .battery, .clock, .menu]
     private mutating func setWidget(_ w: BarWidget, _ on: Bool) {
         if on, !barWidgets.contains(w) {
             // Slot it where the default order would have it, after the nearest enabled predecessor.
@@ -101,7 +98,7 @@ public struct Config {
     public var barDisk: Bool { get { barWidgets.contains(.disk) } set { setWidget(.disk, newValue) } }
     public var barClock: Bool { get { barWidgets.contains(.clock) } set { setWidget(.clock, newValue) } }
     public var barDesktopApps: Bool = true
-    public var barBatteryPercent: Bool = true
+    public var barBatteryPercent: Bool = false
     /// A pixel cat wandering the empty part of the bar.
     public var barCat: Bool = true
     /// Cats cross the notch through portals; off, they stay left of it as the bar text does.
@@ -112,16 +109,16 @@ public struct Config {
     /// "auto" uses Location Services; otherwise "lat,lon".
     public var barWeatherLocation: String = "auto"
     /// "blur" for a translucent material, or a hex colour such as 1E1E1ECC.
-    public var barBackground: String = "blur"
+    public var barBackground: String = "000000"
     /// "auto" follows the system label colour, or a hex colour.
-    public var barTextColor: String = "auto"
-    public var barBorderColor: String = "FFFFFF22"
+    public var barTextColor: String = "FFFFFF"
+    public var barBorderColor: String = "424242"
     /// "accent" follows the system accent colour, or a hex colour.
-    public var barActiveColor: String = "accent"
+    public var barActiveColor: String = "FF9300"
     public var barBorderWidth: CGFloat = 0
     public var barRadius: CGFloat = 0
     /// Horizontal space between the bar edge and its content.
-    public var barPadding: CGFloat = 12
+    public var barPadding: CGFloat = 24
     /// Horizontal gap between the bar and the screen edges; above zero the bar floats.
     public var barMargin: CGFloat = 0
     /// Distance from the top edge of the screen to the bar.
@@ -142,11 +139,6 @@ public struct Config {
         "com.apple.loginwindow", "com.apple.dock", "com.apple.notificationcenterui",
         "com.1password.1password", "org.pqrs.Karabiner-Elements.Settings", "com.apple.CoreSimulator.SimulatorTrampoline",
     ]
-
-    public enum FocusRingStyle: String, CaseIterable {
-        case outline, underneath
-        public var title: String { self == .outline ? "Outline around the window" : "Glow underneath the window" }
-    }
 
     public enum AutoTileStrategy: String, CaseIterable {
         case rightmost, leftmost, position, nextToFocused, stackFocused, autoSplit, spiral
@@ -213,9 +205,6 @@ public struct Config {
         # ⌥Tab window switcher grouped by desktop; previews need Screen Recording permission, otherwise icons only.
         switcher = \(switcher)
         switcherThumbnails = \(switcherThumbnails)
-        # Workspaces per macOS desktop; the other workspaces' windows are hidden or parked off the bottom-right
-        # corner, so switching is instant. More are created on demand (sending a window to desktop 6).
-        virtualWorkspaces = \(virtualWorkspaces)
         # Tile windows automatically when they open or arrive on a desktop.
         autoTile = \(autoTile)
         # Stacked layout (per screen, toggled with the toggleStack action): windows cascade with this horizontal
@@ -234,7 +223,6 @@ public struct Config {
 
         # Highlight the focused window. Style: outline (ring around it) or underneath (glow behind it).
         focusRing = \(focusRing)
-        focusRingStyle = \(focusRingStyle.rawValue)
         # Also ring floating (untiled) windows, not just tiled ones.
         focusRingFloating = \(focusRingFloating)
         focusRingWidth = \(num(focusRingWidth))
@@ -352,7 +340,7 @@ public struct Config {
             case "handleWidth": cfg.handleWidth = Double(value).map { CGFloat($0) } ?? cfg.handleWidth
             case "dragModifiers": cfg.dragModifiers = value
             case "workspaces": break  // native Spaces mode was removed in 0.12; the key is accepted and ignored
-            case "virtualWorkspaces": cfg.virtualWorkspaces = Int(value).map { max(1, min(9, $0)) } ?? cfg.virtualWorkspaces
+            case "virtualWorkspaces": break  // workspaces are created on demand since 0.12.1; accepted and ignored
             case "switcher": cfg.switcher = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "switcherThumbnails": cfg.switcherThumbnails = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "debugLog": cfg.debugLog = ["true", "yes", "1", "on"].contains(value.lowercased())
@@ -366,7 +354,7 @@ public struct Config {
                 case "actionOverlay": cfg.actionOverlay = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRing": cfg.focusRing = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRingFloating": cfg.focusRingFloating = ["true", "yes", "1", "on"].contains(value.lowercased())
-            case "focusRingStyle": cfg.focusRingStyle = FocusRingStyle(rawValue: value) ?? cfg.focusRingStyle
+            case "focusRingStyle": break  // the glow style was removed in 0.12.1; accepted and ignored
             case "focusRingWidth": cfg.focusRingWidth = Double(value).map { CGFloat($0) } ?? cfg.focusRingWidth
             case "focusRingAutoRadius": cfg.focusRingAutoRadius = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRingRadius": cfg.focusRingRadius = Double(value).map { CGFloat($0) } ?? cfg.focusRingRadius

@@ -42,16 +42,19 @@ public struct SavedLayout: Codable, Equatable {
     public var spaces: [Space] = []
     /// Apps hidden by the window manager at the time of the save; unhidden at launch if a run ended without cleanup.
     public var hiddenPids: [Int32] = []
+    /// Active workspace index per macOS desktop (keyed by the real Space id as a string), restored at launch.
+    public var activeWorkspaces: [String: Int] = [:]
 
     public init(spaces: [Space] = []) { self.spaces = spaces }
 
-    enum CodingKeys: String, CodingKey { case version, spaces, hiddenPids }
+    enum CodingKeys: String, CodingKey { case version, spaces, hiddenPids, activeWorkspaces }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
         spaces = try c.decodeIfPresent([Space].self, forKey: .spaces) ?? []
         hiddenPids = try c.decodeIfPresent([Int32].self, forKey: .hiddenPids) ?? []
+        activeWorkspaces = try c.decodeIfPresent([String: Int].self, forKey: .activeWorkspaces) ?? [:]
     }
 
     /// v1 virtual ids (1_000_000 + ws*100 + screen) belonged to one global workspace set. v2 ids are

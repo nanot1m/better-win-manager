@@ -78,7 +78,7 @@ Per screen, as an alternative to columns: every tiled window gets almost the who
 
 ### Virtual workspaces
 
-Every macOS desktop gets its own independent set of `virtualWorkspaces` workspaces (Settings › General › Desktops), with its own active workspace, window membership and grids; nothing crosses between macOS desktops. Switching is instant and needs no Mission Control tricks: an app whose windows all live on inactive workspaces is hidden, and an app with windows on several workspaces has the inactive ones parked just off the bottom-right corner of the screen, like AeroSpace does. Workspaces beyond the configured count are created when you send a window there and trimmed when empty; drag a chip in the status bar or use Move This Desktop Left/Right to reorder them. All desktop actions, the popup, hotkeys, the ⌥Tab switcher and the bar chips refer to the current macOS desktop's workspaces. Hidden and parked windows still appear in ⌘Tab.
+Every macOS desktop gets its own independent set of workspaces, created on demand (switch or send a window to desktop 4 and desktops 2 to 4 exist) and trimmed when empty, with its own active workspace, window membership and grids; nothing crosses between macOS desktops. Switching is instant and needs no Mission Control tricks: an app whose windows all live on inactive workspaces is hidden, and an app with windows on several workspaces has the inactive ones parked just off the bottom-right corner of the screen, like AeroSpace does. Drag a chip in the status bar or use Move This Desktop Left/Right to reorder them. All desktop actions, the popup, hotkeys, the ⌥Tab switcher and the bar chips refer to the current macOS desktop's workspaces. Hidden and parked windows still appear in ⌘Tab.
 
 ### Status bar
 

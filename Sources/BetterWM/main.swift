@@ -143,7 +143,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if CommandLine.arguments.contains("--test-hotkeys") {
             registerHotKeys(manager.config)
+            statusItem.menu = buildMenu()
             registerHotKeys(manager.config)
+            statusItem.menu = buildMenu()
             print("hotkeys registered twice ok:", hotKeys.count)
         }
         if CommandLine.arguments.contains("--test-record") {
@@ -175,16 +177,26 @@ setbuf(stdout, nil)
 extension AppDelegate {
     func buildMenu() -> NSMenu {
         let menu = NSMenu()
-        func add(_ title: String, _ sel: Selector, _ key: String = "") {
-            let item = menu.addItem(withTitle: title, action: sel, keyEquivalent: key)
+        // Key equivalents only display the user's global hotkey for the action; the Carbon registration
+        // does the actual work, so a menu item without a configured hotkey shows none.
+        func add(_ title: String, _ sel: Selector, action: String? = nil) {
+            let item = menu.addItem(withTitle: title, action: sel, keyEquivalent: "")
             item.target = self
+            if let action, let spec = manager.config.hotkeys[action] { HotKey.applyKeyEquivalent(spec, to: item) }
         }
-        add("Window Actions…", #selector(showPopup), "w")
-        menu.addItem(.separator())
-        add("Focus Next Window", #selector(focusNext), "]")
-        add("Focus Previous Window", #selector(focusPrevious), "[")
-        menu.addItem(.separator())
-        add("Tile / Untile Focused Window", #selector(toggleFocused), "t")
+        func section(_ title: String) {
+            if menu.items.count > 0 { menu.addItem(.separator()) }
+            if #available(macOS 14, *) {
+                menu.addItem(.sectionHeader(title: title))
+            } else {
+                let h = menu.addItem(withTitle: title, action: nil, keyEquivalent: "")
+                h.isEnabled = false
+            }
+        }
+
+        section("Window")
+        add("Window Actions…", #selector(showPopup), action: "popup")
+        add("Tile / Untile Focused Window", #selector(toggleFocused), action: "toggleTile")
         let moveMenu = NSMenu(title: "Move")
         moveMenu.delegate = self
         moveMenu.autoenablesItems = false
@@ -195,33 +207,33 @@ extension AppDelegate {
             item.target = self
             item.representedObject = dir
         }
-        let move = menu.addItem(withTitle: "Move Focused Window", action: nil, keyEquivalent: "")
-        move.submenu = moveMenu
+        menu.addItem(withTitle: "Move Focused Window", action: nil, keyEquivalent: "").submenu = moveMenu
         let sendMenu = NSMenu(title: "SendTo")
         sendMenu.autoenablesItems = false
         sendMenu.delegate = self
-        menu.addItem(withTitle: "Send Focused Window to", action: nil, keyEquivalent: "").submenu = sendMenu
-        add("Toggle Stacked Layout on This Screen", #selector(toggleStack), "s")
-        add("Move This Desktop Left", #selector(moveDesktopLeft), "")
-        add("Move This Desktop Right", #selector(moveDesktopRight), "")
-        add("Retile Current Screen", #selector(retile), "r")
-        add("Equalize Sizes", #selector(equalize), "e")
-        menu.addItem(.separator())
+        menu.addItem(withTitle: "Send Focused Window to Desktop", action: nil, keyEquivalent: "").submenu = sendMenu
+        add("Focus Next Window", #selector(focusNext), action: "focusNext")
+        add("Focus Previous Window", #selector(focusPrevious), action: "focusPrevious")
+
+        section("Screen")
+        add("Retile Current Screen", #selector(retile), action: "retile")
+        add("Equalize Sizes", #selector(equalize), action: "equalize")
+        add("Toggle Stacked Layout", #selector(toggleStack), action: "toggleStack")
+
+        section("Desktops")
         let desktops = NSMenuItem(title: "Switch to Desktop", action: nil, keyEquivalent: "")
         let sub = NSMenu(title: "Desktops")
         sub.delegate = self
         desktops.submenu = sub
         menu.addItem(desktops)
-        menu.addItem(.separator())
-        let pause = menu.addItem(withTitle: "Pause Tiling", action: #selector(togglePause), keyEquivalent: "p")
+        add("Move This Desktop Left", #selector(moveDesktopLeft), action: "desktopMoveLeft")
+        add("Move This Desktop Right", #selector(moveDesktopRight), action: "desktopMoveRight")
+
+        section("Tiling")
+        let pause = menu.addItem(withTitle: "Pause Tiling", action: #selector(togglePause), keyEquivalent: "")
         pause.target = self
+        if let spec = manager.config.hotkeys["pause"] { HotKey.applyKeyEquivalent(spec, to: pause) }
         pauseItem = pause
-        let switcherItem = menu.addItem(withTitle: "⌥Tab Window Switcher", action: #selector(toggleSwitcher), keyEquivalent: "")
-        switcherItem.target = self
-        self.switcherItem = switcherItem
-        let overlay = menu.addItem(withTitle: "Show Action Overlay", action: #selector(toggleOverlay), keyEquivalent: "")
-        overlay.target = self
-        overlayItem = overlay
         let auto = menu.addItem(withTitle: "Auto-tile New Windows", action: #selector(toggleAutoTile), keyEquivalent: "")
         auto.target = self
         autoTileItem = auto
@@ -233,20 +245,34 @@ extension AppDelegate {
             item.representedObject = st.rawValue
         }
         menu.addItem(withTitle: "Auto-tile Strategy", action: nil, keyEquivalent: "").submenu = strategyMenu
+        let switcherItem = menu.addItem(withTitle: "⌥Tab Window Switcher", action: #selector(toggleSwitcher), keyEquivalent: "")
+        switcherItem.target = self
+        self.switcherItem = switcherItem
+        let overlay = menu.addItem(withTitle: "Show Action Overlay", action: #selector(toggleOverlay), keyEquivalent: "")
+        overlay.target = self
+        overlayItem = overlay
         syncAutoTileItems()
-        menu.addItem(.separator())
-        add("Settings…", #selector(showSettings), ",")
+
+        section("BetterWM")
+        add("Settings…", #selector(showSettings))
         add("Open Config File", #selector(openConfig))
         add("Reload Config", #selector(reloadConfig))
-        add("Re-measure Window Corners", #selector(refreshRing))
-        add("Open Log File", #selector(openLog))
-        add("Copy Diagnostics Report", #selector(copyDiagnostics))
+        let diag = NSMenu(title: "Diagnostics")
+        for (title, sel, action) in [("Re-measure Window Corners", #selector(refreshRing), "refreshRing"), ("Open Log File", #selector(openLog), ""),
+                                     ("Copy Diagnostics Report", #selector(copyDiagnostics), "")] {
+            let item = diag.addItem(withTitle: title, action: sel, keyEquivalent: "")
+            item.target = self
+            if let spec = manager.config.hotkeys[action] { HotKey.applyKeyEquivalent(spec, to: item) }
+        }
+        menu.addItem(withTitle: "Diagnostics", action: nil, keyEquivalent: "").submenu = diag
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit BetterWM", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
     }
 
     @objc func switchDesktop(_ sender: NSMenuItem) { manager.switchDesktop(sender.tag) }
+    @objc func desktopNext() { manager.switchDesktop(next: true) }
+    @objc func desktopPrevious() { manager.switchDesktop(next: false) }
     @objc func sendToDesktop(_ sender: NSMenuItem) { manager.sendFocusedWindow(toDesktop: sender.tag) }
     @objc func toggleFocused() { manager.toggleFocused() }
     @objc func showPopup() { popup.toggle() }
@@ -332,6 +358,7 @@ extension AppDelegate {
         manager.reloadConfig()
         bar.apply(manager.config)
         registerHotKeys(manager.config)
+        statusItem.menu = buildMenu()
         syncAutoTileItems()
     }
     @objc func toggleAutoTile() {
@@ -355,6 +382,7 @@ extension AppDelegate {
         manager.config.switcher.toggle()
         manager.config.save()
         registerHotKeys(manager.config)
+        statusItem.menu = buildMenu()
         syncAutoTileItems()
     }
     @objc func toggleOverlay() {
@@ -380,6 +408,7 @@ extension AppDelegate {
             self.bar.apply(cfg)
             self.manager.relayout()
             self.registerHotKeys(cfg)
+            self.statusItem.menu = self.buildMenu()
             self.syncAutoTileItems()
         }
     }
@@ -399,8 +428,13 @@ extension AppDelegate: NSMenuDelegate {
             return
         }
         if menu.title == "Move" {
+            let actions: [Move: String] = [.left: "moveLeft", .right: "moveRight", .up: "moveUp", .down: "moveDown",
+                                           .mergeLeft: "mergeLeft", .mergeRight: "mergeRight"]
             for item in menu.items {
-                if let dir = item.representedObject as? Move { item.isEnabled = manager.canMoveFocused(dir) }
+                guard let dir = item.representedObject as? Move else { continue }
+                item.isEnabled = manager.canMoveFocused(dir)
+                item.keyEquivalent = ""
+                if let spec = actions[dir].flatMap({ manager.config.hotkeys[$0] }) { HotKey.applyKeyEquivalent(spec, to: item) }
             }
             return
         }
@@ -411,18 +445,31 @@ extension AppDelegate: NSMenuDelegate {
         if sending {
             let next = menu.addItem(withTitle: "Next Desktop", action: #selector(sendNext), keyEquivalent: "")
             next.target = self
-            next.isEnabled = current.map { $0 + 1 < manager.desktopCount } ?? false
+            next.isEnabled = current.map { $0 + 1 < 9 } ?? false
+            if let spec = manager.config.hotkeys["sendToNextDesktop"] { HotKey.applyKeyEquivalent(spec, to: next) }
             let prev = menu.addItem(withTitle: "Previous Desktop", action: #selector(sendPrevious), keyEquivalent: "")
             prev.target = self
             prev.isEnabled = current.map { $0 > 0 } ?? false
+            if let spec = manager.config.hotkeys["sendToPreviousDesktop"] { HotKey.applyKeyEquivalent(spec, to: prev) }
+            menu.addItem(.separator())
+        } else {
+            let next = menu.addItem(withTitle: "Next Desktop", action: #selector(desktopNext), keyEquivalent: "")
+            next.target = self
+            if let spec = manager.config.hotkeys["desktopNext"] { HotKey.applyKeyEquivalent(spec, to: next) }
+            let prev = menu.addItem(withTitle: "Previous Desktop", action: #selector(desktopPrevious), keyEquivalent: "")
+            prev.target = self
+            if let spec = manager.config.hotkeys["desktopPrevious"] { HotKey.applyKeyEquivalent(spec, to: prev) }
             menu.addItem(.separator())
         }
-        for i in 0..<manager.desktopCount {
-            let item = menu.addItem(withTitle: "Desktop \(i + 1)", action: sending ? #selector(sendToDesktop(_:)) : #selector(switchDesktop(_:)), keyEquivalent: "")
+        // All nine, existing or not: switching to or sending to a missing one creates it.
+        for i in 0..<9 {
+            let exists = i < manager.desktopCount
+            let item = menu.addItem(withTitle: "Desktop \(i + 1)" + (exists ? "" : "  (new)"), action: sending ? #selector(sendToDesktop(_:)) : #selector(switchDesktop(_:)), keyEquivalent: "")
             item.target = self
             item.tag = i
             item.state = i == current ? .on : .off
             if sending { item.isEnabled = i != current }
+            if let spec = manager.config.hotkeys[(sending ? "sendToDesktop" : "desktop") + "\(i + 1)"] { HotKey.applyKeyEquivalent(spec, to: item) }
         }
     }
 }

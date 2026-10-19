@@ -98,7 +98,7 @@ final class FocusRing {
         }
     }
 
-    private var pad: CGFloat { config.focusRingStyle == .underneath ? config.focusRingWidth : config.focusRingWidth / 2 + 1 }
+    private var pad: CGFloat { config.focusRingWidth / 2 + 1 }
 
     /// Shows the ring for a window we are about to focus, at the frame it will have, without waiting for the
     /// focus notification. Used when switching workspaces so ring and windows appear in the same frame.
@@ -156,14 +156,9 @@ final class FocusRing {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         layer.cornerRadius = radius(for: id) + pad
-        if config.focusRingStyle == .outline {
-            layer.borderWidth = config.focusRingWidth
-            layer.borderColor = color.cgColor
-            layer.backgroundColor = nil
-        } else {
-            layer.borderWidth = 0
-            layer.backgroundColor = color.cgColor
-        }
+        layer.borderWidth = config.focusRingWidth
+        layer.borderColor = color.cgColor
+        layer.backgroundColor = nil
         CATransaction.commit()
         place(frame: frame)
         // Always just beneath the window it belongs to: the outline is drawn outside the window's frame so it
