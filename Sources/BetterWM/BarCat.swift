@@ -175,6 +175,8 @@ final class Cat {
     var napStyle = "sleep3"
     /// Which grooming animation this session uses.
     var groomStyle = "groom"
+    /// Movement mode to return to after leaping through a portal.
+    var modeBeforeJump: Mode?
 
     static func personality(seed: String) -> Personality {
         var h: UInt64 = 1469598103934665603
@@ -530,12 +532,14 @@ final class BarCat: NSView {
     /// Positions sprites, splitting a cat that is part-way through the portals across both edges.
     private func place(_ c: Cat) {
         let y = baseline(for: c), w = c.size.width
-        // Crossing a portal is a leap.
-        if let g = gap, c.sheet != nil, (c.mode == .walk || c.mode == .run), c.x < g.upperBound, c.x + w > g.lowerBound {
+        // Crossing a portal is a leap; the cat keeps moving underneath and lands back in its stride.
+        let inGap = gap.map { c.x < $0.upperBound && c.x + w > $0.lowerBound } ?? false
+        if inGap, c.sheet != nil, c.mode == .walk || c.mode == .run {
+            c.modeBeforeJump = c.mode
             c.mode = .jump
-        } else if c.mode == .jump, Date() >= c.modeUntil, gap.map({ c.x >= $0.upperBound || c.x + w <= $0.lowerBound }) ?? true {
-            c.mode = .walk
-            c.modeUntil = .distantFuture
+        } else if c.mode == .jump, !inGap {
+            c.mode = c.modeBeforeJump ?? .walk
+            c.modeBeforeJump = nil
         }
         // Entirely inside the notch (a slot or a layout change put it there): it has effectively crossed.
         if let g = gap, c.x >= g.lowerBound, c.x + w <= g.upperBound { settleOutsideGap(c) }
@@ -757,15 +761,15 @@ final class BarCat: NSView {
             if approach(c, to: last - c.size.width / 2, speed: 2) { c.enter(.sit, for: 2...3); c.huntInterestUntil = nil }
             return
         }
-        if c.mode != .walk, c.mode != .run, Date() >= c.modeUntil {
+        if c.mode != .walk, c.mode != .run, c.mode != .jump, Date() >= c.modeUntil {
             // Waking up takes a yawn first.
             if c.mode == .sleep, c.sheet != nil { c.enter(.yawn); return }
             c.enter(.walk)
         }
         if stepPoke(c) { return }
         switch c.mode {
-        case .walk, .run:
-            move(c, by: c.mode == .run ? 5 : 2)
+        case .walk, .run, .jump:
+            move(c, by: (c.mode == .run || c.modeBeforeJump == .run) ? 5 : 2)
             let inGap = gap.map { c.x < $0.upperBound && c.x + c.size.width > $0.lowerBound } ?? false
             if c.mode == .walk, !inGap, tick % 8 == 0 { decide(c) }
             else if c.mode == .run, Date() >= c.modeUntil { c.enter(.walk) }

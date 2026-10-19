@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.12.5] - 2026-10-19
+
+### Fixed
+- A cat that leapt through a notch portal could get stuck jumping on the spot afterwards: the leap had no end condition it could meet. It now lands back in its stride as soon as it is clear of the notch.
+
 ## [0.12.4] - 2026-10-19
 
 ### Changed
