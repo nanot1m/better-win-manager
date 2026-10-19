@@ -329,6 +329,10 @@ final class WindowManager {
             focusRing.suspended = false
         }
         system.execute([.raise(id)])
+        // The raise and the unhides that follow a switch change depths asynchronously; settle the ring after them.
+        for delay in [0.1, 0.4] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.focusRing.reorder() }
+        }
     }
 
     /// Moves and shrinks a frame so it lies within the visible area of the screen nearest to it; frames
@@ -385,7 +389,7 @@ final class WindowManager {
                 unhide: { [weak self] pid in
                     NSRunningApplication(processIdentifier: pid)?.unhide()
                     // Frames set while an app is still unhiding can be lost; look again shortly after.
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self?.scheduleTick() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self?.scheduleTick(); self?.focusRing.reorder() }
                 })
         }
     }

@@ -119,6 +119,13 @@ final class FocusRing {
         }
     }
 
+    /// Puts the ring back directly beneath its window. Needed after the window is raised or its app unhidden,
+    /// since both change the window's depth while the ring keeps its old one.
+    func reorder() {
+        guard let id = current, window.isVisible, !suspended else { return }
+        window.order(.below, relativeTo: Int(id))
+    }
+
     func update() {
         guard !suspended, !hiddenForSystemReveal, config.focusRing else {
             current = nil

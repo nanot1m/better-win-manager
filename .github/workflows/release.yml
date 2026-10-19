@@ -22,7 +22,10 @@ jobs:
         run: |
           # Release notes come from CHANGELOG.md when it has a section for this version; otherwise GitHub generates them.
           v="${GITHUB_REF_NAME#v}"
-          if awk -v v="$v" '/^## \[/{p = index($0, "[" v "]") > 0} p' CHANGELOG.md | sed '1d' | grep -q .; then
+          # Re-running the workflow must not fail on an existing release: refresh its asset instead.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber
+          elif awk -v v="$v" '/^## \[/{p = index($0, "[" v "]") > 0} p' CHANGELOG.md | sed '1d' | grep -q .; then
             awk -v v="$v" '/^## \[/{p = index($0, "[" v "]") > 0} p' CHANGELOG.md | sed '1d' > notes.md
             gh release create "$GITHUB_REF_NAME" dist/*.zip --notes-file notes.md --title "BetterWM $v"
           else
