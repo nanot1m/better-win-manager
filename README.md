@@ -20,16 +20,26 @@ The [docs](docs/README.md) folder covers everything in depth: [getting started](
 
 ```sh
 brew install --cask nanot1m/tap/betterwm
-xattr -dr com.apple.quarantine /Applications/BetterWM.app
 ```
 
-The second line clears Gatekeeper's block on the ad-hoc signed app (see below); current Homebrew no longer offers `--no-quarantine`. The cask lives in [nanot1m/homebrew-tap](https://github.com/nanot1m/homebrew-tap) and is updated by the release workflow.
+Or install directly from this repository:
+
+```sh
+brew install --cask nanot1m/better-win-manager/betterwm
+```
+
+> The cask automatically clears Gatekeeper's `com.apple.quarantine` attribute during installation (`postflight_steps`). If you ever need to clear it manually:
+> ```sh
+> xattr -dr com.apple.quarantine /Applications/BetterWM.app
+> ```
+
+The cask lives in [nanot1m/homebrew-tap](https://github.com/nanot1m/homebrew-tap) and in this repository, updated on each release.
 
 ### From a release
 
 Download `BetterWM-x.y.z.zip` from [Releases](https://github.com/nanot1m/better-win-manager/releases), unzip, and move `BetterWM.app` to Applications.
 
-Releases are ad-hoc signed, not notarized, so Gatekeeper blocks the first launch. Either right-click the app and choose Open, or clear the quarantine flag:
+Releases are ad-hoc signed, not notarized, so Gatekeeper blocks the first launch if downloaded via a browser. Either right-click the app and choose Open, or clear the quarantine flag:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/BetterWM.app

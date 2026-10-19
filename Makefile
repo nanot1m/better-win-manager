@@ -4,7 +4,7 @@ BUILD    = .build/release
 BUNDLE   = dist/$(APP).app
 ZIP      = dist/$(APP)-$(VERSION).zip
 
-.PHONY: build test bundle sign zip install run demo clean
+.PHONY: build test bundle sign zip cask install run demo clean
 
 build:
 	swift build -c release --product BetterWM
@@ -28,9 +28,16 @@ zip: sign
 	ditto -c -k --keepParent $(BUNDLE) $(ZIP)
 	@echo "Built $(ZIP)"
 
+cask: zip
+	@sha=$$(shasum -a 256 $(ZIP) | cut -d' ' -f1); \
+	sed -i '' -e 's/version "[^"]*"/version "$(VERSION)"/' \
+	          -e 's/sha256 "[^"]*"/sha256 "'$$sha'"/' Casks/betterwm.rb; \
+	echo "Updated Casks/betterwm.rb to $(VERSION) ($$sha)"
+
 install: sign
 	rm -rf /Applications/$(APP).app
 	cp -R $(BUNDLE) /Applications/
+	xattr -dr com.apple.quarantine /Applications/$(APP).app 2>/dev/null || true
 
 # Debug build as a bundle: needed for anything that reads Info.plist, such as Location Services.
 run:

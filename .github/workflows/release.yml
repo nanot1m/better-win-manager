@@ -14,8 +14,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test
         run: make test
-      - name: Build, bundle, ad-hoc sign, zip
-        run: make zip VERSION="${GITHUB_REF_NAME#v}"
+      - name: Build, bundle, ad-hoc sign, zip, update cask
+        run: make cask VERSION="${GITHUB_REF_NAME#v}"
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -27,10 +27,17 @@ jobs:
             gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber
           elif awk -v v="$v" '/^## \[/{p = index($0, "[" v "]") > 0} p' CHANGELOG.md | sed '1d' | grep -q .; then
             awk -v v="$v" '/^## \[/{p = index($0, "[" v "]") > 0} p' CHANGELOG.md | sed '1d' > notes.md
-            gh release create "$GITHUB_REF_NAME" dist/*.zip --notes-file notes.md --title "BetterWM $v"
+            gh release create "$GITHUB_REF_NAME" dist/*.zip Casks/betterwm.rb --notes-file notes.md --title "BetterWM $v"
           else
-            gh release create "$GITHUB_REF_NAME" dist/*.zip --generate-notes --title "BetterWM $v"
+            gh release create "$GITHUB_REF_NAME" dist/*.zip Casks/betterwm.rb --generate-notes --title "BetterWM $v"
           fi
+      - name: Commit updated cask to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/betterwm.rb
+          git commit -m "Update Homebrew Cask to ${GITHUB_REF_NAME}" || true
+          git push origin HEAD:main || true
       - name: Update Homebrew tap
         # Needs a TAP_TOKEN secret: a fine-grained PAT with contents read/write on nanot1m/homebrew-tap.
         env:
