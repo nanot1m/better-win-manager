@@ -18,7 +18,8 @@ final class StatusBar {
     var onMenuRequested: ((NSView) -> Void)?
     var desktopCount: () -> Int = { 0 }
     var currentDesktop: () -> Int? = { nil }
-    var desktopApps: () -> [Int: [(pid: pid_t, windows: Int)]] = { [:] }
+    var desktopApps: () -> [Int: [(pid: pid_t, windows: [WindowID])]] = { [:] }
+    var focusedWindow: () -> WindowID? = { nil }
     /// While the user drags a window the bar stays as it is; any work on the main thread stalls the event tap.
     var isInteracting: () -> Bool = { false }
     /// Called whenever the bar is shown or hidden so the layout can reserve space.
@@ -127,6 +128,7 @@ final class StatusBar {
             desktops: desktopCount(),
             current: currentDesktop(),
             apps: config.barDesktopApps ? desktopApps() : [:],
+            focusedWindow: focusedWindow() ?? focused?.windowID,
             app: app,
             title: title,
             clock: config.barClock ? formatter.string(from: Date()) : nil,
@@ -232,12 +234,14 @@ private final class ChipView: NSView {
     }
     required init?(coder: NSCoder) { fatalError() }
 
-    /// One icon per window, so two Chrome windows show two Chrome icons.
-    func setApps(_ apps: [(pid: pid_t, windows: Int)]) {
-        let pids = apps.flatMap { Array(repeating: $0.pid, count: max(1, $0.windows)) }
+    /// One icon per window, so two Chrome windows show two Chrome icons; the focused window's icon is outlined.
+    func setApps(_ apps: [(pid: pid_t, windows: [WindowID])], focused: WindowID?, color: NSColor) {
+        let pids = apps.flatMap { app in app.windows.isEmpty ? [(app.pid, WindowID(0))] : app.windows.map { (app.pid, $0) } }
         while icons.count < pids.count {
             let v = NSImageView()
             v.imageScaling = .scaleProportionallyUpOrDown
+            v.wantsLayer = true
+            v.layer?.cornerRadius = 4
             v.widthAnchor.constraint(equalToConstant: 14).isActive = true
             v.heightAnchor.constraint(equalToConstant: 14).isActive = true
             icons.append(v)
@@ -246,7 +250,10 @@ private final class ChipView: NSView {
         for (i, v) in icons.enumerated() {
             v.isHidden = i >= pids.count
             guard i < pids.count else { continue }
-            let pid = pids[i]
+            let (pid, id) = pids[i]
+            let isFocused = focused != nil && id == focused
+            v.layer?.borderWidth = isFocused ? 1.5 : 0
+            v.layer?.borderColor = color.cgColor
             let app = NSRunningApplication(processIdentifier: pid)
             let key = app?.bundleIdentifier ?? "\(pid)"
             if ChipView.iconCache[key] == nil, let icon = app?.icon { ChipView.iconCache[key] = icon }
@@ -283,7 +290,8 @@ final class BarView: NSView {
     struct Model {
         var desktops: Int
         var current: Int?
-        var apps: [Int: [(pid: pid_t, windows: Int)]]
+        var apps: [Int: [(pid: pid_t, windows: [WindowID])]]
+        var focusedWindow: WindowID?
         var app: String
         var title: String
         var clock: String?
@@ -312,6 +320,7 @@ final class BarView: NSView {
     private var catsEnabled = true
     private var textColor: NSColor = .labelColor
     private var activeColor: NSColor = .controlAccentColor
+    private var focusOutline: NSColor?
     private var padding: CGFloat = 12
     private let left = NSStackView()
     private let right = NSStackView()
@@ -458,6 +467,7 @@ final class BarView: NSView {
         rightTrailing.constant = -padding
         textColor = config.barTextColor.lowercased() == "auto" ? .labelColor : (NSColor(hex: config.barTextColor) ?? .labelColor)
         activeColor = config.barActiveColor.lowercased() == "accent" ? .controlAccentColor : (NSColor(hex: config.barActiveColor) ?? .controlAccentColor)
+        focusOutline = config.barFocusOutlineColor.lowercased() == "auto" ? nil : NSColor(hex: config.barFocusOutlineColor)
         let blur = config.barBackground.lowercased() == "blur"
         background.isHidden = !blur
         solid.isHidden = blur
@@ -532,7 +542,7 @@ final class BarView: NSView {
                 .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
             ])
             c.layer?.backgroundColor = current ? activeColor.cgColor : textColor.withAlphaComponent(0.1).cgColor
-            c.setApps(m.apps[i] ?? [])
+            c.setApps(m.apps[i] ?? [], focused: m.focusedWindow, color: focusOutline ?? (current ? activeColor.contrastingText : activeColor))
         }
         if appLabel.superview == nil {
             let sep = NSBox(); sep.boxType = .separator

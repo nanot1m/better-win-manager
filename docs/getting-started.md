@@ -18,7 +18,9 @@ From source, with Command Line Tools only (no Xcode): `make install` builds, bun
 | Permission | Needed for | When asked |
 | --- | --- | --- |
 | Accessibility | Reading and moving windows. Nothing works without it | First launch; the app waits until granted |
-| Screen Recording | Window previews in the ⌥Tab switcher | Optional; without it the switcher shows app icons |
+| Screen Recording | Window previews in the ⌥Tab switcher and the desktop overview | Optional; without it both show app icons |
+
+On first launch, while Accessibility is missing, a welcome window lists both permissions with a button to the right System Settings pane each; it notices when a permission is granted, no relaunch needed. It is available later from the menu as Permissions…
 | Location Services | Weather for your current position | Optional; set a fixed `barWeatherLocation` instead |
 
 Because the signature is ad-hoc, macOS treats every release as a new app and asks for Accessibility again after each update. Grant it and relaunch.

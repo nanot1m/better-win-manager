@@ -57,6 +57,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `barBackground` | 000000 | `blur` or a colour |
 | `barTextColor` | FFFFFF | `auto` or a colour |
 | `barActiveColor` | FF9300 | `accent` or a colour, for the active desktop chip |
+| `barFocusOutlineColor` | auto | Outline around the focused window's icon in its chip: `auto` contrasts with the chip, or a colour |
 | `barBorderColor` | 424242 | Border colour |
 | `barBorderWidth` | 0 | Border width; 0 none |
 | `barRadius` | 0 | Corner radius |
@@ -79,6 +80,9 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | --- | --- | --- |
 | `switcher` | true | ⌥Tab window switcher |
 | `switcherThumbnails` | true | Window previews in the switcher; needs Screen Recording, otherwise icons |
+| `overview` | true | Desktop overview (see [actions](actions.md)); previews need Screen Recording, otherwise app icons |
+| `overviewKey` | true | The Mission Control key (F3) opens the overview instead of Mission Control |
+| `overviewGesture` | false | Four-finger vertical swipe drives the overview; turn Mission Control's gesture off in System Settings › Trackpad › More Gestures first |
 | `actionOverlay` | false | Flash the pressed hotkey and action name at the bottom of the screen |
 | `debugLog` | true | Write `log.txt` |
 | `hotkey.<action>` | see [Actions](actions.md) | Global hotkeys |

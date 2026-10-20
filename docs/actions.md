@@ -15,6 +15,7 @@ Hotkeys are registered globally with Carbon. A combination macOS already uses, s
 | `mergeLeft` / `mergeRight` | ⌃⌥⇧← / ⌃⌥⇧→ | Fold into the neighbouring column |
 | `focusNext` / `focusPrevious` | ⌃] / ⌃[ | Cycle focus through the desktop's windows in reading order, tiled or floating |
 | `switcher` / `switcherBack` | ⌥Tab / ⌥⇧Tab | ⌘Tab-style strip of all windows grouped by desktop; release ⌥ or press Return to pick, Esc to cancel |
+| `overview` | unbound; the Mission Control key (F3) when `overviewKey` is on | Desktop overview: every desktop in a strip along the top, the current desktop's windows spread out below. Click a window to focus it, a desktop to switch, drag a window onto a desktop or the + tile to move it; Esc or a click on the backdrop closes. With `overviewGesture` on, a four-finger swipe up opens it and follows your fingers, swipe down closes |
 
 ## Screen
 

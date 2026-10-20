@@ -14,6 +14,8 @@ final class DragController {
     private var windowMoved = false
     private var lastMoveCheck = Date.distantPast
     private var lastScrollSwitch = Date.distantPast
+    /// The Mission Control key (keycode 160) when the overview has taken it over.
+    var onOverviewKey: (() -> Void)?
     init(manager: WindowManager) { self.manager = manager }
 
     func start() -> Bool {
@@ -55,6 +57,10 @@ final class DragController {
         }
         switch type {
         case .keyDown:
+            if manager.config.overview, manager.config.overviewKey, event.getIntegerValueField(.keyboardEventKeycode) == 160 {
+                DispatchQueue.main.async { self.onOverviewKey?() }
+                return nil
+            }
             // Feed an active hotkey recorder before macOS gets a chance to treat the press as a system shortcut.
             guard let recorder = KeyRecorderView.active else { return Unmanaged.passUnretained(event) }
             let consumed = recorder.record(keyCode: event.getIntegerValueField(.keyboardEventKeycode), flags: event.flags)

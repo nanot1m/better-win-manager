@@ -40,6 +40,13 @@ public struct Config {
     public var switcher: Bool = true
     /// Show live window previews, or just app icons.
     public var switcherThumbnails: Bool = true
+    /// Desktop overview: every desktop in a strip and the current one's windows spread out, Mission Control style.
+    public var overview: Bool = true
+    /// Take over the Mission Control key (F3 on Apple keyboards) to open the overview.
+    public var overviewKey: Bool = true
+    /// Drive the overview with a four-finger vertical swipe, like Mission Control's gesture; the native gesture
+    /// should be turned off in System Settings › Trackpad › More Gestures or both will open.
+    public var overviewGesture: Bool = false
     public var autoTile: Bool = false
     public var autoTileStrategy: AutoTileStrategy = .rightmost
     public var focusRing: Bool = true
@@ -115,6 +122,8 @@ public struct Config {
     public var barBorderColor: String = "424242"
     /// "accent" follows the system accent colour, or a hex colour.
     public var barActiveColor: String = "FF9300"
+    /// Outline around the focused window's icon in a chip: "auto" (contrasts with the chip) or a hex colour.
+    public var barFocusOutlineColor: String = "auto"
     public var barBorderWidth: CGFloat = 0
     public var barRadius: CGFloat = 0
     /// Horizontal space between the bar edge and its content.
@@ -165,6 +174,7 @@ public struct Config {
 
     public static let actions: [(key: String, title: String)] = [
         ("popup", "Window actions popup"), ("switcher", "Window switcher (⌥Tab)"), ("switcherBack", "Window switcher, backwards"),
+        ("overview", "Desktop overview"),
         ("focusNext", "Focus next window"), ("focusPrevious", "Focus previous window"),
         ("moveLeft", "Move left"), ("moveRight", "Move right"), ("moveUp", "Move up"), ("moveDown", "Move down"),
         ("mergeLeft", "Merge into left column"), ("mergeRight", "Merge into right column"),
@@ -205,6 +215,11 @@ public struct Config {
         # ⌥Tab window switcher grouped by desktop; previews need Screen Recording permission, otherwise icons only.
         switcher = \(switcher)
         switcherThumbnails = \(switcherThumbnails)
+        # Desktop overview (Mission Control style). overviewKey takes over the Mission Control key (F3);
+        # overviewGesture drives it with a four-finger swipe (turn the native gesture off in System Settings).
+        overview = \(overview)
+        overviewKey = \(overviewKey)
+        overviewGesture = \(overviewGesture)
         # Tile windows automatically when they open or arrive on a desktop.
         autoTile = \(autoTile)
         # Stacked layout (per screen, toggled with the toggleStack action): windows cascade with this horizontal
@@ -269,6 +284,8 @@ public struct Config {
         barBorderColor = \(barBorderColor)
         # Active desktop chip: "accent" or a hex colour.
         barActiveColor = \(barActiveColor)
+        # Outline around the focused window's icon: "auto" (contrasts with its chip) or a hex colour.
+        barFocusOutlineColor = \(barFocusOutlineColor)
         barBorderWidth = \(num(barBorderWidth))
         barRadius = \(num(barRadius))
         barPadding = \(num(barPadding))
@@ -343,6 +360,9 @@ public struct Config {
             case "virtualWorkspaces": break  // workspaces are created on demand since 0.12.1; accepted and ignored
             case "switcher": cfg.switcher = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "switcherThumbnails": cfg.switcherThumbnails = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "overview": cfg.overview = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "overviewKey": cfg.overviewKey = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "overviewGesture": cfg.overviewGesture = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "debugLog": cfg.debugLog = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "restoreLayouts": cfg.restoreLayouts = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "stackOffset": cfg.stackOffset = Double(value).map { CGFloat($0) } ?? cfg.stackOffset
@@ -384,6 +404,7 @@ public struct Config {
             case "barTextColor": cfg.barTextColor = value
             case "barBorderColor": cfg.barBorderColor = value
             case "barActiveColor": cfg.barActiveColor = value
+            case "barFocusOutlineColor": cfg.barFocusOutlineColor = value
             case "barBorderWidth": cfg.barBorderWidth = Double(value).map { CGFloat($0) } ?? cfg.barBorderWidth
             case "barRadius": cfg.barRadius = Double(value).map { CGFloat($0) } ?? cfg.barRadius
             case "barPadding": cfg.barPadding = Double(value).map { CGFloat($0) } ?? cfg.barPadding

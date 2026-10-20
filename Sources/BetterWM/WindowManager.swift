@@ -46,6 +46,8 @@ final class WindowManager {
     }
     /// Visible window IDs front to back from the last full tick; avoids re-enumerating on every gesture frame.
     private var zOrder: [WindowID] = []
+    /// Front-to-back order of visible windows as of the last full tick.
+    var frontToBack: [WindowID] { zOrder }
     private var reconciler: Reconciler
     let system = SystemObserver()
     let overlay: ZoneOverlay
@@ -138,35 +140,43 @@ final class WindowManager {
         }
     }
 
-    /// Apps with a window on each desktop, front to back, one entry per app. Built from the window list alone:
-    /// the bar asks for this often and an Accessibility pass over every window would stall the event tap.
-    /// Order shown on the chips, per desktop: apps keep their slot while they have a window there; newcomers
-    /// go to the end. Built from z-order alone the icons would shuffle on every focus change.
-    private var chipOrder: [Int: [pid_t]] = [:]
+    /// Floating windows keep their chip slot while they are around; newcomers go to the end. Tiled windows
+    /// follow the grid instead, so their icons never need remembering.
+    private var chipOrder: [Int: [WindowID]] = [:]
 
-    /// Apps per desktop in a stable order, each with how many windows it has there.
-    func appsByDesktop() -> [Int: [(pid: pid_t, windows: Int)]] {
-        let counts = currentAppsByDesktop()
-        var out: [Int: [(pid: pid_t, windows: Int)]] = [:]
-        for (desktop, apps) in counts {
-            let pids = apps.map(\.pid)
-            var order = chipOrder[desktop]?.filter { pids.contains($0) } ?? []
-            order += pids.filter { !order.contains($0) }
+    /// Windows per desktop in display order: the grid's columns left to right, top to bottom, then floating
+    /// windows. One entry per window, for the status bar chips.
+    func appsByDesktop() -> [Int: [(pid: pid_t, windows: [WindowID])]] {
+        let v = virtualWS
+        var out: [Int: [(pid: pid_t, windows: [WindowID])]] = [:]
+        for (desktop, apps) in currentAppsByDesktop() {
+            let all = apps.flatMap { app in app.windows.map { (pid: app.pid, id: $0) } }
+            let gridOrder = state.grids
+                .compactMap { key, grid -> (Int, [WindowID])? in
+                    guard let d = VirtualWorkspaces.decode(key), d.real == v.realSpace, d.workspace == desktop else { return nil }
+                    return (d.screenIndex, grid.columns.flatMap(\.windows))
+                }
+                .sorted { $0.0 < $1.0 }.flatMap(\.1)
+            var ordered = gridOrder.compactMap { id in all.first { $0.id == id } }
+            let floating = all.filter { !gridOrder.contains($0.id) }
+            var order = chipOrder[desktop]?.filter { fid in floating.contains { $0.id == fid } } ?? []
+            order += floating.map(\.id).filter { !order.contains($0) }
             chipOrder[desktop] = order
-            out[desktop] = order.map { pid in (pid, apps.first { $0.pid == pid }?.windows ?? 1) }
+            ordered += order.compactMap { id in floating.first { $0.id == id } }
+            out[desktop] = ordered.map { ($0.pid, [$0.id]) }
         }
         for desktop in chipOrder.keys where out[desktop] == nil { chipOrder[desktop] = nil }
         return out
     }
 
-    private func currentAppsByDesktop() -> [Int: [(pid: pid_t, windows: Int)]] {
+    private func currentAppsByDesktop() -> [Int: [(pid: pid_t, windows: [WindowID])]] {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return [:] }
-        var out: [Int: [(pid: pid_t, windows: Int)]] = [:]
+        var out: [Int: [(pid: pid_t, windows: [WindowID])]] = [:]
         var counted = Set<WindowID>()
         func add(_ pid: pid_t, _ id: WindowID, to desktop: Int) {
             guard counted.insert(id).inserted else { return }
-            if let i = out[desktop]?.firstIndex(where: { $0.pid == pid }) { out[desktop]![i].windows += 1 }
-            else { out[desktop, default: []].append((pid, 1)) }
+            if let i = out[desktop]?.firstIndex(where: { $0.pid == pid }) { out[desktop]![i].windows.append(id) }
+            else { out[desktop, default: []].append((pid, [id])) }
         }
         let v = virtualWS
         for info in list {
@@ -184,7 +194,7 @@ final class WindowManager {
     }
 
     /// Where a window sits on its own desktop: its grid slot if tiled, its remembered frame if parked, else as is.
-    private func layoutFrame(of w: AXWindow) -> CGRect? {
+    func layoutFrame(of w: AXWindow) -> CGRect? {
         guard let id = id(w) else { return nil }
         if let space = state.space(containing: id), let screen = system.screens().first {
             return reconciler.geometry(state.grid(for: space), screen).frame(of: id)
@@ -219,6 +229,7 @@ final class WindowManager {
         // Hide the ring during the switch so it doesn't linger on the parked window.
         focusRing.suspended = true
         Log.write("desktop", "switch to workspace \(index + 1) (real space \(v.realSpace))")
+        rememberFocus(in: v)
         v.switchTo(index)
         ignoreFocusSwitchUntil = Date().addingTimeInterval(0.8)
         lastFocusedID = AXWindow.focused.flatMap(id)
@@ -258,6 +269,9 @@ final class WindowManager {
     /// focus counts: after switching to an empty workspace the old window stays focused and must not pull us back.
     private var ignoreFocusSwitchUntil = Date.distantPast
     private var lastFocusedID: WindowID?
+    /// The window focused when each workspace was last left, keyed by model Space ID; coming back focuses it
+    /// rather than whatever ended up on top after parking and unhiding.
+    private var lastFocusedByWorkspace: [SpaceID: WindowID] = [:]
     /// Windows just placed on a background workspace; their app tends to focus them right away (Unity does),
     /// and that focus change is the app's, not the user's, even if the user typed a moment ago.
     private var adoptedInBackground: [WindowID: Date] = [:]
@@ -282,6 +296,7 @@ final class WindowManager {
         }
         Log.write("desktop", "focus follows \(describe(f)) to workspace \(ws + 1)")
         focusRing.suspended = true
+        rememberFocus(in: v)
         v.switchTo(ws)
         tick()
         // The window that triggered this is the one to ring; it is already focused.
@@ -320,9 +335,24 @@ final class WindowManager {
     }
 
     /// After a workspace switch: show the ring on the window we are about to raise, in the same pass, then raise it.
+    /// The window that had focus when `desktop` was last left, if it is still around.
+    func lastFocusedWindow(onDesktop desktop: Int) -> WindowID? {
+        let v = virtualWS
+        guard let id = lastFocusedByWorkspace[v.spaceID(workspace: desktop, screenIndex: 0)],
+              v.workspace(of: id) == desktop, system.axWindow(id)?.isValid == true else { return nil }
+        return id
+    }
+
+    private func rememberFocus(in v: VirtualWorkspaces) {
+        guard let f = AXWindow.focused, let id = id(f), virtualSet(ofWindow: id) === v, v.workspace(of: id) == v.active else { return }
+        lastFocusedByWorkspace[v.spaceID(workspace: v.active, screenIndex: 0)] = id
+    }
+
     private func revealRingAndFocusTop() {
         let v = virtualWS
-        guard let id = zOrder.first(where: { virtualSet(ofWindow: $0) === v && v.workspace(of: $0) == v.active }) else {
+        let onActive: (WindowID) -> Bool = { self.virtualSet(ofWindow: $0) === v && v.workspace(of: $0) == v.active }
+        let remembered = lastFocusedByWorkspace[v.spaceID(workspace: v.active, screenIndex: 0)].flatMap { r in system.axWindow(r)?.isValid == true && onActive(r) ? r : nil }
+        guard let id = remembered ?? zOrder.first(where: onActive) else {
             focusRing.suspended = false
             return
         }
@@ -506,7 +536,9 @@ final class WindowManager {
         for _ in 0..<3 {
             var snap = system.snapshot(tracked: tracked)
             zOrder = snap.windows.map(\.id)
-            if assignNewVirtualWindows(snap) { snap = system.snapshot(tracked: tracked) }
+            // Placing windows changes what the next snapshot shows, and apps unhiding during launch add windows
+            // between snapshots; every window must pass through assignment before parking can adopt it.
+            for _ in 0..<3 where assignNewVirtualWindows(snap) { snap = system.snapshot(tracked: tracked) }
             virtualSets.values.forEach { $0.rememberHomes(snap.windows) }
             restoreSavedModes(snap)
             let before = state
@@ -549,6 +581,7 @@ final class WindowManager {
     private func assignNewVirtualWindows(_ snap: Snapshot) -> Bool {
         var pool = snap.windows.filter { !virtualSet(ofWindow: $0.id).isKnown($0.id) }
         guard !pool.isEmpty else { return false }
+        if Date() < virtualRestoreDeadline { Log.write("restore", "unassigned: \(pool.map { describe($0.id) })") }
         var placed = false
         // At launch everything is matched against the saved layout. Later, only windows of an app that just
         // (re)started are, and only by exact title, against the latest save and never into the active
@@ -556,6 +589,12 @@ final class WindowManager {
         let atLaunch = Date() < virtualRestoreDeadline
         let layout = atLaunch ? saved : lastSaved
         let launchCutoff = Date().addingTimeInterval(-15)
+        // A window of a hidden app is on no Space at all (the previous run left the app hidden); it still belongs
+        // where the layout says.
+        func onDesktop(_ id: WindowID, _ real: SpaceID) -> Bool {
+            let spaces = Spaces.spaces(of: id)
+            return spaces.isEmpty || spaces.first == real
+        }
         func eligible(_ w: WindowInfo) -> Bool {
             atLaunch || (NSRunningApplication(processIdentifier: w.pid)?.launchDate.map { $0 > launchCutoff } ?? false)
         }
@@ -564,9 +603,9 @@ final class WindowManager {
                 guard let d = VirtualWorkspaces.decode(savedSpace.id) else { continue }
                 let v = virtualSet(realSpace: d.real)
                 if !atLaunch, d.workspace == v.active { continue }
-                let candidates = pool.filter { !reconciler.isIgnored($0) && Spaces.spaces(of: $0.id).first == d.real && eligible($0) }
+                let candidates = pool.filter { !reconciler.isIgnored($0) && onDesktop($0.id, d.real) && eligible($0) }
                 guard !candidates.isEmpty, let grid = layout.restore(space: savedSpace.id, candidates: candidates, exactTitle: !atLaunch) else { continue }
-                if !atLaunch { Log.write("restore", "\(grid.windows.map { describe($0) }) back on workspace \(d.workspace + 1) (app relaunched)") }
+                Log.write("restore", "\(grid.windows.map { describe($0) }) back on workspace \(d.workspace + 1)\(atLaunch ? "" : " (app relaunched)")")
                 let ws = d.workspace
                 for id in grid.windows { v.move(id, to: ws) }
                 pool.removeAll { grid.contains($0.id) }
@@ -585,7 +624,7 @@ final class WindowManager {
                 guard let d = VirtualWorkspaces.decode(savedSpace.id) else { continue }
                 let v = virtualSet(realSpace: d.real)
                 if !atLaunch, d.workspace == v.active { continue }
-                let candidates = pool.filter { Spaces.spaces(of: $0.id).first == d.real && eligible($0) }
+                let candidates = pool.filter { onDesktop($0.id, d.real) && eligible($0) }
                 for (id, frame) in layout.restoreFloating(space: savedSpace.id, candidates: candidates, exactTitle: !atLaunch) {
                     v.move(id, to: d.workspace)
                     state.floating.insert(id)
@@ -952,7 +991,12 @@ final class WindowManager {
     }
 
     func sendFocusedWindow(toDesktop index: Int) {
-        guard let w = AXWindow.focused, let id = id(w) else { return }
+        guard let w = AXWindow.focused else { return }
+        send(w, toDesktop: index)
+    }
+
+    func send(_ w: AXWindow, toDesktop index: Int) {
+        guard let id = id(w) else { return }
         let v = virtualSet(ofWindow: id)
         guard index >= 0, index < 9, index != v.active else { return }
         if index >= v.count { v.setCount(index + 1) }

@@ -47,6 +47,9 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var stackOffsetField: NSTextField!
     private var stackNarrowField: NSTextField!
     private var switcherThumbsSwitch: NSSwitch!
+    private var overviewSwitch: NSSwitch!
+    private var overviewKeySwitch: NSSwitch!
+    private var overviewGestureSwitch: NSSwitch!
     private var switcherSwitch: NSSwitch!
     private var overlaySwitch: NSSwitch!
     private var sliders: [(KeyPath<Config, CGFloat>, WritableKeyPath<Config, CGFloat>, NSSlider, NSTextField)] = []
@@ -86,6 +89,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var barBorderColorWell: NSColorWell!
     private var barActiveMode: NSPopUpButton!
     private var barActiveColorWell: NSColorWell!
+    private var barOutlineMode: NSPopUpButton!
+    private var barOutlineColorWell: NSColorWell!
     private var barBorderWidthField: NSTextField!
     private var barRadiusField: NSTextField!
     private var barPaddingField: NSTextField!
@@ -433,6 +438,9 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         debugLogSwitch = toggle()
         switcherSwitch = toggle(#selector(switcherChanged))
         switcherThumbsSwitch = toggle()
+        overviewSwitch = toggle(#selector(overviewChanged))
+        overviewKeySwitch = toggle()
+        overviewGestureSwitch = toggle()
         overlaySwitch = toggle()
         return [
             group("Layout", [
@@ -447,6 +455,11 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             group("Switcher", [
                 row("⌥Tab window switcher", "Windows grouped by desktop; the hotkey is on the Hotkeys page.", [switcherSwitch]),
                 row("Show window previews", "Needs Screen Recording permission; otherwise app icons are shown.", [switcherThumbsSwitch]),
+            ]),
+            group("Desktop overview", [
+                row("Desktop overview", "Mission Control for BetterWM desktops: a strip of every desktop and the current one's windows spread out. Click to switch or focus, drag a window onto a desktop to move it. The hotkey is on the Hotkeys page.", [overviewSwitch]),
+                row("Use the Mission Control key", "F3 on Apple keyboards opens the overview instead of Mission Control.", [overviewKeySwitch]),
+                row("Four-finger swipe", "Swipe up with four fingers to open, down to close; the overview follows your fingers. Turn off Mission Control's own gesture in System Settings › Trackpad › More Gestures, or both will open.", [overviewGestureSwitch]),
             ]),
             group("Diagnostics", [
                 row("Show pressed hotkey on screen", "Flashes the key combination and action at the bottom of the screen; handy for demos.", [overlaySwitch]),
@@ -541,6 +554,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         barBorderColorWell = well()
         barActiveMode = choice(["System accent", "Custom colour"], #selector(barAppearanceChanged))
         barActiveColorWell = well()
+        barOutlineMode = choice(["Automatic", "Custom colour"], #selector(barAppearanceChanged))
+        barOutlineColorWell = well()
         barBorderWidthField = numberField("0")
         barRadiusField = numberField("0")
         barPaddingField = numberField("12")
@@ -569,6 +584,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 row("Background", "A translucent blur, or a solid colour.", [barBackgroundMode, barBgColor]),
                 row("Text colour", nil, [barTextMode, barTextColorWell]),
                 row("Active desktop chip", nil, [barActiveMode, barActiveColorWell]),
+                row("Focused window outline", "Around the focused window's icon in its chip. Automatic contrasts with the chip.", [barOutlineMode, barOutlineColorWell]),
                 row("Border", nil, [barBorderColorWell, barBorderWidthField, unit("pt")]),
                 row("Corner radius", nil, [barRadiusField, unit("pt")]),
                 row("Padding", "Space between the bar's edges and its content.", [barPaddingField, unit("pt")]),
@@ -719,6 +735,10 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     // MARK: Dependent controls
 
     @objc private func switcherChanged() { switcherThumbsSwitch.isEnabled = switcherSwitch.state == .on }
+    @objc private func overviewChanged() {
+        overviewKeySwitch.isEnabled = overviewSwitch.state == .on
+        overviewGestureSwitch.isEnabled = overviewSwitch.state == .on
+    }
     @objc private func autoRadiusChanged() { ringRadius.isEnabled = ringAutoRadius.state == .off }
     @objc private func floatingColorModeChanged() { ringFloatingColor.isEnabled = ringFloatingMode.indexOfSelectedItem == 1 }
     @objc private func ringSliderChanged(_ s: NSSlider) {
@@ -728,6 +748,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         barBgColor.isEnabled = barBackgroundMode.indexOfSelectedItem == 1
         barTextColorWell.isEnabled = barTextMode.indexOfSelectedItem == 1
         barActiveColorWell.isEnabled = barActiveMode.indexOfSelectedItem == 1
+        barOutlineColorWell.isEnabled = barOutlineMode.indexOfSelectedItem == 1
     }
     @objc private func locationModeChanged() { barLocationField.isEnabled = barLocationPopup.indexOfSelectedItem == 1 }
 
@@ -781,6 +802,10 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         on(switcherThumbsSwitch, config.switcherThumbnails)
         on(switcherSwitch, config.switcher)
         switcherChanged()
+        on(overviewSwitch, config.overview)
+        on(overviewKeySwitch, config.overviewKey)
+        on(overviewGestureSwitch, config.overviewGesture)
+        overviewChanged()
         on(overlaySwitch, config.actionOverlay)
         strategyPopup.selectItem(at: Config.AutoTileStrategy.allCases.firstIndex(of: config.autoTileStrategy) ?? 0)
         let mods = config.dragModifiers.lowercased().split(separator: "+").map(String.init)
@@ -825,6 +850,9 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         let accent = config.barActiveColor.lowercased() == "accent"
         barActiveMode.selectItem(at: accent ? 0 : 1)
         barActiveColorWell.color = accent ? .controlAccentColor : (NSColor(hex: config.barActiveColor) ?? .controlAccentColor)
+        let autoOutline = config.barFocusOutlineColor.lowercased() == "auto"
+        barOutlineMode.selectItem(at: autoOutline ? 0 : 1)
+        barOutlineColorWell.color = autoOutline ? .white : (NSColor(hex: config.barFocusOutlineColor) ?? .white)
         barBorderWidthField.stringValue = String(Int(config.barBorderWidth))
         barRadiusField.stringValue = String(Int(config.barRadius))
         barPaddingField.stringValue = String(Int(config.barPadding))
@@ -849,6 +877,9 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.stackScreensNarrowerThan = CGFloat(Double(stackNarrowField.stringValue) ?? 0)
         config.switcherThumbnails = isOn(switcherThumbsSwitch)
         config.switcher = isOn(switcherSwitch)
+        config.overview = isOn(overviewSwitch)
+        config.overviewKey = isOn(overviewKeySwitch)
+        config.overviewGesture = isOn(overviewGestureSwitch)
         config.actionOverlay = isOn(overlaySwitch)
         if let raw = strategyPopup.selectedItem?.representedObject as? String, let st = Config.AutoTileStrategy(rawValue: raw) {
             config.autoTileStrategy = st
@@ -879,6 +910,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.barTextColor = barTextMode.indexOfSelectedItem == 0 ? "auto" : barTextColorWell.color.hexString
         config.barBorderColor = barBorderColorWell.color.hexString
         config.barActiveColor = barActiveMode.indexOfSelectedItem == 0 ? "accent" : barActiveColorWell.color.hexString
+        config.barFocusOutlineColor = barOutlineMode.indexOfSelectedItem == 0 ? "auto" : barOutlineColorWell.color.hexString
         config.barBorderWidth = CGFloat(Double(barBorderWidthField.stringValue) ?? 0)
         config.barRadius = CGFloat(Double(barRadiusField.stringValue) ?? 0)
         config.barPadding = CGFloat(Double(barPaddingField.stringValue) ?? 12)

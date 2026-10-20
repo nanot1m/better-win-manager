@@ -9,6 +9,9 @@ final class FocusRing {
     private var timer: Timer?
     private let events = WindowServerEvents()
     private var current: CGWindowID?
+    /// The window the ring is on; the bar outlines it. Electron apps report no focused window for a moment
+    /// after a switch, so readers prefer this over asking Accessibility again.
+    var currentWindowID: CGWindowID? { current }
     /// Corner radii rarely change for a window's lifetime, so one measurement per window ID is enough.
     private var radiusCache: [CGWindowID: CGFloat] = [:]
     /// Floating windows get a ring only when `focusRingFloating` is set; skipping them keeps drags cheap.
@@ -17,6 +20,8 @@ final class FocusRing {
     var isTiledID: (CGWindowID) -> Bool = { _ in true }
     /// Fired after the ring window is (re)ordered so dependants like the gap handles can stack above it.
     var onReorder: (() -> Void)?
+    /// Fired when the ringed window changes, including between windows of one app.
+    var onFocusChange: (() -> Void)?
     var windowNumber: Int? { window.isVisible ? window.windowNumber : nil }
 
     /// Show Desktop is active: stay hidden until it ends.
@@ -156,6 +161,7 @@ final class FocusRing {
         if current != id {
             current = id
             events.watch([id])
+            onFocusChange?()
         }
         let tiledColor = NSColor(hex: config.focusRingColor) ?? .controlAccentColor
         let color = floating && config.focusRingFloatingColor.lowercased() != "same"

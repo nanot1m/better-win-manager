@@ -13,10 +13,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var bar: StatusBar!
     var demo: DemoRunner?
     var switcher: WindowSwitcher!
+    var overview: Overview!
+    var swipe: SwipeGesture?
     let systemReveal = SystemReveal()
     var overlayItem: NSMenuItem?
     var switcherItem: NSMenuItem?
     let configWindow = ConfigWindow()
+    let onboarding = OnboardingWindow()
 
     func applicationWillTerminate(_ n: Notification) { manager.prepareForQuit() }
 
@@ -32,9 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ n: Notification) {
-        let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        guard AXIsProcessTrustedWithOptions(opts) else {
-            print("Grant Accessibility access in System Settings > Privacy & Security > Accessibility, then relaunch.")
+        guard AXIsProcessTrusted() else {
+            print("Grant Accessibility access in System Settings > Privacy & Security > Accessibility.")
+            onboarding.show()
             waitForTrust()
             return
         }
@@ -53,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager = WindowManager(config: config)
         popup = ActionPopup(manager: manager)
         switcher = WindowSwitcher(manager: manager)
+        overview = Overview(manager: manager)
         bar = StatusBar(config: config)
         manager.system.topInset = { [weak self] screen in self?.bar.inset(for: screen) ?? 0 }
         bar.onLayoutChange = { [weak self] in self?.manager.apply() }
@@ -66,9 +70,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.desktopCount = { [weak self] in self?.manager.desktopCount ?? 0 }
         bar.currentDesktop = { [weak self] in self?.manager.currentDesktop }
         bar.desktopApps = { [weak self] in self?.manager.appsByDesktop() ?? [:] }
+        bar.focusedWindow = { [weak self] in self?.manager.focusRing.currentWindowID }
         bar.isInteracting = { [weak self] in self?.manager.interacting ?? false }
         manager.onWindowsChange = { [weak self] in self?.bar.focusChanged() }
-        manager.onDesktopChange = { [weak self] in self?.bar.focusChanged() }
+        manager.focusRing.onFocusChange = { [weak self] in self?.bar.focusChanged() }
+        manager.onDesktopChange = { [weak self] in
+            self?.bar.focusChanged()
+            self?.overview.desktopChanged()
+        }
         manager.onFocusChange = { [weak self] in self?.bar.focusChanged() }
         systemReveal.onChange = { [weak self] active in
             self?.manager.focusRing.hiddenForSystemReveal = active
@@ -83,6 +92,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             print("Failed to create event tap (needs Accessibility permission).")
             NSApp.terminate(nil)
         }
+        drag.onOverviewKey = { [weak self] in self?.overview.toggle() }
+        applyGestureSetting(config)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = StatusIcon.make(paused: false)
         statusItem.menu = buildMenu()
@@ -130,6 +141,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             h.snapshot(hover: true, dragging: false, to: path)
             h.snapshot(hover: true, dragging: true, to: path.replacingOccurrences(of: ".png", with: "-drag.png"))
             print("handle snapshots written")
+        }
+        if CommandLine.arguments.contains("--onboarding") {
+            onboarding.show()
+            print("onboarding window:", onboarding.windowNumber)
+        }
+        if CommandLine.arguments.contains("--overview") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [overview] in overview?.toggle() }
+        }
+        if let i = CommandLine.arguments.firstIndex(of: "--overview-sweep"), i + 1 < CommandLine.arguments.count {
+            // Scrubs the overview open over the given seconds, as a gesture would, and holds it there.
+            let seconds = Double(CommandLine.arguments[i + 1]) ?? 2
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [overview] in
+                overview?.gestureBegan()
+                let start = Date()
+                Timer.scheduledTimer(withTimeInterval: 1 / 60, repeats: true) { t in
+                    let x = Date().timeIntervalSince(start) / seconds
+                    overview?.gestureChanged(CGFloat(min(1, x)))
+                    if x >= 1 { t.invalidate() }
+                }
+            }
         }
         if let i = CommandLine.arguments.firstIndex(of: "--snapshot-switcher"), i + 1 < CommandLine.arguments.count {
             let path = CommandLine.arguments[i + 1]
@@ -258,6 +289,7 @@ extension AppDelegate {
 
         section("BetterWM")
         add("Settings…", #selector(showSettings))
+        add("Permissions…", #selector(showPermissions))
         add("Open Config File", #selector(openConfig))
         add("Reload Config", #selector(reloadConfig))
         let diag = NSMenu(title: "Diagnostics")
@@ -295,6 +327,7 @@ extension AppDelegate {
             "popup": { [weak self] in self?.popup.toggle() },
             "switcher": { [weak self] in self?.switcher.step(reverse: false) },
             "switcherBack": { [weak self] in self?.switcher.step(reverse: true) },
+            "overview": { [weak self] in self?.overview.toggle() },
             "focusNext": { [weak self] in self?.manager.focusNext() },
             "focusPrevious": { [weak self] in self?.manager.focusNext(reverse: true) },
             "moveLeft": { [weak self] in self?.manager.moveFocused(.left) },
@@ -335,6 +368,7 @@ extension AppDelegate {
         for (index, (name, spec)) in config.hotkeys.sorted(by: { $0.key < $1.key }).enumerated() {
             guard let action = actions[name] else { print("Unknown hotkey action '\(name)'"); continue }
             if name.hasPrefix("switcher"), !config.switcher { continue }
+            if name == "overview", !config.overview { continue }
             let title = Config.actions.first { $0.key == name }?.title ?? name
             let wrapped = { [weak self] in
                 Log.write("hotkey", "\(spec) -> \(name)")
@@ -361,9 +395,24 @@ extension AppDelegate {
         manager.reloadConfig()
         bar.apply(manager.config)
         registerHotKeys(manager.config)
+        applyGestureSetting(manager.config)
         statusItem.menu = buildMenu()
         syncAutoTileItems()
     }
+    func applyGestureSetting(_ config: Config) {
+        if config.overview, config.overviewGesture {
+            guard swipe == nil else { return }
+            let g = SwipeGesture()
+            g.onBegan = { [weak self] in self?.overview.gestureBegan() }
+            g.onChanged = { [weak self] in self?.overview.gestureChanged($0) }
+            g.onEnded = { [weak self] in self?.overview.gestureEnded(velocity: $0) }
+            if g.start() { swipe = g } else { Log.write("gesture", "multitouch framework unavailable; gesture off") }
+        } else {
+            swipe?.stop()
+            swipe = nil
+        }
+    }
+
     @objc func toggleAutoTile() {
         manager.config.autoTile.toggle()
         manager.config.save()
@@ -404,6 +453,7 @@ extension AppDelegate {
         hud.show(keys: nil, action: "Diagnostics copied to clipboard", preformatted: true, force: true)
         Log.write("app", "diagnostics report copied (\(report.count) chars)")
     }
+    @objc func showPermissions() { onboarding.show() }
     @objc func showSettings() {
         configWindow.show(config: manager.config) { [weak self] cfg in
             guard let self else { return }
@@ -411,6 +461,7 @@ extension AppDelegate {
             self.bar.apply(cfg)
             self.manager.relayout()
             self.registerHotKeys(cfg)
+            self.applyGestureSetting(cfg)
             self.statusItem.menu = self.buildMenu()
             self.syncAutoTileItems()
         }

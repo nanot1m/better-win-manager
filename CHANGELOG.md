@@ -4,6 +4,18 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.13.0] - 2026-10-20
+
+### Added
+- Desktop overview, Mission Control style: a strip of every desktop along the top and the current desktop's windows spread out below, with window previews. Click a window to focus it, click a desktop to switch, drag a window onto a desktop or the + tile to move it there; Escape or a click on the backdrop closes. New `overview` action; the Mission Control key (F3) opens it by default (`overviewKey`). With `overviewGesture` on, a four-finger swipe up opens it and the animation follows your fingers; swipe down closes.
+
+- Welcome window on first launch, while Accessibility is missing: what each permission is for, with a button to the matching System Settings pane and live status. Reachable later from the menu as Permissions….
+- The status bar outlines the focused window's icon in its desktop chip; the colour is configurable (`barFocusOutlineColor`, automatic by default). Chip icons follow the grid order, columns left to right, with floating windows last.
+- Switching to a desktop focuses the window that was focused when you last left it.
+
+### Fixed
+- Windows of apps that a killed run left hidden lost their desktops on the next launch: they appeared only while the launch tick was already re-reading the screen, skipped the saved layout and landed on the active desktop as floating windows. Every window now passes through the saved layout before anything else claims it, and a window on no Space (hidden) still matches its saved desktop.
+
 ## [0.12.12] - 2026-10-20
 
 ### Fixed
