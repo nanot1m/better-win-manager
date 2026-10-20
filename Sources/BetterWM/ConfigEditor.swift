@@ -472,7 +472,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             group("Trackpad gestures", [
                 row("Fingers", "For both swipes below. Turn off the matching macOS gestures in System Settings › Trackpad › More Gestures, or both will react.", [gestureFingersPopup]),
                 row("Swipe up and down", "Opens and closes the desktop overview; the animation follows your fingers.", [overviewGestureSwitch]),
-                row("Swipe left and right", "Switches to the next or previous desktop; past the last or first one, on to the neighbouring macOS Space, so fullscreen apps stay reachable.", [desktopSwipeSwitch]),
+                row("Swipe left and right", "Slides to the next or previous desktop, following your fingers; past the last or first one, on to the neighbouring macOS Space. Needs the desktop overview, which provides the previews.", [desktopSwipeSwitch]),
             ]),
             group("Diagnostics", [
                 row("Show pressed hotkey on screen", "Flashes the key combination and action at the bottom of the screen; handy for demos.", [overlaySwitch]),
@@ -751,6 +751,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     @objc private func overviewChanged() {
         overviewKeySwitch.isEnabled = overviewSwitch.state == .on
         overviewGestureSwitch.isEnabled = overviewSwitch.state == .on
+        desktopSwipeSwitch.isEnabled = overviewSwitch.state == .on
     }
     @objc private func autoRadiusChanged() { ringRadius.isEnabled = ringAutoRadius.state == .off }
     @objc private func floatingColorModeChanged() { ringFloatingColor.isEnabled = ringFloatingMode.indexOfSelectedItem == 1 }

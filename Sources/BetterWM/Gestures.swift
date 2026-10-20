@@ -14,10 +14,17 @@ final class SwipeGesture {
     var onChanged: ((CGFloat) -> Void)?
     /// Velocity in travel fractions per second at the moment the fingers lifted.
     var onEnded: ((CGFloat) -> Void)?
-    /// Horizontal swipe, once per gesture; `next` is true for a swipe to the left (the next desktop slides in
-    /// from the right, as with Spaces). Nil leaves horizontal swipes alone.
-    var onHorizontal: ((_ next: Bool) -> Void)?
+    /// Horizontal swipe, scrubbed like the vertical one: travel is a fraction of the distance for one desktop
+    /// (half the pad), negative to the left. Nil leaves horizontal swipes alone.
+    var onHorizontalBegan: (() -> Void)?
+    var onHorizontalChanged: ((CGFloat) -> Void)?
+    var onHorizontalEnded: ((CGFloat) -> Void)?
+    private let fullTravelX: Float = 0.5
+    private var lastX: Float = 0, velocityX: Float = 0
 
+    /// True from the moment enough fingers are down until they lift; the event tap swallows scrolling meanwhile
+    /// so the swipe does not also scroll the window under the cursor.
+    private(set) var fingersDown = false
     private var devices: [MTDevice] = []
     private var startY: Float?, startX: Float = 0
     private var lastY: Float = 0, lastT: Double = 0, velocity: Float = 0
@@ -94,6 +101,7 @@ final class SwipeGesture {
             let y = down.reduce(Float(0)) { $0 + $1.normalized.pos.y } / Float(down.count)
             let x = down.reduce(Float(0)) { $0 + $1.normalized.pos.x } / Float(down.count)
             if startY == nil {
+                DispatchQueue.main.async { self.fingersDown = true }
                 startY = y
                 startX = x
                 lastY = y
@@ -102,18 +110,26 @@ final class SwipeGesture {
                 axis = .undecided
                 return
             }
-            if t > lastT { velocity = (y - lastY) / Float(t - lastT) / fullTravel }
+            if t > lastT {
+                velocity = (y - lastY) / Float(t - lastT) / fullTravel
+                velocityX = (x - lastX) / Float(t - lastT) / fullTravelX
+            }
             lastY = y
+            lastX = x
             lastT = t
             let dy = y - startY!, dx = x - startX
             if axis == .undecided {
                 // A four-finger tap or a tiny shift isn't a swipe; the first clear movement picks the axis.
                 guard max(abs(dx), abs(dy)) > 0.06 * fullTravel else { return }
-                axis = abs(dx) > abs(dy) ? (onHorizontal == nil ? .done : .horizontal) : .vertical
+                axis = abs(dx) > abs(dy) ? (onHorizontalChanged == nil ? .done : .horizontal) : .vertical
                 if axis == .vertical {
                     active = true
                     startY = y - (dy > 0 ? 0.06 : -0.06) * fullTravel
                     DispatchQueue.main.async { self.onBegan?() }
+                } else if axis == .horizontal {
+                    active = true
+                    startX = x - (dx > 0 ? 0.06 : -0.06) * fullTravel
+                    DispatchQueue.main.async { self.onHorizontalBegan?() }
                 }
             }
             switch axis {
@@ -121,18 +137,19 @@ final class SwipeGesture {
                 let adjusted = CGFloat((y - startY!) / fullTravel)
                 DispatchQueue.main.async { self.onChanged?(adjusted) }
             case .horizontal:
-                guard abs(dx) > 0.12 else { return }
-                axis = .done
-                let next = dx < 0
-                DispatchQueue.main.async { self.onHorizontal?(next) }
+                let travel = CGFloat((x - startX) / fullTravelX)
+                DispatchQueue.main.async { self.onHorizontalChanged?(travel) }
             default: break
             }
         } else if startY != nil {
-            let wasActive = active, v = CGFloat(velocity)
+            let wasActive = active, v = CGFloat(velocity), vx = CGFloat(velocityX), wasAxis = axis
+            DispatchQueue.main.async { self.fingersDown = false }
             startY = nil
             active = false
             axis = .undecided
-            if wasActive { DispatchQueue.main.async { self.onEnded?(v) } }
+            if wasActive {
+                DispatchQueue.main.async { wasAxis == .horizontal ? self.onHorizontalEnded?(vx) : self.onEnded?(v) }
+            }
         }
     }
 }

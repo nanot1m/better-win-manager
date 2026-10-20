@@ -58,6 +58,56 @@ final class Overview {
         animate(to: target)
     }
 
+    // MARK: Horizontal swipe while open
+
+    private var hAnimator: Timer?
+    private var hOffset: CGFloat = 0
+
+    func horizontalBegan() {
+        guard isOpen else { return }
+        hAnimator?.invalidate()
+        hOffset = 0
+        view.beginHorizontal()
+    }
+
+    /// `travel` in desktops, negative to the left (the next desktop comes in from the right).
+    func horizontalChanged(_ travel: CGFloat) {
+        guard isOpen else { return }
+        var t = travel
+        if t < 0, !view.hasNeighbour(1) { t *= 0.25 }
+        if t > 0, !view.hasNeighbour(-1) { t *= 0.25 }
+        hOffset = t * view.bounds.width
+        view.horizontalOffset = hOffset
+    }
+
+    func horizontalEnded(velocity: CGFloat) {
+        guard isOpen else { return }
+        let w = view.bounds.width
+        let travel = hOffset / w
+        var target = 0
+        if (velocity < -1.2 || travel < -0.5), view.hasNeighbour(1) { target = 1 }
+        if (velocity > 1.2 || travel > 0.5), view.hasNeighbour(-1) { target = -1 }
+        let destination = (manager.currentDesktop ?? 0) + target
+        if target != 0 { manager.switchDesktop(destination) }
+        let from = hOffset, to = CGFloat(-target) * w, start = Date()
+        let duration = max(0.12, 0.3 * Double(abs(to - from) / w))
+        hAnimator?.invalidate()
+        hAnimator = Timer.scheduledTimer(withTimeInterval: 1 / 120, repeats: true) { [weak self] t in
+            guard let self else { t.invalidate(); return }
+            let x = min(1, Date().timeIntervalSince(start) / duration)
+            self.hOffset = from + (to - from) * CGFloat(1 - pow(1 - x, 3))
+            self.view.horizontalOffset = self.hOffset
+            if x >= 1 {
+                t.invalidate()
+                self.hAnimator = nil
+                // The new current's layers land exactly where the neighbour's were drawn, so the swap is seamless.
+                self.view.endHorizontal()
+                if target != 0 { self.refresh() }
+            }
+        }
+        RunLoop.main.add(hAnimator!, forMode: .common)
+    }
+
     private func animate(to target: CGFloat) {
         animator?.invalidate()
         if target > 0, !panel.isVisible { present() }
@@ -139,7 +189,7 @@ final class Overview {
 
     /// A desktop switch while open (hotkey, bar chip) is shown in place; the user closes when done.
     func desktopChanged() {
-        guard panel.isVisible, animator == nil else { return }
+        guard panel.isVisible, animator == nil, hAnimator == nil else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             guard let self, self.panel.isVisible else { return }
             self.refresh()
@@ -215,7 +265,7 @@ final class Overview {
 
     /// The screen without its windows: wallpaper and desktop icons (everything below the back-most window),
     /// with our own bar drawn back on top. The windows themselves are drawn as previews, so they visibly lift off.
-    private static func captureBackdrop(_ area: CGRect, topInset: CGFloat) -> CGImage? {
+    static func captureBackdrop(_ area: CGRect, topInset: CGFloat) -> CGImage? {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else { return nil }
         var backmost: CGWindowID?
         var bar: [CGWindowID] = []
@@ -436,13 +486,14 @@ final class OverviewView: NSView {
 
     /// Spread-out slots, Exposé style: one cell per window in reading order, each window scaled to fit its cell,
     /// so every window is fully visible whatever the layout.
-    private func computeSlots() {
-        slots.removeAll()
+    private func computeSlots() { slots = slots(for: model.current?.windows ?? []) }
+
+    private func slots(for windows: [OverviewModel.Window]) -> [WindowID: CGRect] {
+        var slots: [WindowID: CGRect] = [:]
         let area = CGRect(x: 48, y: stripFrame.maxY + 36, width: bounds.width - 96, height: bounds.height - stripFrame.maxY - 36 - 40)
-        guard bounds.width > 0, bounds.height > 0, area.width > 0, area.height > 0 else { return }
-        let windows = model.current?.windows ?? []
+        guard bounds.width > 0, bounds.height > 0, area.width > 0, area.height > 0 else { return slots }
         let frames = windows.map { local($0.frame) }
-        guard !windows.isEmpty else { return }
+        guard !windows.isEmpty else { return slots }
         // Reading order so the cells follow the screen, however the windows are stacked.
         let order = windows.indices.sorted { (frames[$0].minX / 40).rounded() == (frames[$1].minX / 40).rounded() ? frames[$0].minY < frames[$1].minY : frames[$0].minX < frames[$1].minX }
         let n = order.count
@@ -460,6 +511,40 @@ final class OverviewView: NSView {
             let w = f.width * s, h = f.height * s
             slots[windows[i].id] = CGRect(x: cell.midX - w / 2, y: cell.midY - h / 2, width: w, height: h)
         }
+        return slots
+    }
+
+    // MARK: Horizontal scrub between desktops
+
+    /// Neighbouring desktops' windows at their own spread-out slots, one screen width to either side.
+    private var neighbourLayers: [(layer: WindowLayer, slot: CGRect, side: CGFloat)] = []
+    var horizontalOffset: CGFloat = 0 { didSet { layoutForProgress() } }
+
+    func hasNeighbour(_ side: Int) -> Bool {
+        guard let current = model.current?.index else { return false }
+        return model.desktops.contains { $0.index == current + side }
+    }
+
+    func beginHorizontal() {
+        endHorizontal()
+        guard let current = model.current?.index else { return }
+        let scale = window?.backingScaleFactor ?? 2
+        for side in [-1, 1] {
+            guard let d = model.desktops.first(where: { $0.index == current + side }) else { continue }
+            for (w, slot) in slots(for: d.windows).sorted(by: { $0.key < $1.key }) {
+                guard let item = d.windows.first(where: { $0.id == w }) else { continue }
+                let l = WindowLayer(item: item, scale: scale)
+                layer?.insertSublayer(l, below: titleLayer)
+                neighbourLayers.append((l, slot, CGFloat(side)))
+            }
+        }
+        layoutForProgress()
+    }
+
+    func endHorizontal() {
+        for n in neighbourLayers { n.layer.removeFromSuperlayer() }
+        neighbourLayers.removeAll()
+        horizontalOffset = 0
     }
 
     override func layout() {
@@ -491,9 +576,13 @@ final class OverviewView: NSView {
             guard let l = windowLayers[w.id], let slot = slots[w.id] else { continue }
             if let d = dragging, d.item.id == w.id { continue }
             let real = local(w.frame)
-            l.frame = CGRect(x: real.minX + (slot.minX - real.minX) * p, y: real.minY + (slot.minY - real.minY) * p,
+            l.frame = CGRect(x: real.minX + (slot.minX - real.minX) * p + horizontalOffset, y: real.minY + (slot.minY - real.minY) * p,
                              width: real.width + (slot.width - real.width) * p, height: real.height + (slot.height - real.height) * p)
             l.setProgress(p)
+        }
+        for n in neighbourLayers {
+            n.layer.frame = n.slot.offsetBy(dx: horizontalOffset + n.side * bounds.width, dy: 0)
+            n.layer.setProgress(1)
         }
         titleLayer.opacity = p >= 1 && hovered != nil ? 1 : 0
         CATransaction.commit()

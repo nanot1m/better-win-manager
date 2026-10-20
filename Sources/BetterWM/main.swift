@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var demo: DemoRunner?
     var switcher: WindowSwitcher!
     var overview: Overview!
+    var slide: DesktopSlide!
     var swipe: SwipeGesture?
     let systemReveal = SystemReveal()
     var overlayItem: NSMenuItem?
@@ -57,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popup = ActionPopup(manager: manager)
         switcher = WindowSwitcher(manager: manager)
         overview = Overview(manager: manager)
+        slide = DesktopSlide(manager: manager)
         bar = StatusBar(config: config)
         manager.system.topInset = { [weak self] screen in self?.bar.inset(for: screen) ?? 0 }
         bar.onLayoutChange = { [weak self] in self?.manager.apply() }
@@ -95,6 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
         }
         drag.onOverviewKey = { [weak self] in self?.overview.toggle() }
+        drag.swallowScrolling = { [weak self] in (self?.overview.isOpen ?? false) || (self?.slide.isActive ?? false) || (self?.swipe?.fingersDown ?? false) }
         applyGestureSetting(config)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = StatusIcon.make(paused: false)
@@ -147,6 +150,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--onboarding") {
             onboarding.show()
             print("onboarding window:", onboarding.windowNumber)
+        }
+        if let i = CommandLine.arguments.firstIndex(of: "--slide-sweep"), i + 1 < CommandLine.arguments.count {
+            // Scrubs the desktop slide to the given travel over a second and lets go, as a swipe would.
+            let travel = CGFloat(Double(CommandLine.arguments[i + 1]) ?? -0.35)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [slide] in
+                slide?.began()
+                let start = Date()
+                Timer.scheduledTimer(withTimeInterval: 1 / 60, repeats: true) { t in
+                    let x = min(1, Date().timeIntervalSince(start) / 1.0)
+                    slide?.changed(travel * CGFloat(x))
+                    if x >= 1 { t.invalidate(); DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { slide?.ended(velocity: 0) } }
+                }
+            }
+        }
+        if let i = CommandLine.arguments.firstIndex(of: "--overview-hsweep"), i + 1 < CommandLine.arguments.count {
+            // Opens the overview, then scrubs it sideways to the given travel over a second and lets go.
+            let travel = CGFloat(Double(CommandLine.arguments[i + 1]) ?? -0.4)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [overview] in overview?.toggle() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [overview] in
+                overview?.horizontalBegan()
+                let start = Date()
+                Timer.scheduledTimer(withTimeInterval: 1 / 60, repeats: true) { t in
+                    let x = min(1, Date().timeIntervalSince(start) / 1.0)
+                    overview?.horizontalChanged(travel * CGFloat(x))
+                    if x >= 1 { t.invalidate(); DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { overview?.horizontalEnded(velocity: 0) } }
+                }
+            }
         }
         if CommandLine.arguments.contains("--overview") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [overview] in overview?.toggle() }
@@ -403,7 +433,8 @@ extension AppDelegate {
     }
     func applyGestureSetting(_ config: Config) {
         let vertical = config.overview && config.overviewGesture
-        guard vertical || config.desktopSwipe else {
+        let horizontal = config.overview && config.desktopSwipe
+        guard vertical || horizontal else {
             swipe?.stop()
             swipe = nil
             return
@@ -413,9 +444,18 @@ extension AppDelegate {
         g.onBegan = vertical ? { [weak self] in self?.overview.gestureBegan() } : nil
         g.onChanged = vertical ? { [weak self] in self?.overview.gestureChanged($0) } : nil
         g.onEnded = vertical ? { [weak self] in self?.overview.gestureEnded(velocity: $0) } : nil
-        g.onHorizontal = config.desktopSwipe ? { [weak self] next in
-            Log.write("gesture", "four-finger swipe \(next ? "left" : "right")")
-            self?.manager.switchDesktopOrSpace(next: next)
+        // With the overview open the swipe scrubs the overview itself; otherwise it slides the desktops.
+        g.onHorizontalBegan = horizontal ? { [weak self] in
+            guard let self else { return }
+            if self.overview.isOpen { self.overview.horizontalBegan() } else { self.slide.began() }
+        } : nil
+        g.onHorizontalChanged = horizontal ? { [weak self] in
+            guard let self else { return }
+            if self.slide.isActive { self.slide.changed($0) } else { self.overview.horizontalChanged($0) }
+        } : nil
+        g.onHorizontalEnded = horizontal ? { [weak self] in
+            guard let self else { return }
+            if self.slide.isActive { self.slide.ended(velocity: $0) } else { self.overview.horizontalEnded(velocity: $0) }
         } : nil
         if swipe == nil {
             if g.start() { swipe = g } else { Log.write("gesture", "multitouch framework unavailable; gesture off") }

@@ -16,6 +16,10 @@ final class DragController {
     private var lastScrollSwitch = Date.distantPast
     /// The Mission Control key (keycode 160) when the overview has taken it over.
     var onOverviewKey: (() -> Void)?
+    /// While true, scroll and gesture events are swallowed (a swipe is in progress or the overview is open).
+    var swallowScrolling: () -> Bool = { false }
+    /// A scroll sequence that started while swallowing stays swallowed through its momentum, which outlives the fingers.
+    private var swallowingSequence = false
     init(manager: WindowManager) { self.manager = manager }
 
     func start() -> Bool {
@@ -23,6 +27,7 @@ final class DragController {
             | (1 << CGEventType.leftMouseDragged.rawValue)
             | (1 << CGEventType.leftMouseUp.rawValue)
             | (1 << CGEventType.scrollWheel.rawValue)
+            | (1 << 29) | (1 << 30) | (1 << 31)
             | (1 << CGEventType.keyDown.rawValue)
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
         guard let tap = CGEvent.tapCreate(
@@ -46,6 +51,7 @@ final class DragController {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return Unmanaged.passUnretained(event)
         }
+        if type.rawValue >= 29 && type.rawValue <= 31 { return swallowScrolling() ? nil : Unmanaged.passUnretained(event) }
         let p = event.location
         let alt = event.flags.contains(HotKey.eventFlags(manager.config.dragModifiers))
         if type == .keyDown || type == .leftMouseDown {
@@ -66,6 +72,17 @@ final class DragController {
             let consumed = recorder.record(keyCode: event.getIntegerValueField(.keyboardEventKeycode), flags: event.flags)
             return consumed ? nil : Unmanaged.passUnretained(event)
         case .scrollWheel:
+            let phase = event.getIntegerValueField(.scrollWheelEventScrollPhase)
+            let momentum = event.getIntegerValueField(.scrollWheelEventMomentumPhase)
+            // Phases: 1 began, 2 changed, 4 ended, 8 cancelled. A sequence that began while swallowing stays
+            // swallowed through its momentum; a plain mouse wheel has no phases and is judged on its own.
+            if phase == 1 { swallowingSequence = swallowScrolling() }
+            else if swallowScrolling() { swallowingSequence = true }
+            let inSequence = phase != 0 || momentum != 0
+            if inSequence ? swallowingSequence : swallowScrolling() {
+                if momentum == 4 || momentum == 8 { swallowingSequence = false }
+                return nil
+            }
             guard alt, dragged == nil else { return Unmanaged.passUnretained(event) }
             let dy = event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1)
             let dx = event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2)

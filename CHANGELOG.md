@@ -4,6 +4,13 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.15.0] - 2026-10-21
+
+### Changed
+- Swiping left or right now slides between desktops like Spaces: the current desktop's windows follow your fingers out as previews while the neighbour's slide in, and the real switch happens behind the slide on release. Past the last or first desktop the swipe still moves on to the neighbouring macOS Space. The slide needs the desktop overview, which provides the previews, so the setting is only available with the overview on.
+- With the overview open, a horizontal swipe scrubs the overview itself between desktops: the spread-out windows move with the fingers and the neighbour's come in beside them, with the focus ring drawn on the focused window in both the overview and the slide.
+- Scroll and gesture events are swallowed while the swipe fingers are down, through the scroll's momentum, and while the overview or slide is up, so a swipe no longer scrolls the window underneath.
+
 ## [0.14.2] - 2026-10-21
 
 ### Added
