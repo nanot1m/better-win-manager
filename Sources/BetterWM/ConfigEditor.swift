@@ -43,6 +43,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var autoTileSwitch: NSSwitch!
     private var tileOnStartSwitch: NSSwitch!
     private var restoreSwitch: NSSwitch!
+    private var hideAppsSwitch: NSSwitch!
     private var debugLogSwitch: NSSwitch!
     private var stackOffsetField: NSTextField!
     private var stackNarrowField: NSTextField!
@@ -437,6 +438,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private func generalGroups() -> [NSView] {
         tileOnStartSwitch = toggle()
         restoreSwitch = toggle()
+        hideAppsSwitch = toggle()
         debugLogSwitch = toggle()
         switcherSwitch = toggle(#selector(switcherChanged))
         switcherThumbsSwitch = toggle()
@@ -455,6 +457,9 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             group("Launch", [
                 row("Tile existing windows", "When a desktop is seen for the first time, arrange the windows already on it.", [tileOnStartSwitch]),
                 row("Remember layouts", "Save each desktop's grid and floating windows, and restore them on launch.", [restoreSwitch]),
+            ]),
+            group("Other desktops", [
+                row("Hide apps", "An app whose windows are all on other desktops is hidden. Off parks every window in the screen corner instead: a sliver stays visible, but the overview can keep their previews live.", [hideAppsSwitch]),
             ]),
             group("Switcher", [
                 row("⌥Tab window switcher", "Windows grouped by desktop; the hotkey is on the Hotkeys page.", [switcherSwitch]),
@@ -804,6 +809,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         on(autoTileSwitch, config.autoTile)
         on(tileOnStartSwitch, config.tileExistingOnStart)
         on(restoreSwitch, config.restoreLayouts)
+        on(hideAppsSwitch, config.hideApps)
         on(debugLogSwitch, config.debugLog)
         stackOffsetField.stringValue = String(Int(config.stackOffset))
         stackNarrowField.stringValue = String(Int(config.stackScreensNarrowerThan))
@@ -882,6 +888,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.autoTile = isOn(autoTileSwitch)
         config.tileExistingOnStart = isOn(tileOnStartSwitch)
         config.restoreLayouts = isOn(restoreSwitch)
+        config.hideApps = isOn(hideAppsSwitch)
         config.debugLog = isOn(debugLogSwitch)
         config.stackOffset = CGFloat(Double(stackOffsetField.stringValue) ?? 48)
         config.stackScreensNarrowerThan = CGFloat(Double(stackNarrowField.stringValue) ?? 0)

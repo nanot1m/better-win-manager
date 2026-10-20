@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.14.2] - 2026-10-21
+
+### Added
+- `hideApps` setting (Settings › General › Other desktops): off keeps every window of other desktops parked in the screen corner instead of hiding its app, so the overview can show them live.
+
 ## [0.14.1] - 2026-10-21
 
 ### Fixed

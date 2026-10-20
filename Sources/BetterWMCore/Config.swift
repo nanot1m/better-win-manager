@@ -34,6 +34,9 @@ public struct Config {
     public var stackScreensNarrowerThan: CGFloat = 0
     /// Remember each desktop's grid and put matching windows back into it on the next launch.
     public var restoreLayouts: Bool = true
+    /// Hide an app natively when all its windows are on inactive desktops; off parks every window in the corner
+    /// instead, which keeps it on screen for previews at the cost of a sliver showing in the corner.
+    public var hideApps: Bool = true
     /// Action log at ~/.config/betterwm/log.txt (menu: Open Log File / Copy Diagnostics Report).
     public var debugLog: Bool = true
     /// Window switcher (⌥Tab). Off leaves the ⌥Tab hotkeys unregistered.
@@ -217,6 +220,8 @@ public struct Config {
         debugLog = \(debugLog)
         # Remember each desktop's grid (state.json next to this file) and restore matching windows on launch.
         restoreLayouts = \(restoreLayouts)
+        # Hide an app whose windows are all on other desktops (otherwise park every window in the screen corner).
+        hideApps = \(hideApps)
         # ⌥Tab window switcher grouped by desktop; previews need Screen Recording permission, otherwise icons only.
         switcher = \(switcher)
         switcherThumbnails = \(switcherThumbnails)
@@ -376,6 +381,7 @@ public struct Config {
             case "desktopSwipe": cfg.desktopSwipe = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "debugLog": cfg.debugLog = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "restoreLayouts": cfg.restoreLayouts = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "hideApps": cfg.hideApps = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "stackOffset": cfg.stackOffset = Double(value).map { CGFloat($0) } ?? cfg.stackOffset
             case "stackScreensNarrowerThan": cfg.stackScreensNarrowerThan = Double(value).map { CGFloat($0) } ?? cfg.stackScreensNarrowerThan
             case "animateLayout": break  // removed: Accessibility-driven frame animation was too laggy

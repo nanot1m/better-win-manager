@@ -441,7 +441,7 @@ final class WindowManager {
                 pid: { snap.window($0)?.pid },
                 // Hiding is app-wide: only when every window the app has anywhere belongs to this set.
                 hideable: { p in
-                    guard let app = NSRunningApplication(processIdentifier: p), app.activationPolicy == .regular else { return false }
+                    guard self.config.hideApps, let app = NSRunningApplication(processIdentifier: p), app.activationPolicy == .regular else { return false }
                     return snap.windows.filter { $0.pid == p }.allSatisfy { self.virtualSet(ofWindow: $0.id) === v }
                 },
                 isTiled: { self.state.isTiled($0) }, frame: { snap.window($0)?.frame },
