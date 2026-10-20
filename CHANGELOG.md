@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.14.1] - 2026-10-21
+
+### Fixed
+- With the overview turned off, windows are no longer captured before their app is hidden on a desktop switch, so BetterWM does not count as a screen-recording app unless you use the overview or switcher previews.
+
 ## [0.14.0] - 2026-10-21
 
 ### Added
