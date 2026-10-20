@@ -73,6 +73,9 @@ final class FocusRing {
                 // from WindowServer. An ⌥-drag of an unfocused window fires this per pixel, so no AX here.
                 guard !self.suspended, wid == self.current, let id = wid, let f = WindowServerEvents.bounds(of: id) else { return }
                 self.place(frame: f)
+            case .windowReorder, .frontChange, .windowLevel:
+                if let wid, wid == self.current { self.reorder() }
+                self.scheduleUpdate()
             case .spaceChange:
                 self.window.orderOut(nil)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.update() }
@@ -124,11 +127,10 @@ final class FocusRing {
         }
     }
 
-    /// Puts the ring back directly beneath its window. Needed after the window is raised or its app unhidden,
-    /// since both change the window's depth while the ring keeps its old one.
+    /// Brings the ring back to the front of its level after anything that could have slipped a window above it.
     func reorder() {
-        guard let id = current, window.isVisible, !suspended else { return }
-        window.order(.below, relativeTo: Int(id))
+        guard current != nil, window.isVisible, !suspended else { return }
+        window.orderFrontRegardless()
     }
 
     func update() {
@@ -174,12 +176,11 @@ final class FocusRing {
         layer.backgroundColor = nil
         CATransaction.commit()
         place(frame: frame)
-        // Always just beneath the window it belongs to: the outline is drawn outside the window's frame so it
-        // stays visible, clicks that raise the window never put it on the wrong side, and a re-order (which
-        // flashes) is needed only when the target changes.
-        window.level = .normal
+        // Above every normal window: the outline is drawn outside the window's frame, so it covers nothing of
+        // the window itself, and it never has to chase the window's depth through raises and unhides.
+        window.level = .floating
         if wasHidden || targetChanged {
-            window.order(.below, relativeTo: Int(id))
+            window.orderFrontRegardless()
             onReorder?()
         }
     }

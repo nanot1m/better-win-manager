@@ -4,6 +4,15 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.13.2] - 2026-10-21
+
+### Changed
+- The focus ring is drawn above all normal windows instead of being slotted beneath the focused one, so it no longer lags behind raises and unhides or ends up under an overlapping floating window.
+- Focus Next / Previous include BetterWM's own Settings and Welcome windows.
+
+### Fixed
+- A newly launched app that is slow to answer Accessibility (System Settings) was skipped for five seconds before its window was tracked; starting apps are retried after one second, and the end of any back-off triggers a layout pass.
+
 ## [0.13.1] - 2026-10-21
 
 ### Changed

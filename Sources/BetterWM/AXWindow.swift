@@ -10,6 +10,8 @@ func _AXUIElementGetWindow(_ element: AXUIElement, _ id: UnsafeMutablePointer<CG
 enum AXResponsiveness {
     static let timeout: Float = 0.3
     private static var unresponsiveUntil: [pid_t: Date] = [:]
+    /// Called on the main thread when a back-off ends, so the skipped app's windows are picked up right away.
+    static var onBackoffEnd: (() -> Void)?
 
     static func tune(_ element: AXUIElement) { AXUIElementSetMessagingTimeout(element, timeout) }
 
@@ -23,10 +25,15 @@ enum AXResponsiveness {
     /// Call after an AX request fails with a timeout-class error.
     static func noteFailure(_ pid: pid_t, _ error: AXError) {
         guard error == .cannotComplete || error == .notificationUnsupported else { return }
+        // An app still starting up is busy, not hung (System Settings takes seconds); ask again soon.
+        let app = NSRunningApplication(processIdentifier: pid)
+        let starting = app?.launchDate.map { Date().timeIntervalSince($0) < 15 } ?? false
+        let delay: TimeInterval = starting ? 1 : 5
         if unresponsiveUntil[pid] == nil {
-            Log.write("ax", "\(NSRunningApplication(processIdentifier: pid)?.localizedName ?? "pid \(pid)") is not responding; skipping it for 5 s")
+            Log.write("ax", "\(app?.localizedName ?? "pid \(pid)") is not responding; skipping it for \(Int(delay)) s")
         }
-        unresponsiveUntil[pid] = Date().addingTimeInterval(5)
+        unresponsiveUntil[pid] = Date().addingTimeInterval(delay)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay + 0.1) { onBackoffEnd?() }
     }
 
     static func application(_ pid: pid_t) -> AXUIElement {

@@ -488,6 +488,7 @@ final class WindowManager {
             default: break
             }
         }
+        AXResponsiveness.onBackoffEnd = { [weak self] in self?.scheduleTick() }
         axObserver = WindowObserver(onNewWindow: { [weak self] _ in self?.tick() },
                                     onFocusChange: { [weak self] in
                                         self?.followFocusedWindowsWorkspace()
@@ -955,12 +956,28 @@ final class WindowManager {
     /// Cycles through every window on the current desktop, tiled or floating, in reading order
     /// (left to right, top to bottom), starting from the focused one.
     func focusNext(reverse: Bool = false) {
-        guard let current = currentDesktop,
-              let group = windowsByDesktop().first(where: { $0.desktop == current }), !group.windows.isEmpty else { return }
-        let order = group.windows
-        let focused = AXWindow.focused
-        let i = focused.flatMap { f in order.firstIndex { $0 == f } } ?? (reverse ? 0 : order.count - 1)
-        order[(i + (reverse ? -1 : 1) + order.count) % order.count].raise()
+        guard let current = currentDesktop else { return }
+        let others = windowsByDesktop().first(where: { $0.desktop == current })?.windows ?? []
+        // Our own titled windows (Settings, Welcome) are not in the list: Accessibility calls into our own
+        // process would stall the main thread. They join the cycle through AppKit instead.
+        let own = NSApp.windows.filter { $0.isVisible && $0.styleMask.contains(.titled) }
+        let count = others.count + own.count
+        guard count > 0 else { return }
+        var i: Int
+        if NSApp.isActive, let key = NSApp.keyWindow, let k = own.firstIndex(of: key) {
+            i = others.count + k
+        } else if let f = AXWindow.focused, let k = others.firstIndex(of: f) {
+            i = k
+        } else {
+            i = reverse ? 0 : count - 1
+        }
+        i = (i + (reverse ? -1 : 1) + count) % count
+        if i < others.count {
+            others[i].raise()
+        } else {
+            own[i - others.count].makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     // MARK: Presets
