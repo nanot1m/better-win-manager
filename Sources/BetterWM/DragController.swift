@@ -8,34 +8,12 @@ final class DragController {
     private var draggedID: WindowID?
     private var dragStart: CGPoint = .zero
     private var originalFrame: CGRect = .zero
-    private var intercepting = false
     private var currentZone: (DropZone, CGRect)?
+    /// A drag inside the window (⌥-drag of a canvas item, text selection) never moves the window; only a drag that
+    /// does is ours to tile. Confirmed once per drag, polled sparingly because a frame read is IPC into the app.
+    private var windowMoved = false
+    private var lastMoveCheck = Date.distantPast
     private var lastScrollSwitch = Date.distantPast
-    /// AX moves are synchronous IPC into the target app; done inside the tap callback they stall every event in
-    /// the system, so they run off-thread and only the latest position is applied.
-    private let moveQueue = DispatchQueue(label: "betterwm.drag", qos: .userInteractive)
-    private let moveLock = NSLock()
-    private var pendingOrigin: CGPoint?
-    private var moveInFlight = false
-
-    private func scheduleMove(_ w: AXWindow, to origin: CGPoint) {
-        moveLock.lock()
-        pendingOrigin = origin
-        let start = !moveInFlight
-        moveInFlight = true
-        moveLock.unlock()
-        guard start else { return }
-        moveQueue.async { [self] in
-            while true {
-                moveLock.lock()
-                guard let o = pendingOrigin else { moveInFlight = false; moveLock.unlock(); return }
-                pendingOrigin = nil
-                moveLock.unlock()
-                w.setOrigin(o)
-            }
-        }
-    }
-
     init(manager: WindowManager) { self.manager = manager }
 
     func start() -> Bool {
@@ -100,9 +78,8 @@ final class DragController {
             dragStart = p
             originalFrame = w.frame
             currentZone = nil
-            // Without Option the app runs its own drag; we only watch in case Option is pressed later.
-            intercepting = alt
-            return alt ? nil : Unmanaged.passUnretained(event)
+            windowMoved = false
+            return Unmanaged.passUnretained(event)
         case .leftMouseDragged:
             if dragged == nil, alt, manager.enabled, let w = AXWindow.focused {
                 // Hit-testing failed on mouse-down; the window being dragged is the frontmost app's focused one.
@@ -110,32 +87,29 @@ final class DragController {
                 draggedID = manager.id(w)
                 manager.interacting = true
                 originalFrame = w.frame
+                windowMoved = false
             }
             guard let w = dragged else { return Unmanaged.passUnretained(event) }
             // Clicks often carry a pixel of motion; only real movement suspends reconciling and the focus ring.
-            if !manager.interacting, hypot(p.x - dragStart.x, p.y - dragStart.y) < 4 {
-                return intercepting ? nil : Unmanaged.passUnretained(event)
-            }
+            if !manager.interacting, hypot(p.x - dragStart.x, p.y - dragStart.y) < 4 { return Unmanaged.passUnretained(event) }
             manager.interacting = true
-            if intercepting {
-                let dx = p.x - dragStart.x, dy = p.y - dragStart.y
-                scheduleMove(w, to: CGPoint(x: originalFrame.minX + dx, y: originalFrame.minY + dy))
+            if alt, !windowMoved, Date().timeIntervalSince(lastMoveCheck) > 0.1 {
+                lastMoveCheck = Date()
+                windowMoved = hypot(w.frame.minX - originalFrame.minX, w.frame.minY - originalFrame.minY) >= 4
             }
-            if intercepting || alt {
+            if alt, windowMoved {
                 currentZone = manager.zone(at: p, draggingID: draggedID)
                 manager.overlay.show(zone: currentZone?.1)
             } else {
                 currentZone = nil
                 manager.overlay.hide()
             }
-            return intercepting ? nil : Unmanaged.passUnretained(event)
+            return Unmanaged.passUnretained(event)
         case .leftMouseUp:
             let w = dragged
             dragged = nil
             manager.overlay.hide()
             let zone = currentZone?.0
-            let wasIntercepting = intercepting
-            intercepting = false
             let original = originalFrame
             let finish = { [manager] in
                 manager.interacting = false
@@ -144,13 +118,8 @@ final class DragController {
                 } else {
                     manager.releaseDisplacedWindows()
                     // Only a plain drag or resize settles a new floating spot; a ⌥-drag that misses every zone does not.
-                    if let w, !wasIntercepting { manager.rememberFloatingFrame(w) }
+                    if let w, !alt { manager.rememberFloatingFrame(w) }
                 }
-            }
-            if wasIntercepting {
-                moveQueue.sync {}
-                finish()
-                return nil
             }
             // Let the app complete its own move or resize before we inspect frames.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: finish)

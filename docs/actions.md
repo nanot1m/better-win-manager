@@ -63,7 +63,7 @@ Behind the grid button at the right end of the bar, and behind the menu bar icon
 
 | Gesture | Does |
 | --- | --- |
-| ⌥-drag a window (`dragModifiers`) | Tile it into the highlighted drop zone; pressing ⌥ partway through a normal drag works too |
+| ⌥-drag a window (`dragModifiers`) | Tile it into the highlighted drop zone; ⌥ only matters while a drag is in progress, so ⌥-clicking stays an ordinary click |
 | Drag a gap handle | Resize the columns or rows on either side |
 | Plain move or resize of a tiled window | Untiles it; the grid reflows |
 | ⌥ + scroll | Switch desktop |

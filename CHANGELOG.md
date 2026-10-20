@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.12.8] - 2026-10-20
+
+### Changed
+- Holding ⌥ no longer turns a click into a BetterWM drag: windows always move through the app's own drag, and ⌥ held at any point during that drag shows the drop zones and tiles on release. ⌥-clicks and ⌥-drags inside a window (such as cloning a Miro widget) reach the app untouched, because zones only appear once the window itself has moved.
+
 ## [0.12.7] - 2026-10-20
 
 ### Fixed
