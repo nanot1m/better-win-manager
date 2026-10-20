@@ -50,6 +50,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var overviewSwitch: NSSwitch!
     private var overviewKeySwitch: NSSwitch!
     private var overviewGestureSwitch: NSSwitch!
+    private var desktopSwipeSwitch: NSSwitch!
+    private var gestureFingersPopup: NSPopUpButton!
     private var switcherSwitch: NSSwitch!
     private var overlaySwitch: NSSwitch!
     private var sliders: [(KeyPath<Config, CGFloat>, WritableKeyPath<Config, CGFloat>, NSSlider, NSTextField)] = []
@@ -441,6 +443,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         overviewSwitch = toggle(#selector(overviewChanged))
         overviewKeySwitch = toggle()
         overviewGestureSwitch = toggle()
+        desktopSwipeSwitch = toggle()
+        gestureFingersPopup = choice(["Three fingers", "Four fingers"], #selector(overviewChanged))
         overlaySwitch = toggle()
         return [
             group("Layout", [
@@ -459,7 +463,11 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             group("Desktop overview", [
                 row("Desktop overview", "Mission Control for BetterWM desktops: a strip of every desktop and the current one's windows spread out. Click to switch or focus, drag a window onto a desktop to move it. The hotkey is on the Hotkeys page.", [overviewSwitch]),
                 row("Use the Mission Control key", "F3 on Apple keyboards opens the overview instead of Mission Control.", [overviewKeySwitch]),
-                row("Four-finger swipe", "Swipe up with four fingers to open, down to close; the overview follows your fingers. Turn off Mission Control's own gesture in System Settings › Trackpad › More Gestures, or both will open.", [overviewGestureSwitch]),
+            ]),
+            group("Trackpad gestures", [
+                row("Fingers", "For both swipes below. Turn off the matching macOS gestures in System Settings › Trackpad › More Gestures, or both will react.", [gestureFingersPopup]),
+                row("Swipe up and down", "Opens and closes the desktop overview; the animation follows your fingers.", [overviewGestureSwitch]),
+                row("Swipe left and right", "Switches to the next or previous desktop; past the last or first one, on to the neighbouring macOS Space, so fullscreen apps stay reachable.", [desktopSwipeSwitch]),
             ]),
             group("Diagnostics", [
                 row("Show pressed hotkey on screen", "Flashes the key combination and action at the bottom of the screen; handy for demos.", [overlaySwitch]),
@@ -805,6 +813,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         on(overviewSwitch, config.overview)
         on(overviewKeySwitch, config.overviewKey)
         on(overviewGestureSwitch, config.overviewGesture)
+        on(desktopSwipeSwitch, config.desktopSwipe)
+        gestureFingersPopup.selectItem(at: config.gestureFingers == 3 ? 0 : 1)
         overviewChanged()
         on(overlaySwitch, config.actionOverlay)
         strategyPopup.selectItem(at: Config.AutoTileStrategy.allCases.firstIndex(of: config.autoTileStrategy) ?? 0)
@@ -880,6 +890,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.overview = isOn(overviewSwitch)
         config.overviewKey = isOn(overviewKeySwitch)
         config.overviewGesture = isOn(overviewGestureSwitch)
+        config.desktopSwipe = isOn(desktopSwipeSwitch)
+        config.gestureFingers = gestureFingersPopup.indexOfSelectedItem == 0 ? 3 : 4
         config.actionOverlay = isOn(overlaySwitch)
         if let raw = strategyPopup.selectedItem?.representedObject as? String, let st = Config.AutoTileStrategy(rawValue: raw) {
             config.autoTileStrategy = st

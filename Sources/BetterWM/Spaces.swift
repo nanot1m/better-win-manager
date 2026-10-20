@@ -35,6 +35,51 @@ enum Spaces {
         return false
     }
 
+    /// Fullscreen and split-view Spaces on the display showing `space`, in Mission Control order.
+    static func fullscreenSpaces(alongside space: SpaceID) -> [SpaceID] {
+        guard let cid = mainConnection?(), let arr = managedDisplaySpaces?(cid) as? [[String: Any]] else { return [] }
+        for display in arr {
+            let spaces = display["Spaces"] as? [[String: Any]] ?? []
+            guard spaces.contains(where: { ($0["id64"] as? SpaceID) == space }) else { continue }
+            return spaces.filter { ($0["type"] as? Int) != 0 }.compactMap { $0["id64"] as? SpaceID }
+        }
+        return []
+    }
+
+    /// The Spaces either side of `space` in Mission Control order, on the display that holds it.
+    static func neighbours(of space: SpaceID) -> (previous: SpaceID?, next: SpaceID?) {
+        guard let cid = mainConnection?(), let arr = managedDisplaySpaces?(cid) as? [[String: Any]] else { return (nil, nil) }
+        for display in arr {
+            let ids = (display["Spaces"] as? [[String: Any]] ?? []).compactMap { $0["id64"] as? SpaceID }
+            guard let i = ids.firstIndex(of: space) else { continue }
+            return (i > 0 ? ids[i - 1] : nil, i + 1 < ids.count ? ids[i + 1] : nil)
+        }
+        return (nil, nil)
+    }
+
+    /// Ordinary windows on `space`, front to back, with their owners; a fullscreen Space has one (two in split view).
+    static func windows(on space: SpaceID) -> [(id: CGWindowID, pid: pid_t)] {
+        guard let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else { return [] }
+        var out: [(id: CGWindowID, pid: pid_t)] = []
+        for info in list {
+            // A fullscreen window sits at layer 26, not 0; the owner being an ordinary app is the real test.
+            guard let layer = info[kCGWindowLayer as String] as? Int, (0...100).contains(layer),
+                  let pid = info[kCGWindowOwnerPID as String] as? pid_t, pid != getpid(),
+                  NSRunningApplication(processIdentifier: pid)?.activationPolicy == .regular,
+                  let id = info[kCGWindowNumber as String] as? CGWindowID,
+                  let b = info[kCGWindowBounds as String] as? [String: CGFloat], (b["Width"] ?? 0) > 200,
+                  spaces(of: id).contains(space) else { continue }
+            out.append((id, pid))
+        }
+        return out
+    }
+
+    static func owners(on space: SpaceID) -> [pid_t] {
+        var seen: [pid_t] = []
+        for w in windows(on: space) where !seen.contains(w.pid) { seen.append(w.pid) }
+        return seen
+    }
+
     static func spaces(of windowID: CGWindowID) -> [SpaceID] {
         guard let cid = mainConnection?(), let f = spacesForWindows else { return [] }
         return (f(cid, 7, [NSNumber(value: windowID)] as CFArray) as? [SpaceID]) ?? []

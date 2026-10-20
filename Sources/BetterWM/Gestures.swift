@@ -1,21 +1,29 @@
 import Cocoa
 
-/// Four-finger vertical swipe from the trackpad's raw contact frames, via the private MultitouchSupport framework
+/// Four-finger swipes from the trackpad's raw contact frames: vertical scrubs the overview, horizontal switches
+/// desktops. Read, via the private MultitouchSupport framework
 /// (the only way to see individual fingers system-wide; event taps never do). Callbacks arrive on a framework
 /// thread at about 125 Hz and are forwarded to the main thread.
 final class SwipeGesture {
     /// Travel is reported as a fraction of this (normalized pad height, 0...1) so a third of the pad opens fully.
     private let fullTravel: Float = 0.33
+    /// Fingers that make a swipe; more fingers than that still count.
+    var fingers = 4
     var onBegan: (() -> Void)?
     /// Fraction of `fullTravel` travelled since `onBegan`; up is positive.
     var onChanged: ((CGFloat) -> Void)?
     /// Velocity in travel fractions per second at the moment the fingers lifted.
     var onEnded: ((CGFloat) -> Void)?
+    /// Horizontal swipe, once per gesture; `next` is true for a swipe to the left (the next desktop slides in
+    /// from the right, as with Spaces). Nil leaves horizontal swipes alone.
+    var onHorizontal: ((_ next: Bool) -> Void)?
 
     private var devices: [MTDevice] = []
-    private var startY: Float?
+    private var startY: Float?, startX: Float = 0
     private var lastY: Float = 0, lastT: Double = 0, velocity: Float = 0
     private var active = false
+    private enum Axis { case undecided, vertical, horizontal, done }
+    private var axis = Axis.undecided
 
     private typealias MTDevice = UnsafeMutableRawPointer
     private struct Point { var x, y: Float }
@@ -82,32 +90,48 @@ final class SwipeGesture {
     private func frame(_ touches: [Touch], at t: Double) {
         // States 3 and 4 are fingers in contact; hovering and lifting fingers are not.
         let down = touches.filter { $0.state == 3 || $0.state == 4 }
-        if down.count >= 4 {
+        if down.count >= fingers {
             let y = down.reduce(Float(0)) { $0 + $1.normalized.pos.y } / Float(down.count)
+            let x = down.reduce(Float(0)) { $0 + $1.normalized.pos.x } / Float(down.count)
             if startY == nil {
                 startY = y
+                startX = x
                 lastY = y
                 lastT = t
                 velocity = 0
+                axis = .undecided
                 return
             }
             if t > lastT { velocity = (y - lastY) / Float(t - lastT) / fullTravel }
             lastY = y
             lastT = t
-            let travel = (y - startY!) / fullTravel
-            if !active {
-                // A four-finger tap or a tiny shift isn't a swipe.
-                guard abs(travel) > 0.06 else { return }
-                active = true
-                startY = y - (travel > 0 ? 0.06 : -0.06) * fullTravel
-                DispatchQueue.main.async { self.onBegan?() }
+            let dy = y - startY!, dx = x - startX
+            if axis == .undecided {
+                // A four-finger tap or a tiny shift isn't a swipe; the first clear movement picks the axis.
+                guard max(abs(dx), abs(dy)) > 0.06 * fullTravel else { return }
+                axis = abs(dx) > abs(dy) ? (onHorizontal == nil ? .done : .horizontal) : .vertical
+                if axis == .vertical {
+                    active = true
+                    startY = y - (dy > 0 ? 0.06 : -0.06) * fullTravel
+                    DispatchQueue.main.async { self.onBegan?() }
+                }
             }
-            let adjusted = CGFloat((y - startY!) / fullTravel)
-            DispatchQueue.main.async { self.onChanged?(adjusted) }
+            switch axis {
+            case .vertical:
+                let adjusted = CGFloat((y - startY!) / fullTravel)
+                DispatchQueue.main.async { self.onChanged?(adjusted) }
+            case .horizontal:
+                guard abs(dx) > 0.12 else { return }
+                axis = .done
+                let next = dx < 0
+                DispatchQueue.main.async { self.onHorizontal?(next) }
+            default: break
+            }
         } else if startY != nil {
             let wasActive = active, v = CGFloat(velocity)
             startY = nil
             active = false
+            axis = .undecided
             if wasActive { DispatchQueue.main.async { self.onEnded?(v) } }
         }
     }

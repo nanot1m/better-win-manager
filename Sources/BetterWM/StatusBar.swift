@@ -12,6 +12,8 @@ final class StatusBar {
     private let media = MediaService()
     private var inputSourceObserver: NSObjectProtocol?
     var onSelectDesktop: ((Int) -> Void)?
+    var onSelectFullscreen: ((UInt64) -> Void)?
+    var fullscreenSpaces: () -> [(space: UInt64, pids: [pid_t])] = { [] }
     /// A desktop chip was dragged to a new position.
     var onReorderDesktop: ((Int, Int) -> Void)?
     /// The menu widget was clicked; the app pops its menu at the given view.
@@ -88,6 +90,7 @@ final class StatusBar {
             let w = BarWindow(frame: frame, screen: screen)
             w.view.apply(config, avoidNotch: atScreenTop(screen))
             w.view.onSelectDesktop = { [weak self] i in self?.onSelectDesktop?(i) }
+            w.view.onSelectFullscreen = { [weak self] s in self?.onSelectFullscreen?(s) }
             w.view.onReorderDesktop = { [weak self] from, to in self?.onReorderDesktop?(from, to) }
             w.view.onMenuRequested = { [weak self] v in self?.onMenuRequested?(v) }
             w.view.onPlayPause = { [weak self] in self?.media.togglePlayPause() }
@@ -129,6 +132,7 @@ final class StatusBar {
             current: currentDesktop(),
             apps: config.barDesktopApps ? desktopApps() : [:],
             focusedWindow: focusedWindow() ?? focused?.windowID,
+            fullscreen: config.barDesktopApps ? fullscreenSpaces() : [],
             app: app,
             title: title,
             clock: config.barClock ? formatter.string(from: Date()) : nil,
@@ -292,6 +296,7 @@ final class BarView: NSView {
         var current: Int?
         var apps: [Int: [(pid: pid_t, windows: [WindowID])]]
         var focusedWindow: WindowID?
+        var fullscreen: [(space: UInt64, pids: [pid_t])]
         var app: String
         var title: String
         var clock: String?
@@ -309,6 +314,7 @@ final class BarView: NSView {
     }
 
     var onSelectDesktop: ((Int) -> Void)?
+    var onSelectFullscreen: ((UInt64) -> Void)?
     var onReorderDesktop: ((Int, Int) -> Void)?
     var onMenuRequested: ((NSView) -> Void)?
     var onPlayPause: (() -> Void)?
@@ -346,6 +352,9 @@ final class BarView: NSView {
     /// One container per right-side widget; `apply` arranges them in the configured order.
     private var widgetViews: [Config.BarWidget: NSStackView] = [:]
     private var chips: [ChipView] = []
+    /// Fullscreen Spaces, after the desktop chips; clicking one goes there.
+    private var fsChips: [ChipView] = []
+    private var fsSpaces: [UInt64] = []
     private var lastDesktop: Int?
     private var warnedBatteryLow = false
     private var lastLoadReaction = Date.distantPast
@@ -543,6 +552,26 @@ final class BarView: NSView {
             ])
             c.layer?.backgroundColor = current ? activeColor.cgColor : textColor.withAlphaComponent(0.1).cgColor
             c.setApps(m.apps[i] ?? [], focused: m.focusedWindow, color: focusOutline ?? (current ? activeColor.contrastingText : activeColor))
+        }
+        fsSpaces = m.fullscreen.map(\.space)
+        while fsChips.count < m.fullscreen.count {
+            let c = ChipView()
+            let i = fsChips.count
+            c.onClick = { [weak self] in
+                guard let self, i < self.fsSpaces.count else { return }
+                self.onSelectFullscreen?(self.fsSpaces[i])
+            }
+            fsChips.append(c)
+            left.insertArrangedSubview(c, at: chips.count + fsChips.count - 1)
+        }
+        for (i, c) in fsChips.enumerated() {
+            c.isHidden = i >= m.fullscreen.count
+            guard i < m.fullscreen.count else { continue }
+            c.number.attributedStringValue = NSAttributedString(string: "⛶", attributes: [
+                .foregroundColor: textColor.withAlphaComponent(0.7), .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+            ])
+            c.layer?.backgroundColor = textColor.withAlphaComponent(0.1).cgColor
+            c.setApps(m.fullscreen[i].pids.map { ($0, []) }, focused: nil, color: activeColor)
         }
         if appLabel.superview == nil {
             let sep = NSBox(); sep.boxType = .separator

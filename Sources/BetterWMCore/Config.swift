@@ -47,6 +47,11 @@ public struct Config {
     /// Drive the overview with a four-finger vertical swipe, like Mission Control's gesture; the native gesture
     /// should be turned off in System Settings › Trackpad › More Gestures or both will open.
     public var overviewGesture: Bool = false
+    /// Four-finger swipe left/right switches to the next/previous desktop; macOS's own swipe between Spaces
+    /// should be turned off or set to three fingers.
+    public var desktopSwipe: Bool = false
+    /// Fingers for the swipe gestures: 3 or 4.
+    public var gestureFingers: Int = 4
     public var autoTile: Bool = false
     public var autoTileStrategy: AutoTileStrategy = .rightmost
     public var focusRing: Bool = true
@@ -220,6 +225,10 @@ public struct Config {
         overview = \(overview)
         overviewKey = \(overviewKey)
         overviewGesture = \(overviewGesture)
+        # Four-finger swipe left/right switches desktops (turn off macOS's swipe between Spaces, or set it to three fingers).
+        desktopSwipe = \(desktopSwipe)
+        # Fingers for both swipe gestures: 3 or 4.
+        gestureFingers = \(gestureFingers)
         # Tile windows automatically when they open or arrive on a desktop.
         autoTile = \(autoTile)
         # Stacked layout (per screen, toggled with the toggleStack action): windows cascade with this horizontal
@@ -363,6 +372,8 @@ public struct Config {
             case "overview": cfg.overview = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "overviewKey": cfg.overviewKey = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "overviewGesture": cfg.overviewGesture = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "gestureFingers": cfg.gestureFingers = Int(value) == 3 ? 3 : 4
+            case "desktopSwipe": cfg.desktopSwipe = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "debugLog": cfg.debugLog = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "restoreLayouts": cfg.restoreLayouts = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "stackOffset": cfg.stackOffset = Double(value).map { CGFloat($0) } ?? cfg.stackOffset

@@ -4,6 +4,13 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.14.0] - 2026-10-21
+
+### Added
+- Swipe left and right (three or four fingers, `gestureFingers`) to switch desktops, opt-in with `desktopSwipe`. Past the last or first desktop the swipe moves on to the neighbouring macOS Space, which is how fullscreen apps are reached, and from a fullscreen Space back again. Next/Previous desktop hotkeys do the same.
+- Fullscreen apps appear in the status bar after the desktop chips, marked ⛶; clicking one switches to it.
+- The finger count for the overview swipe is configurable too; both gestures share Settings › General › Trackpad gestures.
+
 ## [0.13.2] - 2026-10-21
 
 ### Changed

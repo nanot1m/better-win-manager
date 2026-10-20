@@ -265,6 +265,54 @@ final class WindowManager {
 
     func switchDesktop(next: Bool) { switchDesktop(virtualWS.active + (next ? 1 : -1)) }
 
+    private var fullscreenCache: (at: Date, value: [(space: SpaceID, pids: [pid_t])])?
+    /// Fullscreen Spaces on the main display with the apps in them, for the bar; enumerating windows per Space
+    /// is not free, so the answer is kept for a few seconds.
+    func fullscreenSpaces() -> [(space: SpaceID, pids: [pid_t])] {
+        if let c = fullscreenCache, Date().timeIntervalSince(c.at) < 3 { return c.value }
+        guard let screen = NSScreen.screens.first else { return [] }
+        let value = Spaces.fullscreenSpaces(alongside: Spaces.current(for: screen)).map { ($0, Spaces.owners(on: $0)) }.filter { !$0.1.isEmpty }
+        fullscreenCache = (Date(), value)
+        return value
+    }
+
+    /// Goes to another macOS Space by activating an app with a window on it, as a Dock click would; there is no
+    /// public call to switch Spaces, and Accessibility does not even list windows on other Spaces. `prefer`
+    /// names windows whose apps to try first.
+    @discardableResult
+    func activateSpace(_ space: SpaceID, prefer: [WindowID] = []) -> Bool {
+        let all = Spaces.windows(on: space)
+        let ordered = prefer.compactMap { id in all.first { $0.id == id } } + all.filter { !prefer.contains($0.id) }
+        var tried: Set<pid_t> = []
+        for w in ordered where tried.insert(w.pid).inserted {
+            guard let app = NSRunningApplication(processIdentifier: w.pid), app.activate(options: [.activateIgnoringOtherApps]) else { continue }
+            Log.write("desktop", "activating \(app.localizedName ?? "pid \(w.pid)") to reach Space \(space)")
+            return true
+        }
+        Log.write("desktop", "no app on Space \(space) to switch through")
+        return false
+    }
+
+    /// Swipe semantics: through the virtual desktops, and past the last (or first) one on to the neighbouring
+    /// macOS Space, which is how fullscreen apps are reached; from a fullscreen Space, back the same way.
+    /// There is no public call to switch Spaces, but activating an app whose windows live on the target Space
+    /// makes macOS go there.
+    func switchDesktopOrSpace(next: Bool) {
+        guard let screen = NSScreen.screens.first else { return }
+        let real = Spaces.current(for: screen)
+        let v = virtualWS
+        let atEdge = next ? v.active >= v.count - 1 : v.active == 0
+        if !Spaces.isFullscreen(real), !atEdge {
+            switchDesktop(next: next)
+            return
+        }
+        let n = Spaces.neighbours(of: real)
+        guard let target = next ? n.next : n.previous else { return }
+        // On a desktop, prefer a window visible on its active workspace so the switch lands on the right windows.
+        let prefer = virtualSets[target].map { set in set.knownWindows.filter { set.workspace(of: $0) == set.active && !set.isParked($0) } } ?? []
+        activateSpace(target, prefer: prefer)
+    }
+
     /// Activating a parked window (⌘Tab, Dock, a notification) switches to its workspace. Only a *change* of
     /// focus counts: after switching to an empty workspace the old window stays focused and must not pull us back.
     private var ignoreFocusSwitchUntil = Date.distantPast

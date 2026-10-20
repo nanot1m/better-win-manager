@@ -61,6 +61,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.system.topInset = { [weak self] screen in self?.bar.inset(for: screen) ?? 0 }
         bar.onLayoutChange = { [weak self] in self?.manager.apply() }
         bar.onSelectDesktop = { [weak self] in self?.manager.switchDesktop($0) }
+        bar.onSelectFullscreen = { [weak self] in self?.manager.activateSpace($0) }
+        bar.fullscreenSpaces = { [weak self] in self?.manager.fullscreenSpaces() ?? [] }
         bar.onReorderDesktop = { [weak self] from, to in self?.manager.moveDesktop(from: from, to: to) }
         bar.onMenuRequested = { [weak self] view in
             guard let self else { return }
@@ -342,12 +344,12 @@ extension AppDelegate {
             "refreshRing": { [weak self] in self?.manager.focusRing.remeasureCorners() },
             "equalize": { [weak self] in self?.manager.equalize() },
             "pause": { [weak self] in self?.togglePause() },
-            "desktopNext": { [weak self] in self?.manager.switchDesktop(next: true) },
+            "desktopNext": { [weak self] in self?.manager.switchDesktopOrSpace(next: true) },
             "desktopMoveLeft": { [weak self] in self?.manager.moveCurrentDesktop(left: true) },
             "desktopMoveRight": { [weak self] in self?.manager.moveCurrentDesktop(left: false) },
             "sendToNextDesktop": { [weak self] in self?.manager.sendFocusedWindow(toNext: true) },
             "sendToPreviousDesktop": { [weak self] in self?.manager.sendFocusedWindow(toNext: false) },
-            "desktopPrevious": { [weak self] in self?.manager.switchDesktop(next: false) },
+            "desktopPrevious": { [weak self] in self?.manager.switchDesktopOrSpace(next: false) },
         ]
         for i in 1...9 {
             actions["desktop\(i)"] = { [weak self] in self?.manager.switchDesktop(i - 1) }
@@ -400,16 +402,23 @@ extension AppDelegate {
         syncAutoTileItems()
     }
     func applyGestureSetting(_ config: Config) {
-        if config.overview, config.overviewGesture {
-            guard swipe == nil else { return }
-            let g = SwipeGesture()
-            g.onBegan = { [weak self] in self?.overview.gestureBegan() }
-            g.onChanged = { [weak self] in self?.overview.gestureChanged($0) }
-            g.onEnded = { [weak self] in self?.overview.gestureEnded(velocity: $0) }
-            if g.start() { swipe = g } else { Log.write("gesture", "multitouch framework unavailable; gesture off") }
-        } else {
+        let vertical = config.overview && config.overviewGesture
+        guard vertical || config.desktopSwipe else {
             swipe?.stop()
             swipe = nil
+            return
+        }
+        let g = swipe ?? SwipeGesture()
+        g.fingers = config.gestureFingers
+        g.onBegan = vertical ? { [weak self] in self?.overview.gestureBegan() } : nil
+        g.onChanged = vertical ? { [weak self] in self?.overview.gestureChanged($0) } : nil
+        g.onEnded = vertical ? { [weak self] in self?.overview.gestureEnded(velocity: $0) } : nil
+        g.onHorizontal = config.desktopSwipe ? { [weak self] next in
+            Log.write("gesture", "four-finger swipe \(next ? "left" : "right")")
+            self?.manager.switchDesktopOrSpace(next: next)
+        } : nil
+        if swipe == nil {
+            if g.start() { swipe = g } else { Log.write("gesture", "multitouch framework unavailable; gesture off") }
         }
     }
 

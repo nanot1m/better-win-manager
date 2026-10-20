@@ -82,7 +82,9 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `switcherThumbnails` | true | Window previews in the switcher; needs Screen Recording, otherwise icons |
 | `overview` | true | Desktop overview (see [actions](actions.md)); previews need Screen Recording, otherwise app icons |
 | `overviewKey` | true | The Mission Control key (F3) opens the overview instead of Mission Control |
-| `overviewGesture` | false | Four-finger vertical swipe drives the overview; turn Mission Control's gesture off in System Settings › Trackpad › More Gestures first |
+| `gestureFingers` | 4 | Fingers for both swipe gestures: 3 or 4 |
+| `desktopSwipe` | false | Swipe left/right switches to the next/previous desktop, and past the last or first one on to the neighbouring macOS Space (fullscreen apps); set macOS's swipe between Spaces to three fingers or off |
+| `overviewGesture` | false | Vertical swipe drives the overview; turn Mission Control's gesture off in System Settings › Trackpad › More Gestures first |
 | `actionOverlay` | false | Flash the pressed hotkey and action name at the bottom of the screen |
 | `debugLog` | true | Write `log.txt` |
 | `hotkey.<action>` | see [Actions](actions.md) | Global hotkeys |
