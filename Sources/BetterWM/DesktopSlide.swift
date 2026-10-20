@@ -128,22 +128,17 @@ final class DesktopSlide {
         }
         guard target != 0 else { animate(to: 0) {}; return }
         let destination = current + target
-        // The real switch blocks the main thread for some 40 ms (Accessibility moves and unhides). It starts just
-        // before the slide lands, in the slowest part of the ease-out, so it is done when the panel goes.
-        var switched = false
-        let doSwitch = { [weak self] in
-            guard let self, !switched else { return }
-            switched = true
-            self.manager.interacting = false
-            let t0 = Date()
-            self.manager.switchDesktop(destination)
-            Log.write("gesture", "real switch took \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
-        }
-        let duration = animate(to: CGFloat(-target) * width) { [weak self] in
-            doSwitch()
-            self?.dismiss()
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, duration - 0.05), execute: doSwitch)
+        // The finishing slide is a Core Animation transaction, animated by the render server, so the real switch
+        // (some 40 ms of Accessibility moves on the main thread) can run right away without stalling a frame.
+        animator?.invalidate()
+        let to = CGFloat(-target) * width
+        let duration = max(0.15, 0.3 * Double(abs(to - offset) / width))
+        view.animateOffset(to: to, duration: duration) { [weak self] in self?.dismiss() }
+        offset = to
+        manager.interacting = false
+        let t0 = Date()
+        manager.switchDesktop(destination)
+        Log.write("gesture", "real switch took \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
     }
 
     private func set(offset o: CGFloat) {
@@ -194,8 +189,10 @@ private final class SlideView: NSView {
     private var tiles: [WindowID: CALayer] = [:]
     override var isFlipped: Bool { true }
 
+    private var animating = false
     var offset: CGFloat = 0 {
         didSet {
+            guard !animating else { return }
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             let w = bounds.width
@@ -270,6 +267,22 @@ private final class SlideView: NSView {
         }
         CATransaction.commit()
         offset = 0
+    }
+
+    /// Animated in the render server: the main thread may block meanwhile without dropping a frame.
+    func animateOffset(to target: CGFloat, duration: TimeInterval, completion: @escaping () -> Void) {
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(duration)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
+        CATransaction.setCompletionBlock(completion)
+        let w = bounds.width
+        slides.current.frame = CGRect(x: target, y: 0, width: w, height: bounds.height)
+        slides.previous.frame = CGRect(x: target - w - 40, y: 0, width: w, height: bounds.height)
+        slides.next.frame = CGRect(x: target + w + 40, y: 0, width: w, height: bounds.height)
+        CATransaction.commit()
+        animating = true
+        offset = target
+        animating = false
     }
 
     func setThumbnail(_ image: NSImage, for id: WindowID) {

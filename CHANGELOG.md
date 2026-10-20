@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.15.2] - 2026-10-21
+
+### Changed
+- The desktop slide's finishing animation runs in the render server, so the real switch behind it can no longer drop frames.
+
 ## [0.15.1] - 2026-10-21
 
 ### Changed
