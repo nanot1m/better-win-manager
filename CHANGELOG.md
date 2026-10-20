@@ -4,6 +4,18 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.12.6] - 2026-10-20
+
+### Fixed
+- A cat held in place while in a walking or running pose (its destination blocked by the notch, or a follower whose slot sits across it) pedalled on the spot; it now stands still and flicks its tail until it actually moves.
+- Cats ran at a portal without ever getting through: the leap animation counted as resting, so the step that keeps resting cats out of the notch pushed them straight back out. Leaping cats are left alone.
+- Cats could oscillate at a portal mouth when their destination lay inside the notch (a partner or slot sitting right at the edge): destinations inside the notch now snap to its nearer edge, and a cat that animates a run or leap without moving for five seconds is sat down and freed.
+- Cats got stuck at a portal mouth: poking a head in switched them into the leap animation, which the poke then treated as "not running" and restarted. Pokes no longer trigger the leap, and any poke still going after six seconds is abandoned.
+
+### Added
+- Cats remember you: affection, energy and boredom are saved per cat (`~/.config/betterwm/cats.json`) and restored on launch. Affection fades a little for each day away, and a cat that likes you meows hello when you come back after half a day or more.
+- Stroke to pet: rubbing the pointer back and forth over a cat pets it, no click needed.
+
 ## [0.12.5] - 2026-10-19
 
 ### Fixed

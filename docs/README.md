@@ -20,3 +20,4 @@ Files BetterWM writes, all under `~/.config/betterwm/`:
 | `config.conf` | Settings. Key = value, `#` comments, versioned and migrated on load |
 | `state.json` | Saved layouts: grids, floating windows, hidden apps, active workspace per desktop |
 | `log.txt` | Action log when `debugLog` is on; rotates at 2 MB |
+| `cats.json` | What each cat remembers about you between launches |

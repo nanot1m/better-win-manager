@@ -17,9 +17,13 @@ With two or more cats, scenes happen: a chase, a visit where one sits beside ano
 ## Interaction
 
 - **Hover** the empty part of the bar and interested cats run to the pointer and sit beside it, each in its own spot. Interest depends on playfulness and affection; sleeping cats are reluctant, and one cat always humours you. When the pointer leaves, they stroll to where it was and look around.
-- **Click** a cat to pet it. A sleeping cat wakes and looks about. Three pets in a row and it lies down purring with hearts; too many and it walks off, slightly offended.
+- **Stroke** a cat by rubbing the pointer back and forth over it, or **click** it, to pet it. A sleeping cat wakes and looks about. Three pets in a row and it lies down purring with hearts; too many and it walks off, slightly offended.
 
 Clicks elsewhere on the strip pass through to the bar.
+
+## Memory
+
+Each cat's affection, energy and boredom are saved to `~/.config/betterwm/cats.json` every half minute and on quit, keyed by its sheet path, and restored on launch. Affection fades by a tenth per day away; a cat that likes you meows hello when you return after half a day or more. Delete the file to start over.
 
 ## The notch
 

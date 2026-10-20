@@ -177,6 +177,8 @@ final class Cat {
     var groomStyle = "groom"
     /// Movement mode to return to after leaping through a portal.
     var modeBeforeJump: Mode?
+    /// Key under which this cat's state is remembered between launches (its sheet path, or builtin-N).
+    var memoryKey = ""
 
     static func personality(seed: String) -> Personality {
         var h: UInt64 = 1469598103934665603
@@ -289,9 +291,12 @@ final class Cat {
         }
     }
 
+    private var lastRenderedX: CGFloat = .nan
     func render(tick: Int) {
-        let name: String
+        var name: String
         let every: Int
+        let stoodStill = lastRenderedX == x
+        lastRenderedX = x
         switch mode {
         case .walk: (name, every) = ("walk", 1)
         case .run: (name, every) = ("run", 1)
@@ -310,6 +315,8 @@ final class Cat {
         case .yawn: (name, every) = (sheet == nil ? "stretch" : "yawn", 2)
         case .hind: (name, every) = (sheet == nil ? "sit" : "hind", 3)
         }
+        // Feet only move when the cat does; a walker held in place stands and flicks its tail instead.
+        if stoodStill, mode == .walk || mode == .run { name = sheet == nil ? "sit" : "alert" }
         // Extras a sheet lacks fall back to the nearest core animation.
         var resolved = name
         if let sheet, !sheet.has(name) {
@@ -482,7 +489,32 @@ final class BarCat: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
-    deinit { timer?.invalidate() }
+    deinit { timer?.invalidate(); saveMemory() }
+
+    // MARK: Memory
+
+    /// What a cat keeps between launches. Affection fades a little per day away; energy and boredom resume.
+    private struct Memory: Codable { var affection: Double; var energy: Double; var boredom: Double; var lastSeen: Date }
+    private static let memoryPath = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/betterwm/cats.json")
+    private var lastMemorySave = Date()
+
+    private func loadMemory() -> [String: Memory] {
+        guard let data = try? Data(contentsOf: BarCat.memoryPath) else { return [:] }
+        let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
+        return (try? dec.decode([String: Memory].self, from: data)) ?? [:]
+    }
+
+    private func saveMemory() {
+        guard !cats.isEmpty else { return }
+        var all = loadMemory()
+        for c in cats where !c.memoryKey.isEmpty {
+            all[c.memoryKey] = Memory(affection: c.affection, energy: c.energy, boredom: c.boredom, lastSeen: Date())
+        }
+        let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601; enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try? FileManager.default.createDirectory(at: BarCat.memoryPath.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? enc.encode(all).write(to: BarCat.memoryPath, options: .atomic)
+        lastMemorySave = Date()
+    }
 
     /// `sheets`: one entry per cat, a PNG path or "builtin". Empty means a single built-in cat.
     func configure(sheets: [String], color: NSColor, barHeight: CGFloat) {
@@ -493,6 +525,7 @@ final class BarCat: NSView {
         scene = .free
         let entries = sheets.isEmpty ? ["builtin"] : sheets
         let scale = max(0.5, floor((barHeight - 4) / CatSheet.crop.height * 2) / 2)
+        let remembered = loadMemory()
         for entry in entries {
             var sheet: CatSheet?
             if entry.lowercased() != "builtin" {
@@ -500,9 +533,20 @@ final class BarCat: NSView {
                 if sheet == nil { print("Cat: could not load sprite sheet at \(entry); using the built-in cat.") }
             }
             let cat = Cat(sheet: sheet, color: color)
-            cat.personality = Cat.personality(seed: entry.lowercased() == "builtin" ? "builtin-\(cats.count)" : entry)
-            cat.energy = Double.random(in: 0.5...1)
-            cat.boredom = Double.random(in: 0...0.4)
+            let key = entry.lowercased() == "builtin" ? "builtin-\(cats.count)" : entry
+            cat.personality = Cat.personality(seed: key)
+            cat.memoryKey = key
+            if let m = remembered[key] {
+                let daysAway = Date().timeIntervalSince(m.lastSeen) / 86_400
+                cat.affection = max(0, m.affection - 0.1 * daysAway)
+                cat.energy = min(1, m.energy + 0.3 * daysAway)
+                cat.boredom = min(1, m.boredom + 0.2 * daysAway)
+                // Back after a while: a cat that likes you says hello.
+                if daysAway > 0.5, m.affection > 0.3 { cat.enter(.meow, for: 1.5...1.5) }
+            } else {
+                cat.energy = Double.random(in: 0.5...1)
+                cat.boredom = Double.random(in: 0...0.4)
+            }
             cat.x = CGFloat.random(in: roam.lowerBound...max(roam.lowerBound, roam.upperBound - cat.size.width))
             cat.direction = Bool.random() ? 1 : -1
             // Cats pass in front of the portals, so the oval frames the clipped edge rather than covering it.
@@ -534,7 +578,7 @@ final class BarCat: NSView {
         let y = baseline(for: c), w = c.size.width
         // Crossing a portal is a leap; the cat keeps moving underneath and lands back in its stride.
         let inGap = gap.map { c.x < $0.upperBound && c.x + w > $0.lowerBound } ?? false
-        if inGap, c.sheet != nil, c.mode == .walk || c.mode == .run {
+        if inGap, c.sheet != nil, pokes[ObjectIdentifier(c)] == nil, c.mode == .walk || c.mode == .run {
             c.modeBeforeJump = c.mode
             c.mode = .jump
         } else if c.mode == .jump, !inGap {
@@ -609,9 +653,34 @@ final class BarCat: NSView {
         return cats.contains { $0.sprite.frame.insetBy(dx: -4, dy: -4).contains(p) } ? self : nil
     }
 
+    private var strokeCat: ObjectIdentifier?
+    private var strokeLastX: CGFloat = 0
+    private var strokeDirection: CGFloat = 0
+    private var strokeReversals = 0
+    private var lastStrokePet = Date.distantPast
+
     override func mouseMoved(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         pointerX = roam.contains(p.x) && !cats.isEmpty ? p.x : nil
+        // Rubbing the pointer back and forth over a cat strokes it: two reversals make one pet.
+        guard let cat = cats.first(where: { $0.sprite.frame.insetBy(dx: -4, dy: -4).contains(p) }) else { strokeCat = nil; return }
+        if strokeCat != ObjectIdentifier(cat) {
+            strokeCat = ObjectIdentifier(cat); strokeLastX = p.x; strokeDirection = 0; strokeReversals = 0
+            return
+        }
+        let dx = p.x - strokeLastX
+        guard abs(dx) > 2 else { return }
+        let dir: CGFloat = dx > 0 ? 1 : -1
+        if strokeDirection != 0, dir != strokeDirection {
+            strokeReversals += 1
+            if strokeReversals >= 2, Date().timeIntervalSince(lastStrokePet) > 1.2 {
+                strokeReversals = 0
+                lastStrokePet = Date()
+                pet(cat)
+            }
+        }
+        strokeDirection = dir
+        strokeLastX = p.x
     }
 
     override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
@@ -714,6 +783,7 @@ final class BarCat: NSView {
     private func step() {
         guard !isHidden, !cats.isEmpty, roam.upperBound - roam.lowerBound > (cats.map { $0.size.width }.max() ?? 0) + 8 else { return }
         tick += 1
+        if Date().timeIntervalSince(lastMemorySave) > 30 { saveMemory() }
         let inScene: Set<Int>
         switch scene {
         case .free: inScene = []
@@ -746,11 +816,36 @@ final class BarCat: NSView {
             stepFollow(leader: leader, until: until)
         }
         for c in cats {
-            if c.mode != .walk, c.mode != .run { settleOutsideGap(c) }
+            // A leap is movement through the notch; only resting cats are nudged out of it.
+            if c.mode != .walk, c.mode != .run, c.mode != .jump { settleOutsideGap(c) }
+            unstickIfFrozen(c)
             c.render(tick: tick)
             place(c)
         }
         updatePortals()
+    }
+
+    /// Safety net: a cat animating a run, walk or leap without actually moving for five seconds has been pinned
+    /// by some conflicting target. Sit it down facing the other way; the drives take over from there.
+    private var lastMoved: [ObjectIdentifier: (x: CGFloat, at: Date)] = [:]
+    private func unstickIfFrozen(_ c: Cat) {
+        let key = ObjectIdentifier(c)
+        guard c.mode == .walk || c.mode == .run || c.mode == .jump else { lastMoved[key] = (c.x, Date()); return }
+        if let last = lastMoved[key], abs(last.x - c.x) < 12 {
+            // Not just frozen: jittering within a cat's width for five seconds counts as stuck too.
+            if Date().timeIntervalSince(last.at) > 5 {
+                Log.write("cat", "unsticking a cat frozen at x=\(Int(c.x)) in \(c.mode)")
+                pokes[key] = nil
+                c.huntInterestUntil = nil
+                scene = .free
+                settleOutsideGap(c)
+                c.direction = -c.direction
+                c.enter(.sit, for: 1.5...2.5)
+                lastMoved[key] = (c.x, Date())
+            }
+        } else {
+            lastMoved[key] = (c.x, Date())
+        }
     }
 
     private func stepFree(_ c: Cat) {
@@ -778,13 +873,20 @@ final class BarCat: NSView {
     }
 
     /// Portal poking: (turns left, resting x). The cat darts a little way into the portal and back out.
-    private var pokes: [ObjectIdentifier: (turns: Int, home: CGFloat)] = [:]
+    private var pokes: [ObjectIdentifier: (turns: Int, home: CGFloat, since: Date)] = [:]
     private func stepPoke(_ c: Cat) -> Bool {
         guard let g = gap, var poke = pokes[ObjectIdentifier(c)] else { return false }
+        // A poke that drags on (a cat pinned by something else) is abandoned rather than looped forever.
+        if Date().timeIntervalSince(poke.since) > 6 {
+            pokes[ObjectIdentifier(c)] = nil
+            c.enter(.walk)
+            c.direction = -c.direction
+            return true
+        }
         let depth: CGFloat = 14
         let intoLeft = c.direction > 0 && c.x + c.size.width <= g.lowerBound + depth && c.x + c.size.width > g.lowerBound - 2
         let intoRight = c.direction < 0 && c.x >= g.upperBound - depth && c.x < g.upperBound + 2
-        if c.mode != .run, c.mode != .swipe { c.enter(.swipe, for: 0.9...0.9); return true }
+        if c.mode != .run, c.mode != .swipe, c.mode != .jump { c.enter(.swipe, for: 0.9...0.9); return true }
         if c.mode == .swipe { if Date() >= c.modeUntil { c.enter(.run, for: 60...60) } else { return true } }
         if intoLeft || intoRight {
             // Head is in: turn around and come back out.
@@ -819,6 +921,7 @@ final class BarCat: NSView {
         var slot = l.x
         for (i, c) in cats.enumerated() where i != leader {
             slot -= (c.size.width + 6) * l.direction
+            if c.mode != .walk, c.mode != .run, c.mode != .jump { c.enter(.walk) }
             if approach(c, to: slot, speed: 3) { c.direction = l.direction }
         }
         if Date() >= until { scene = .free }
@@ -868,7 +971,7 @@ final class BarCat: NSView {
             // A playful cat near a portal pokes its head in and out a few times before going through.
             let nearLeft = abs(c.x + c.size.width - g.lowerBound) < 30 && c.direction > 0
             let nearRight = abs(c.x - g.upperBound) < 30 && c.direction < 0
-            if nearLeft || nearRight { options.append((0.9 * p.playful, { self.pokes[ObjectIdentifier(c)] = (3, c.x) })) }
+            if nearLeft || nearRight { options.append((0.9 * p.playful, { self.pokes[ObjectIdentifier(c)] = (3, c.x, Date()) })) }
         }
         let total = options.reduce(0) { $0 + $1.weight }
         var r = Double.random(in: 0..<total)
@@ -907,7 +1010,12 @@ final class BarCat: NSView {
 
     /// Moves `c` toward `target` (its left edge, clamped to the roam range), returning true when there.
     private func approach(_ c: Cat, to rawTarget: CGFloat, speed: CGFloat) -> Bool {
-        let target = min(max(rawTarget, roam.lowerBound), max(roam.lowerBound, roam.upperBound - c.size.width))
+        var target = min(max(rawTarget, roam.lowerBound), max(roam.lowerBound, roam.upperBound - c.size.width))
+        // Nowhere to stand inside the notch: a target there becomes the nearer edge, otherwise the cat would
+        // cross, get pulled back, and oscillate at the portal mouth forever.
+        if let g = gap, target + c.size.width > g.lowerBound, target < g.upperBound {
+            target = target + c.size.width / 2 < (g.lowerBound + g.upperBound) / 2 ? g.lowerBound - c.size.width : g.upperBound
+        }
         let delta = target - c.x
         if abs(delta) <= speed { c.x = target; return true }
         c.direction = delta > 0 ? 1 : -1
