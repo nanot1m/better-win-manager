@@ -4,6 +4,17 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.12.7] - 2026-10-20
+
+### Fixed
+- Crash after display sleep or monitor hot-plug: CPU tick counters that reset below the previous sample no longer underflow, and screen lookups fall back safely when the display list is momentarily empty. Thanks @vteremasov.
+- The drop-zone overlay now moves to the screen the zone is on, so drag previews show on external monitors. Thanks @vteremasov.
+- Grid resize helpers guard column and boundary indices, so a stale index after a window closes no longer traps. Thanks @vteremasov.
+- ⌥1–9 in the action popup applied presets by keycode; previously the option-modified character never matched. Thanks @vteremasov.
+- Cat sprites render at pixel size on Retina displays. Thanks @vteremasov.
+- The window switcher reacts to Escape and releasing ⌥ when BetterWM itself is the key app. Thanks @vteremasov.
+- Accessibility observers remove their run-loop sources when an app quits, and status bar icons are cached by bundle id so relaunched apps do not show stale icons. Thanks @vteremasov.
+
 ## [0.12.6] - 2026-10-20
 
 ### Fixed
