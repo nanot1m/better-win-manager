@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.12.10] - 2026-10-20
+
+### Changed
+- Dragging a tiled window by hand floats it only after it has moved or resized by more than 10 points; smaller nudges snap back into the slot.
+
 ## [0.12.9] - 2026-10-20
 
 ### Fixed

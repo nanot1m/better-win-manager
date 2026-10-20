@@ -126,13 +126,14 @@ public struct Reconciler {
     }
 
     /// Tiled windows whose real frame no longer matches their slot: the user moved or resized them by hand.
+    /// A nudge under 10pt snaps back instead of floating the window.
     public func displaced(_ state: DesiredState, _ snapshot: Snapshot) -> [WindowID] {
         var out: [WindowID] = []
         for screen in snapshot.screens {
             let geo = geometry(state.grid(for: screen.space), screen)
             for (w, target) in geo.windowFrames() {
                 guard let actual = snapshot.window(w)?.frame else { continue }
-                if !actual.approximatelyEquals(target) { out.append(w) }
+                if !actual.approximatelyEquals(target, tolerance: 10) { out.append(w) }
             }
         }
         return out
