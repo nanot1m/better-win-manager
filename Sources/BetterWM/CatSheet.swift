@@ -33,6 +33,7 @@ struct CatSheet {
 
     init?(path: String, scale: CGFloat) {
         guard let img = NSImage(contentsOfFile: path), let rep = img.representations.first as? NSBitmapImageRep else { return nil }
+        img.size = NSSize(width: rep.pixelsWide, height: rep.pixelsHigh)
         let cellPx = Int(CatSheet.cell)
         let rowsInSheet = rep.pixelsHigh / cellPx, colsInSheet = rep.pixelsWide / cellPx
         spriteSize = NSSize(width: CatSheet.crop.width * scale, height: CatSheet.crop.height * scale)
