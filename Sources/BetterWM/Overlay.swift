@@ -19,7 +19,11 @@ final class ZoneOverlay: NSWindow {
     /// `rect` in AX (top-left origin) coordinates.
     func show(zone rect: CGRect?) {
         guard let rect else { view.rect = nil; view.needsDisplay = true; return }
-        view.rect = convertFromScreen(rect.toCocoa())
+        let cocoaRect = rect.toCocoa()
+        if let targetScreen = NSScreen.screens.first(where: { $0.frame.intersects(cocoaRect) }) {
+            if frame != targetScreen.frame { setFrame(targetScreen.frame, display: false) }
+        }
+        view.rect = convertFromScreen(cocoaRect)
         view.needsDisplay = true
         if !isVisible { orderFrontRegardless() }
     }
@@ -128,13 +132,14 @@ private final class HandleView: NSView {
 extension CGRect {
     /// AX top-left-origin <-> Cocoa bottom-left-origin; the transform is its own inverse.
     func toCocoa() -> CGRect {
-        let h = NSScreen.screens[0].frame.height
+        let h = NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 1080
         return CGRect(x: minX, y: h - maxY, width: width, height: height)
     }
 }
 
 extension CGPoint {
     func toAX() -> CGPoint {
-        CGPoint(x: x, y: NSScreen.screens[0].frame.height - y)
+        let h = NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 1080
+        return CGPoint(x: x, y: h - y)
     }
 }

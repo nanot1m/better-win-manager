@@ -107,19 +107,21 @@ public struct Grid: Equatable {
 
     /// Column `ci`'s share of the total width under the current weights.
     public func fraction(ofColumn ci: Int) -> CGFloat {
+        guard ci >= 0, ci < columns.count else { return 0 }
         let total = columns.reduce(0) { $0 + $1.weight }
         return total > 0 ? columns[ci].weight / total : 0
     }
 
     /// Re-weights so column `ci` takes `fraction` of the width; the others keep their relative sizes.
     public mutating func setFraction(_ fraction: CGFloat, ofColumn ci: Int) {
-        guard columns.count > 1, fraction > 0, fraction < 1 else { return }
+        guard columns.count > 1, ci >= 0, ci < columns.count, fraction > 0, fraction < 1 else { return }
         let others = columns.indices.filter { $0 != ci }.reduce(CGFloat(0)) { $0 + columns[$1].weight }
         columns[ci].weight = fraction * others / (1 - fraction)
     }
 
     /// Next fraction after the current one, so repeated presses cycle 1/3 → 1/4 → 2/3 → 1/2 → 1/3.
     public mutating func cycleEdgeWidth(ofColumn ci: Int) {
+        guard columns.count > 1, ci >= 0, ci < columns.count else { return }
         let current = fraction(ofColumn: ci)
         let next: CGFloat
         if let i = Grid.edgeFractions.firstIndex(where: { abs($0 - current) < 0.02 }) {
@@ -321,7 +323,7 @@ public struct GridGeometry {
     public func resizing(boundary i: Int, toX x: CGFloat) -> Grid {
         var g = grid
         let cf = columnFrames()
-        guard i + 1 < cf.count else { return g }
+        guard i >= 0, i + 1 < cf.count, i + 1 < g.columns.count else { return g }
         // Weights drift from real widths once a column is pinned to a minimum; re-anchor them first.
         for (ci, f) in cf.enumerated() { g.columns[ci].weight = f.width }
         let minA = max(120, minSize(of: grid.columns[i]).width), minB = max(120, minSize(of: grid.columns[i + 1]).width)
@@ -336,9 +338,11 @@ public struct GridGeometry {
     /// Grid with the boundary between window i and i+1 in a column moved to global y, keeping the pair's total height.
     public func resizing(column ci: Int, boundary i: Int, toY y: CGFloat) -> Grid {
         var g = grid
+        guard ci >= 0, ci < grid.columns.count else { return g }
         let c = grid.columns[ci]
-        guard i + 1 < c.windows.count else { return g }
+        guard i >= 0, i + 1 < c.windows.count else { return g }
         let frames = windowFrames().filter { c.windows.contains($0.0) }.map(\.1)
+        guard i + 1 < frames.count else { return g }
         for (w, f) in zip(c.windows, frames) { g.heightWeights[w] = f.height }
         let a = c.windows[i], b = c.windows[i + 1]
         let minA = max(80, grid.minSizes[a]?.height ?? 0), minB = max(80, grid.minSizes[b]?.height ?? 0)
