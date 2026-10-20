@@ -415,6 +415,8 @@ final class WindowManager {
                 },
                 fit: { self.fitToScreen($0) },
                 hide: { pid in
+                    // A hidden window cannot be captured; the overview shows what it looked like just before.
+                    Thumbnails.captureNow(snap.windows.filter { $0.pid == pid }.map(\.id))
                     // Hiding the frontmost app lets macOS pick the next one (usually Finder, with no window);
                     // hand focus to the destination workspace's top app first, or to ourselves if it is empty.
                     if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { self.activateTopApp(in: v) }

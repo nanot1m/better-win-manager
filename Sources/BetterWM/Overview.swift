@@ -312,6 +312,14 @@ enum Thumbnails {
         }
     }
 
+    /// Synchronous capture for windows about to leave the screen; a few milliseconds each at nominal resolution.
+    static func captureNow(_ ids: [WindowID]) {
+        for id in ids {
+            guard let cg = CGWindowListCreateImage(.null, .optionIncludingWindow, id, [.boundsIgnoreFraming, .nominalResolution]), cg.width > 1 else { continue }
+            cache[id] = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+        }
+    }
+
     static func forget(_ id: WindowID) { cache[id] = nil }
 }
 
@@ -426,24 +434,15 @@ final class OverviewView: NSView {
         return CGRect(x: x0 + CGFloat(i) * (pw + gap), y: strip.minY, width: pw, height: ph)
     }
 
-    /// Spread-out slots. A desktop whose windows don't overlap keeps its shape, scaled uniformly into the area
-    /// under the strip. Overlapping windows (stacked layout, floating ones) get one cell each, Exposé style, so
-    /// every window is fully visible.
+    /// Spread-out slots, Exposé style: one cell per window in reading order, each window scaled to fit its cell,
+    /// so every window is fully visible whatever the layout.
     private func computeSlots() {
         slots.removeAll()
         let area = CGRect(x: 48, y: stripFrame.maxY + 36, width: bounds.width - 96, height: bounds.height - stripFrame.maxY - 36 - 40)
         guard bounds.width > 0, bounds.height > 0, area.width > 0, area.height > 0 else { return }
         let windows = model.current?.windows ?? []
         let frames = windows.map { local($0.frame) }
-        let overlapping = frames.indices.contains { i in frames.indices.contains { j in j != i && frames[i].insetBy(dx: 2, dy: 2).intersects(frames[j]) } }
-        if !overlapping {
-            let s = min(area.width / bounds.width, area.height / bounds.height)
-            let ox = area.midX - bounds.width * s / 2, oy = area.midY - bounds.height * s / 2
-            for (w, f) in zip(windows, frames) {
-                slots[w.id] = CGRect(x: ox + f.minX * s, y: oy + f.minY * s, width: f.width * s, height: f.height * s)
-            }
-            return
-        }
+        guard !windows.isEmpty else { return }
         // Reading order so the cells follow the screen, however the windows are stacked.
         let order = windows.indices.sorted { (frames[$0].minX / 40).rounded() == (frames[$1].minX / 40).rounded() ? frames[$0].minY < frames[$1].minY : frames[$0].minX < frames[$1].minX }
         let n = order.count

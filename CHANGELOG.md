@@ -4,6 +4,14 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.13.1] - 2026-10-21
+
+### Changed
+- The overview spreads the current desktop's windows into one cell each, Exposé style, whatever the layout, so every window is fully visible.
+
+### Fixed
+- Desktops you had not visited showed app icons instead of previews in the overview: windows of hidden apps cannot be captured, so an app's windows are now captured right before it is hidden.
+
 ## [0.13.0] - 2026-10-20
 
 ### Added
