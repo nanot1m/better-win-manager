@@ -22,9 +22,22 @@ final class WindowObserver {
         }
         nc.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] n in
             if let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication {
-                self?.observers.removeValue(forKey: app.processIdentifier)
+                self?.unobserve(app.processIdentifier)
             }
         }
+    }
+
+    deinit {
+        for obs in observers.values {
+            let src = AXObserverGetRunLoopSource(obs)
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), src, .commonModes)
+        }
+    }
+
+    private func unobserve(_ pid: pid_t) {
+        guard let obs = observers.removeValue(forKey: pid) else { return }
+        let src = AXObserverGetRunLoopSource(obs)
+        CFRunLoopRemoveSource(CFRunLoopGetMain(), src, .commonModes)
     }
 
     private func observe(_ app: NSRunningApplication) {

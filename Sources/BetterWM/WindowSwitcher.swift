@@ -20,8 +20,7 @@ final class WindowSwitcher {
     private var groups: [Group] = []
     private var flat: [Item] = []
     private var selected = 0
-    private var flagsMonitor: Any?
-    private var keyMonitor: Any?
+    private var monitors: [Any] = []
     var isVisible: Bool { panel.isVisible }
 
     init(manager: WindowManager) {
@@ -62,20 +61,26 @@ final class WindowSwitcher {
         let screen = NSScreen.main?.visibleFrame ?? .zero
         panel.setFrame(NSRect(x: screen.midX - size.width / 2, y: screen.midY - size.height / 2, width: size.width, height: size.height), display: true)
         panel.orderFrontRegardless()
-        flagsMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] e in
+        monitors.append(NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] e in
             if !e.modifierFlags.contains(.option) { self?.commit() }
-        }
-        keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] e in
+        } as Any)
+        if let lm = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged, handler: { [weak self] e in
+            if !e.modifierFlags.contains(.option) { self?.commit() }
+            return e
+        }) { monitors.append(lm) }
+        monitors.append(NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] e in
             if e.keyCode == 53 { self?.cancel() }
-        }
+        } as Any)
+        if let lm = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] e in
+            if e.keyCode == 53 { self?.cancel(); return nil }
+            return e
+        }) { monitors.append(lm) }
         if manager.config.switcherThumbnails { view.loadThumbnails(for: flat) }
     }
 
     private func close() {
-        if let m = flagsMonitor { NSEvent.removeMonitor(m) }
-        if let m = keyMonitor { NSEvent.removeMonitor(m) }
-        flagsMonitor = nil
-        keyMonitor = nil
+        for m in monitors { NSEvent.removeMonitor(m) }
+        monitors.removeAll()
         panel.orderOut(nil)
     }
 

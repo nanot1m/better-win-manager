@@ -212,7 +212,7 @@ private final class ChipView: NSView {
     let number = NSTextField(labelWithString: "")
     private let stack = NSStackView()
     private var icons: [NSImageView] = []
-    private static var iconCache: [pid_t: NSImage] = [:]
+    private static var iconCache: [String: NSImage] = [:]
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -247,8 +247,10 @@ private final class ChipView: NSView {
             v.isHidden = i >= pids.count
             guard i < pids.count else { continue }
             let pid = pids[i]
-            if ChipView.iconCache[pid] == nil, let icon = NSRunningApplication(processIdentifier: pid)?.icon { ChipView.iconCache[pid] = icon }
-            v.image = ChipView.iconCache[pid]
+            let app = NSRunningApplication(processIdentifier: pid)
+            let key = app?.bundleIdentifier ?? "\(pid)"
+            if ChipView.iconCache[key] == nil, let icon = app?.icon { ChipView.iconCache[key] = icon }
+            v.image = ChipView.iconCache[key]
         }
     }
 
