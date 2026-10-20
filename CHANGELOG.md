@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.12.11] - 2026-10-20
+
+### Fixed
+- A tiled window nudged by less than the 10pt threshold now snaps back into its slot on drop instead of waiting for the next layout pass.
+
 ## [0.12.10] - 2026-10-20
 
 ### Changed

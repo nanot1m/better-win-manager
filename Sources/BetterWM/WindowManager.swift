@@ -833,9 +833,10 @@ final class WindowManager {
     func releaseDisplacedWindow(_ id: WindowID) {
         guard state.isTiled(id) else { return }
         let snap = system.lightSnapshot(tracked: tracked)
-        guard reconciler.displaced(state, snap).contains(id) else { return }
-        Log.write("tile", "released by hand: \(describe(id))")
-        state.untile(id)
+        if reconciler.displaced(state, snap).contains(id) {
+            Log.write("tile", "released by hand: \(describe(id))")
+            state.untile(id)
+        }
         apply()
     }
 
