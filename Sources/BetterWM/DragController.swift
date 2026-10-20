@@ -111,12 +111,13 @@ final class DragController {
             manager.overlay.hide()
             let zone = currentZone?.0
             let original = originalFrame
+            let id = draggedID
             let finish = { [manager] in
                 manager.interacting = false
                 if let w, let zone {
                     manager.drop(w, into: zone, at: p, from: original)
                 } else {
-                    manager.releaseDisplacedWindows()
+                    if let id { manager.releaseDisplacedWindow(id) }
                     // Only a plain drag or resize settles a new floating spot; a ⌥-drag that misses every zone does not.
                     if let w, !alt { manager.rememberFloatingFrame(w) }
                 }

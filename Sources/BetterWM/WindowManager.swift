@@ -828,13 +828,14 @@ final class WindowManager {
         }
     }
 
-    /// Called on mouse-up: anything moved or resized by hand leaves the grid and floats.
-    func releaseDisplacedWindows() {
+    /// Called on mouse-up: the window moved or resized by hand leaves the grid and floats. Only that window;
+    /// others may be off their slots merely because a desktop switch is still settling them.
+    func releaseDisplacedWindow(_ id: WindowID) {
+        guard state.isTiled(id) else { return }
         let snap = system.lightSnapshot(tracked: tracked)
-        let displaced = reconciler.displaced(state, snap)
-        guard !displaced.isEmpty else { return }
-        Log.write("tile", "released by hand: \(displaced.map { describe($0) })")
-        displaced.forEach { state.untile($0) }
+        guard reconciler.displaced(state, snap).contains(id) else { return }
+        Log.write("tile", "released by hand: \(describe(id))")
+        state.untile(id)
         apply()
     }
 

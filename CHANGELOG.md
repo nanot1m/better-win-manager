@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.12.9] - 2026-10-20
+
+### Fixed
+- A click shortly after switching desktops could untile windows on that desktop: mouse-up released every tiled window that was not yet in its slot, including ones still settling back from the parking corner. Only the window actually dragged is released now.
+
 ## [0.12.8] - 2026-10-20
 
 ### Changed
