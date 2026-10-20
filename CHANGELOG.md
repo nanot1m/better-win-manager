@@ -4,6 +4,12 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.12.12] - 2026-10-20
+
+### Fixed
+- Windows of an app with windows on several desktops could reappear on screen after the app was unhidden, yet stay invisible to focus cycling, the focus ring and tiling until the next desktop switch. Parked windows now stay in the corner while their app is hidden, so there is nothing to race when it comes back.
+- Re-parking a window that drifted out of the corner is spaced half a second apart and no longer gives up after three quick tries; only a window that ignores the move outright counts as refusing, and after three refusals it joins the active desktop instead of lingering unreachable.
+
 ## [0.12.11] - 2026-10-20
 
 ### Fixed

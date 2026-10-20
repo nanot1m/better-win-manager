@@ -10,10 +10,11 @@ final class VirtualWorkspaces {
     /// Real frames of floating windows while parked, restored when their workspace returns.
     private var parkedFrames: [WindowID: CGRect] = [:]
     private var parked: Set<WindowID> = []
-    /// Apps hidden with the native Hide because every window they have lives on an inactive workspace; hidden
-    /// windows keep their real frames, so nothing peeks out of a screen corner.
+    /// Apps hidden with the native Hide because every window they have lives on an inactive workspace. Windows
+    /// already parked stay in the corner while hidden: moving them back would race the unhide later.
     private var hiddenByPid: [pid_t: Set<WindowID>] = [:]
-    private var reparkAttempts: [WindowID: Int] = [:]
+    /// Consecutive re-parks a window ignored outright, with the frame seen before the last one and its time.
+    private var reparkAttempts: [WindowID: (refused: Int, at: Date, seen: CGPoint)] = [:]
     var knownWindows: [WindowID] { Array(membership.keys) }
     var hiddenPids: [pid_t] { Array(hiddenByPid.keys) }
     /// Last workspace each app had a window in, kept after the window is gone: an app that recreates its only
@@ -134,8 +135,6 @@ final class VirtualWorkspaces {
             let allInactive = group.allSatisfy { workspace(of: $0) != active }
             if allInactive, hideable(p) {
                 if hiddenByPid[p] == nil {
-                    // Anything already in the corner goes back to its real frame first; hidden is invisible anyway.
-                    for w in group { if let f = parkedFrames.removeValue(forKey: w) { setFrame(w, fit(f)) } }
                     hide(p)
                     Log.write("park", "hide app \(p) (\(group.count) window(s), all on inactive workspaces)")
                 }
@@ -164,14 +163,22 @@ final class VirtualWorkspaces {
                     if let f = parkedFrames.removeValue(forKey: w) { setFrame(w, fit(f)) }
                 } else if shouldPark, parked.contains(w), let f = frame(w), !isInCorner(f) {
                     // Already parked but not in the corner: the move was lost (the app was mid-unhide, or it
-                    // repositioned itself). Park again, but not forever: a window macOS refuses to move stays.
-                    let attempts = reparkAttempts[w, default: 0]
-                    if attempts < 3 {
-                        reparkAttempts[w] = attempts + 1
-                        let target = parkOrigin(f)
-                        setFrame(w, CGRect(origin: target, size: f.size))
-                        Log.write("park", "re-park #\(w) (was at \(Int(f.minX)),\(Int(f.minY)); corner \(Int(target.x)),\(Int(target.y)))")
+                    // repositioned itself). Park again, spaced out. Only a window that ignored the move outright
+                    // counts as refusing; after three refusals it is visible anyway, so it joins the active workspace.
+                    let last = reparkAttempts[w]
+                    if let last, Date().timeIntervalSince(last.at) < 0.5 { continue }
+                    let refused = last.map { $0.seen == f.origin ? $0.refused + 1 : 0 } ?? 0
+                    if refused >= 3 {
+                        claimForActive(w)
+                        reparkAttempts[w] = nil
+                        Log.write("park", "#\(w) will not leave the screen; it now belongs to workspace \(active + 1)")
+                        continue
                     }
+                    if !isTiled(w), parkedFrames[w] == nil { parkedFrames[w] = f }
+                    let target = parkOrigin(f)
+                    reparkAttempts[w] = (refused, Date(), f.origin)
+                    setFrame(w, CGRect(origin: target, size: f.size))
+                    Log.write("park", "re-park #\(w) (was at \(Int(f.minX)),\(Int(f.minY)); corner \(Int(target.x)),\(Int(target.y)); refused \(refused))")
                 }
             }
         }

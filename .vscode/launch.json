@@ -1,0 +1,44 @@
+{
+   "configurations": [
+      {
+         "type": "swift",
+         "request": "launch",
+         "args": [],
+         "cwd": "${workspaceFolder:better-win-manager}",
+         "name": "Debug CoreTests",
+         "target": "CoreTests",
+         "configuration": "debug",
+         "preLaunchTask": "swift: Build Debug CoreTests"
+      },
+      {
+         "type": "swift",
+         "request": "launch",
+         "args": [],
+         "cwd": "${workspaceFolder:better-win-manager}",
+         "name": "Release CoreTests",
+         "target": "CoreTests",
+         "configuration": "release",
+         "preLaunchTask": "swift: Build Release CoreTests"
+      },
+      {
+         "type": "swift",
+         "request": "launch",
+         "args": [],
+         "cwd": "${workspaceFolder:better-win-manager}",
+         "name": "Debug BetterWM",
+         "target": "BetterWM",
+         "configuration": "debug",
+         "preLaunchTask": "swift: Build Debug BetterWM"
+      },
+      {
+         "type": "swift",
+         "request": "launch",
+         "args": [],
+         "cwd": "${workspaceFolder:better-win-manager}",
+         "name": "Release BetterWM",
+         "target": "BetterWM",
+         "configuration": "release",
+         "preLaunchTask": "swift: Build Release BetterWM"
+      }
+   ]
+}
