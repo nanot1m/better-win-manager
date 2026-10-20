@@ -2,9 +2,11 @@ import BetterWMCore
 import Cocoa
 import QuartzCore
 
-/// Horizontal swipe between desktops, drawn like Spaces: the current desktop's windows slide out as previews
-/// while the neighbour's slide in, following the fingers. Real windows cannot be moved that smoothly, so the
-/// panel covers the screen for the duration and the real switch happens behind it on release.
+/// Horizontal swipe between desktops, drawn like Spaces: the current desktop slides out as one image while the
+/// neighbour's windows slide in as previews, following the fingers. Real windows cannot be moved that smoothly,
+/// so the panel covers the screen below the bar for the duration and the real switch happens behind it on release.
+/// Everything the first frame needs comes from one screen capture and the manager's own state: no per-window
+/// captures and no Accessibility, which is what kept the start from being instant.
 final class DesktopSlide {
     private let manager: WindowManager
     private let panel: NSPanel
@@ -15,6 +17,10 @@ final class DesktopSlide {
     private var hasPrevious = false, hasNext = false
     private var current = 0
     var isActive: Bool { panel.isVisible }
+    /// Screen image taken when the fingers touched the pad, so a swipe that follows starts without a capture.
+    private var prewarmed: (at: Date, area: CGRect, image: CGImage)?
+    private let captureQueue = DispatchQueue(label: "betterwm.slide", qos: .userInteractive)
+    private var pending = 0
 
     init(manager: WindowManager) {
         self.manager = manager
@@ -29,53 +35,77 @@ final class DesktopSlide {
         panel.contentView = view
     }
 
+    private func area(of screen: NSScreen) -> CGRect {
+        // Below the bar only: the bar stays put and live, like the menu bar in Spaces.
+        let inset = manager.system.topInset(screen)
+        let screenAX = screen.frame.toCocoa()
+        return CGRect(x: screenAX.minX, y: screenAX.minY + inset, width: screenAX.width, height: screenAX.height - inset)
+    }
+
+    /// Fingers are down; capture the screen now, off the main thread, in case a swipe follows.
+    func prewarm() {
+        guard !panel.isVisible, !manager.interacting, let screen = NSScreen.screens.first else { return }
+        let areaAX = area(of: screen)
+        pending += 1
+        captureQueue.async { [weak self] in
+            let image = CGWindowListCreateImage(areaAX, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution])
+            _ = Overview.captureBackdrop(areaAX, topInset: 0)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.pending -= 1
+                if let image { self.prewarmed = (Date(), areaAX, image) }
+            }
+        }
+    }
+
     func began() {
         animator?.invalidate()
         guard !panel.isVisible, let screen = NSScreen.screens.first, let current = manager.currentDesktop else { return }
+        let t0 = Date()
+        defer { Log.write("gesture", "slide ready in \(Int(Date().timeIntervalSince(t0) * 1000)) ms") }
         self.current = current
-        let screenAX = screen.frame.toCocoa()
-        width = screenAX.width
-        let byDesktop = Dictionary(uniqueKeysWithValues: manager.windowsByDesktop().map { ($0.desktop, $0.windows) })
-        let depth = Dictionary(uniqueKeysWithValues: manager.frontToBack.enumerated().map { ($1, $0) })
-        let focusedNow = manager.focusRing.currentWindowID
+        let areaAX = area(of: screen)
+        let inset = manager.system.topInset(screen)
+        width = areaAX.width
+        hasPrevious = current > 0
+        hasNext = current + 1 < manager.desktopCount
         let ringColor = NSColor(hex: manager.config.focusRingColor) ?? .controlAccentColor
         let floatingColor = manager.config.focusRingFloatingColor.lowercased() == "same" ? ringColor : (NSColor(hex: manager.config.focusRingFloatingColor) ?? ringColor)
         func slide(_ d: Int) -> [SlideView.Item] {
-            // The ring travels with the slide: on the focused window here, on the one that will be focused there.
-            let top = d == current ? focusedNow : manager.lastFocusedWindow(onDesktop: d)
-            func rank(_ w: AXWindow) -> Int { let id = w.windowID ?? 0; return id == top ? -1 : (depth[id] ?? .max) }
-            return (byDesktop[d] ?? []).sorted { rank($0) < rank($1) }.compactMap { w in
-                guard let id = w.windowID else { return nil }
-                let frame = d == current ? w.frame : (manager.layoutFrame(of: w) ?? w.frame)
-                let local = CGRect(x: frame.minX - screenAX.minX, y: frame.minY - screenAX.minY, width: frame.width, height: frame.height)
-                let ring: NSColor? = manager.config.focusRing && id == top && (manager.config.focusRingFloating || manager.isTiled(w))
-                    ? (manager.isTiled(w) ? ringColor : floatingColor) : nil
-                return SlideView.Item(id: id, frame: local, icon: NSRunningApplication(processIdentifier: w.pid)?.icon, thumbnail: Thumbnails.cached(id),
-                                      radius: manager.config.focusRingAutoRadius ? (WindowServerEvents.cornerRadius(of: id) ?? manager.config.focusRingRadius) : manager.config.focusRingRadius,
+            let items = manager.previewItems(desktop: d)
+            let top = manager.lastFocusedWindow(onDesktop: d) ?? items.first?.id
+            return items.map { w in
+                let local = CGRect(x: w.frame.minX - areaAX.minX, y: w.frame.minY - areaAX.minY, width: w.frame.width, height: w.frame.height)
+                let ring: NSColor? = manager.config.focusRing && w.id == top && (manager.config.focusRingFloating || w.tiled) ? (w.tiled ? ringColor : floatingColor) : nil
+                return SlideView.Item(id: w.id, frame: local, icon: NSRunningApplication(processIdentifier: w.pid)?.icon, thumbnail: Thumbnails.cached(w.id),
+                                      radius: manager.config.focusRingAutoRadius ? (WindowServerEvents.cornerRadius(of: w.id) ?? manager.config.focusRingRadius) : manager.config.focusRingRadius,
                                       ring: ring, ringWidth: manager.config.focusRingWidth)
             }
         }
-        hasPrevious = current > 0
-        hasNext = current + 1 < manager.desktopCount
-        // The current desktop's windows are on screen: capture them now so the slide starts sharp.
-        Thumbnails.captureNow((byDesktop[current] ?? []).compactMap(\.windowID))
-        let backdrop = Overview.captureBackdrop(screenAX, topInset: manager.system.topInset(screen))
-        panel.setFrame(screen.frame, display: false)
-        view.configure(backdrop: backdrop, current: slide(current), previous: hasPrevious ? slide(current - 1) : nil, next: hasNext ? slide(current + 1) : nil,
+        let fresh = prewarmed.flatMap { $0.area == areaAX && Date().timeIntervalSince($0.at) < 2 ? $0.image : nil }
+        let outgoing = fresh ?? CGWindowListCreateImage(areaAX, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution])
+        prewarmed = nil
+        let backdrop = Overview.captureBackdrop(areaAX, topInset: 0)
+        let frame = NSRect(x: screen.frame.minX, y: screen.frame.minY, width: screen.frame.width, height: screen.frame.height - inset)
+        panel.setFrame(frame, display: false)
+        view.configure(backdrop: backdrop, outgoing: outgoing, previous: hasPrevious ? slide(current - 1) : nil, next: hasNext ? slide(current + 1) : nil,
                        scale: screen.backingScaleFactor)
         offset = 0
         view.offset = 0
         panel.orderFrontRegardless()
-        manager.focusRing.suspended = true
-        // Neighbours of hidden apps were captured before hiding; parked ones can be refreshed now.
-        Thumbnails.refresh(((byDesktop[current - 1] ?? []) + (byDesktop[current + 1] ?? [])).compactMap(\.windowID)) { [weak self] id, img in self?.view.setThumbnail(img, for: id) }
+        // No layout passes while the slide is up: a snapshot mid-scrub stalls the main thread for tens of ms.
+        manager.interacting = true
+        // Parked neighbours are on screen and can be refreshed; hidden ones keep the capture taken before hiding.
+        let neighbours = (hasPrevious ? manager.previewItems(desktop: current - 1) : []) + (hasNext ? manager.previewItems(desktop: current + 1) : [])
+        Thumbnails.refresh(neighbours.filter { !(NSRunningApplication(processIdentifier: $0.pid)?.isHidden ?? false) }.map(\.id)) { [weak self] id, img in
+            self?.view.setThumbnail(img, for: id)
+        }
     }
 
     /// `travel` is in desktops: -1 means the next desktop has fully arrived from the right.
     func changed(_ travel: CGFloat) {
         guard panel.isVisible else { return }
         var t = travel
-        // Rubber band past the edges, where there is no desktop to show.
         if t < 0, !hasNext { t = t * 0.25 }
         if t > 0, !hasPrevious { t = t * 0.25 }
         set(offset: t * width)
@@ -98,9 +128,22 @@ final class DesktopSlide {
         }
         guard target != 0 else { animate(to: 0) {}; return }
         let destination = current + target
-        // The real switch runs behind the finishing animation, so the windows are in place when the slide lands.
-        manager.switchDesktop(destination)
-        animate(to: CGFloat(-target) * width) { [weak self] in self?.dismiss() }
+        // The real switch blocks the main thread for some 40 ms (Accessibility moves and unhides). It starts just
+        // before the slide lands, in the slowest part of the ease-out, so it is done when the panel goes.
+        var switched = false
+        let doSwitch = { [weak self] in
+            guard let self, !switched else { return }
+            switched = true
+            self.manager.interacting = false
+            let t0 = Date()
+            self.manager.switchDesktop(destination)
+            Log.write("gesture", "real switch took \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
+        }
+        let duration = animate(to: CGFloat(-target) * width) { [weak self] in
+            doSwitch()
+            self?.dismiss()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, duration - 0.05), execute: doSwitch)
     }
 
     private func set(offset o: CGFloat) {
@@ -108,7 +151,8 @@ final class DesktopSlide {
         view.offset = o
     }
 
-    private func animate(to target: CGFloat, then: @escaping () -> Void) {
+    @discardableResult
+    private func animate(to target: CGFloat, then: @escaping () -> Void) -> TimeInterval {
         animator?.invalidate()
         let from = offset
         let start = Date()
@@ -126,11 +170,12 @@ final class DesktopSlide {
             }
         }
         RunLoop.main.add(animator!, forMode: .common)
+        return duration
     }
 
     private func dismiss() {
         panel.orderOut(nil)
-        manager.focusRing.suspended = false
+        if manager.interacting { manager.interacting = false; manager.tick() }
     }
 }
 
@@ -168,18 +213,40 @@ private final class SlideView: NSView {
         backdrop.contentsGravity = .resize
         layer?.addSublayer(backdrop)
         for l in [slides.previous, slides.current, slides.next] { layer?.addSublayer(l) }
+        slides.current.contentsGravity = .resize
     }
     required init?(coder: NSCoder) { fatalError() }
 
-    func configure(backdrop image: CGImage?, current: [Item], previous: [Item]?, next: [Item]?, scale: CGFloat) {
+    func configure(backdrop image: CGImage?, outgoing: CGImage?, previous: [Item]?, next: [Item]?, scale: CGFloat) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         backdrop.contents = image
         backdrop.frame = bounds
         tiles.removeAll()
-        for (layer, items) in [(slides.previous, previous ?? []), (slides.current, current), (slides.next, next ?? [])] {
+        slides.current.sublayers?.forEach { $0.removeFromSuperlayer() }
+        slides.current.contents = outgoing
+        for (layer, items) in [(slides.previous, previous ?? []), (slides.next, next ?? [])] {
             layer.sublayers?.forEach { $0.removeFromSuperlayer() }
             for item in items.reversed() {
+                let shadow = CALayer()
+                shadow.frame = item.frame
+                shadow.backgroundColor = NSColor.black.cgColor
+                shadow.cornerRadius = item.radius
+                shadow.shadowColor = NSColor.black.cgColor
+                shadow.shadowOpacity = 0.45
+                shadow.shadowRadius = 20
+                shadow.shadowOffset = CGSize(width: 0, height: 10)
+                shadow.shadowPath = CGPath(roundedRect: CGRect(origin: .zero, size: item.frame.size), cornerWidth: item.radius, cornerHeight: item.radius, transform: nil)
+                layer.addSublayer(shadow)
+                if let color = item.ring {
+                    let r = CALayer()
+                    let pad = item.ringWidth / 2 + 1
+                    r.frame = item.frame.insetBy(dx: -pad, dy: -pad)
+                    r.cornerRadius = item.radius + pad
+                    r.borderWidth = item.ringWidth
+                    r.borderColor = color.cgColor
+                    layer.addSublayer(r)
+                }
                 let t = CALayer()
                 t.contentsScale = scale
                 t.contentsGravity = .resize
@@ -196,24 +263,6 @@ private final class SlideView: NSView {
                     let side = min(96, item.frame.width * 0.3, item.frame.height * 0.3)
                     i.frame = CGRect(x: item.frame.width / 2 - side / 2, y: item.frame.height / 2 - side / 2, width: side, height: side)
                     t.addSublayer(i)
-                }
-                let shadow = CALayer()
-                shadow.frame = item.frame
-                shadow.cornerRadius = item.radius
-                shadow.backgroundColor = NSColor.black.cgColor
-                shadow.shadowColor = NSColor.black.cgColor
-                shadow.shadowOpacity = 0.45
-                shadow.shadowRadius = 20
-                shadow.shadowOffset = CGSize(width: 0, height: 10)
-                layer.addSublayer(shadow)
-                if let color = item.ring {
-                    let r = CALayer()
-                    let pad = item.ringWidth / 2 + 1
-                    r.frame = item.frame.insetBy(dx: -pad, dy: -pad)
-                    r.cornerRadius = item.radius + pad
-                    r.borderWidth = item.ringWidth
-                    r.borderColor = color.cgColor
-                    layer.addSublayer(r)
                 }
                 layer.addSublayer(t)
                 tiles[item.id] = t

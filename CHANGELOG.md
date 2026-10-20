@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.15.1] - 2026-10-21
+
+### Changed
+- The desktop slide starts and finishes without stalls: the outgoing desktop is one screen image captured in the background the moment the fingers touch the pad, the wallpaper is cached, the incoming desktop is built from the manager's own state without Accessibility, layout passes pause while the slide is up, and the real switch runs in the last 50 ms of the ease-out instead of blocking the animation.
+
 ## [0.15.0] - 2026-10-21
 
 ### Changed

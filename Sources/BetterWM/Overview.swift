@@ -265,7 +265,17 @@ final class Overview {
 
     /// The screen without its windows: wallpaper and desktop icons (everything below the back-most window),
     /// with our own bar drawn back on top. The windows themselves are drawn as previews, so they visibly lift off.
+    private static var backdropCache: (at: Date, area: CGRect, topInset: CGFloat, image: CGImage)?
+
     static func captureBackdrop(_ area: CGRect, topInset: CGFloat) -> CGImage? {
+        // The wallpaper hardly changes; a gesture must not pay for it every time.
+        if let c = backdropCache, c.area == area, c.topInset == topInset, Date().timeIntervalSince(c.at) < 60 { return c.image }
+        let image = captureBackdropNow(area, topInset: topInset)
+        if let image { backdropCache = (Date(), area, topInset, image) }
+        return image
+    }
+
+    private static func captureBackdropNow(_ area: CGRect, topInset: CGFloat) -> CGImage? {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else { return nil }
         var backmost: CGWindowID?
         var bar: [CGWindowID] = []
@@ -703,6 +713,8 @@ private final class WindowLayer: CALayer {
         shadowOpacity = 0
         shadowRadius = 18
         shadowOffset = CGSize(width: 0, height: 8)
+        // Without an explicit path Core Animation re-derives the shadow from the layer's pixels on every move.
+        shadowPath = CGPath(rect: .zero, transform: nil)
     }
     override init(layer: Any) { super.init(layer: layer) }
     required init?(coder: NSCoder) { fatalError() }
@@ -721,6 +733,7 @@ private final class WindowLayer: CALayer {
         image.frame = bounds
         highlight.frame = bounds.insetBy(dx: -3, dy: -3)
         let r = baseRadius + (10 - baseRadius) * p
+        shadowPath = CGPath(roundedRect: bounds, cornerWidth: r, cornerHeight: r, transform: nil)
         image.cornerRadius = r
         highlight.cornerRadius = r + 3
         let pad = ringWidth / 2 + 1

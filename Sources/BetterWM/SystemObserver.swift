@@ -24,6 +24,8 @@ final class SystemObserver {
     var spacesOfWindow: (WindowID) -> [SpaceID] = { Spaces.spaces(of: $0) }
 
     func pid(of id: WindowID) -> pid_t? { ax[id]?.pid ?? lastInfo[id]?.pid }
+    /// Frame from the last snapshot, without touching Accessibility.
+    func lastFrame(of id: WindowID) -> CGRect? { lastInfo[id]?.frame }
 
     func axWindow(_ id: WindowID) -> AXWindow? {
         if let w = ax[id], w.isValid { return w }

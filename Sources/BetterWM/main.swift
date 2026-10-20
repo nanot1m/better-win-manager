@@ -445,6 +445,10 @@ extension AppDelegate {
         g.onChanged = vertical ? { [weak self] in self?.overview.gestureChanged($0) } : nil
         g.onEnded = vertical ? { [weak self] in self?.overview.gestureEnded(velocity: $0) } : nil
         // With the overview open the swipe scrubs the overview itself; otherwise it slides the desktops.
+        g.onTouchBegan = horizontal ? { [weak self] in
+            guard let self, !self.overview.isOpen else { return }
+            self.slide.prewarm()
+        } : nil
         g.onHorizontalBegan = horizontal ? { [weak self] in
             guard let self else { return }
             if self.overview.isOpen { self.overview.horizontalBegan() } else { self.slide.began() }

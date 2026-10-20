@@ -233,10 +233,14 @@ final class WindowManager {
         v.switchTo(index)
         ignoreFocusSwitchUntil = Date().addingTimeInterval(0.8)
         lastFocusedID = AXWindow.focused.flatMap(id)
-        tick()
+        let t0 = Date()
+        tick(settle: false)
+        let t1 = Date()
         revealRingAndFocusTop()
         v.trimEmptyTrailing(minimum: 1)
         onDesktopChange?()
+        let t2 = Date()
+        if t2.timeIntervalSince(t0) > 0.02 { Log.write("desktop", "switch cost: tick \(Int(t1.timeIntervalSince(t0) * 1000)) ms, reveal \(Int(t2.timeIntervalSince(t1) * 1000)) ms") }
     }
 
     /// Reorders workspaces: everything keyed by workspace follows.
@@ -383,6 +387,28 @@ final class WindowManager {
     }
 
     /// After a workspace switch: show the ring on the window we are about to raise, in the same pass, then raise it.
+    /// Windows of `desktop` with the frames they will have when it shows, from the manager's own state and the
+    /// last snapshot: no Accessibility round trips, so it is cheap enough for the first frame of a gesture.
+    /// The window that was focused there comes first, then the grid's order, then floating windows.
+    func previewItems(desktop d: Int) -> [(id: WindowID, pid: pid_t, frame: CGRect, tiled: Bool)] {
+        let v = virtualWS
+        let top = lastFocusedWindow(onDesktop: d)
+        let gridOrder = state.grids
+            .compactMap { key, grid -> (Int, [WindowID])? in
+                guard let s = VirtualWorkspaces.decode(key), s.real == v.realSpace, s.workspace == d else { return nil }
+                return (s.screenIndex, grid.columns.flatMap(\.windows))
+            }
+            .sorted { $0.0 < $1.0 }.flatMap(\.1)
+        let known = v.knownWindows.filter { v.workspace(of: $0) == d }
+        let ordered = ([top].compactMap { $0 } + gridOrder + known).reduce(into: [WindowID]()) { if !$0.contains($1), known.contains($1) { $0.append($1) } }
+        return ordered.compactMap { id in
+            guard let pid = system.pid(of: id) else { return nil }
+            let tiled = state.isTiled(id)
+            guard let frame = (tiled ? targetFrame(of: id) : nil) ?? v.parkedFrame(of: id) ?? system.lastFrame(of: id) else { return nil }
+            return (id, pid, frame, tiled)
+        }
+    }
+
     /// The window that had focus when `desktop` was last left, if it is still around.
     func lastFocusedWindow(onDesktop desktop: Int) -> WindowID? {
         let v = virtualWS
@@ -582,11 +608,16 @@ final class WindowManager {
     }
 
     /// Full reconcile: observe, reconcile, execute, and settle (windows that refuse a size need a second pass).
-    func tick() {
+    /// `settle` re-reads the screen after moving windows, for ones that refuse a size; a desktop switch skips it,
+    /// since the window-server events the moves cause bring a tick right after anyway.
+    func tick(settle: Bool = true) {
         guard !interacting, !switching else { return }
         pruneDeadWindows()
-        for _ in 0..<3 {
+        var timing: [String] = []
+        for pass in 0..<(settle ? 3 : 1) {
+            let t0 = Date()
             var snap = system.snapshot(tracked: tracked)
+            timing.append("snap\(pass) \(Int(Date().timeIntervalSince(t0) * 1000))")
             zOrder = snap.windows.map(\.id)
             // Placing windows changes what the next snapshot shows, and apps unhiding during launch add windows
             // between snapshots; every window must pass through assignment before parking can adopt it.
@@ -600,12 +631,19 @@ final class WindowManager {
             let ids = Set(snap.windows.map(\.id))
             if ids != lastWindowIDs { lastWindowIDs = ids; onWindowsChange?() }
             scheduleSave(snap)
+            let t1 = Date()
             applyVirtualParking(snap)
+            timing.append("park \(Int(Date().timeIntervalSince(t1) * 1000))")
             guard !commands.isEmpty else { break }
             anticipateRing(commands, snap.focused)
+            let t2 = Date()
             system.execute(commands)
+            timing.append("exec\(commands.count) \(Int(Date().timeIntervalSince(t2) * 1000))")
         }
+        let t3 = Date()
         refreshChrome()
+        timing.append("chrome \(Int(Date().timeIntervalSince(t3) * 1000))")
+        if Log.enabled, timing.count > 3 || timing.contains(where: { Int($0.split(separator: " ")[1]) ?? 0 > 15 }) { Log.write("tick", timing.joined(separator: ", ")) }
     }
 
     /// Workspace membership outlives windows unless told otherwise; a closed window must not keep showing its
