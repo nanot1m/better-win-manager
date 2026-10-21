@@ -2,6 +2,8 @@
 
 Column-based tiling window manager for macOS. Tile windows by ⌥-dragging them into place; everything else stays a normal, freely movable window.
 
+**Website:** [nanot1m.github.io/better-win-manager](https://nanot1m.github.io/better-win-manager/)
+
 - Columns across the screen, windows stacked within a column
 - Virtual workspaces per macOS desktop: instant switching, reorderable, created on demand
 - Drop zones highlighted while dragging, draggable gap handles to resize

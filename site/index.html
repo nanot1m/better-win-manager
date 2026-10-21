@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BetterWM: column tiling for macOS</title>
+<meta name="description" content="A column-based tiling window manager for macOS. ⌥-drag windows into place, switch between virtual desktops instantly, and swipe through them like Spaces.">
+<meta property="og:title" content="BetterWM: column tiling for macOS">
+<meta property="og:description" content="⌥-drag windows into columns, instant virtual desktops, a Mission Control style overview and Spaces-like swipes.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='2' y='4' width='12' height='24' rx='3' fill='%23ff9300'/><rect x='18' y='4' width='12' height='10' rx='3' fill='%23ff9300' opacity='.7'/><rect x='18' y='18' width='12' height='10' rx='3' fill='%23ff9300' opacity='.45'/></svg>">
+<style>
+  :root {
+    --bg: #0b0c10; --panel: #14161c; --line: #262a33; --text: #e9eaee; --muted: #9aa0ab;
+    --accent: #ff9300; --teal: #2bb3a3; --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  nav { position: sticky; top: 0; z-index: 10; backdrop-filter: saturate(160%) blur(14px); background: rgba(11,12,16,.72); border-bottom: 1px solid var(--line); }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); }
+  .brand:hover { text-decoration: none; }
+  .logo { width: 22px; height: 22px; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 3px; }
+  .logo i { background: var(--accent); border-radius: 3px; }
+  .logo i:first-child { grid-row: span 2; }
+  .logo i:nth-child(2) { opacity: .7; } .logo i:nth-child(3) { opacity: .45; }
+  nav ul { display: flex; gap: 24px; list-style: none; margin: 0; padding: 0; font-size: 14px; }
+  nav ul a { color: var(--muted); } nav ul a:hover { color: var(--text); text-decoration: none; }
+
+  header.hero { padding: 88px 0 40px; text-align: center; }
+  .eyebrow { display: inline-block; font-size: 13px; color: var(--accent); border: 1px solid rgba(255,147,0,.35); padding: 4px 12px; border-radius: 999px; margin-bottom: 22px; }
+  h1 { font-size: clamp(38px, 6vw, 64px); line-height: 1.05; letter-spacing: -.02em; margin: 0 0 18px; }
+  h1 span { background: linear-gradient(90deg, var(--accent), #ffc56b); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lede { font-size: 19px; color: var(--muted); max-width: 640px; margin: 0 auto 32px; }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; font-weight: 600; font-size: 15px; border: 1px solid var(--line); color: var(--text); background: var(--panel); }
+  .btn:hover { text-decoration: none; border-color: #3a3f4a; }
+  .btn.primary { background: var(--accent); color: #1a1205; border-color: var(--accent); }
+  .btn.primary:hover { background: #ffa526; }
+
+  .install { margin: 28px auto 0; max-width: 560px; display: flex; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font: 14px/1 ui-monospace, "SF Mono", Menlo, monospace; }
+  .install code { flex: 1; padding: 14px 16px; text-align: left; overflow-x: auto; white-space: nowrap; color: #d6d8de; }
+  .install code::before { content: "$ "; color: var(--muted); }
+  .install button { border: 0; border-left: 1px solid var(--line); background: none; color: var(--muted); padding: 0 16px; height: 44px; cursor: pointer; font: inherit; }
+  .install button:hover { color: var(--text); }
+
+  /* Desktop mock */
+  .screen { margin: 56px auto 0; max-width: 980px; aspect-ratio: 16 / 9.4; border-radius: 18px; border: 1px solid var(--line); overflow: hidden; position: relative;
+    background: radial-gradient(120% 90% at 70% 10%, #3b2fd0 0%, #1d1a7a 38%, #0c0e2b 75%); box-shadow: 0 40px 120px -30px rgba(70,60,255,.45); }
+  .bar { position: absolute; inset: 0 0 auto 0; height: 34px; background: #000; display: flex; align-items: center; gap: 8px; padding: 0 14px; font-size: 12px; color: #fff; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 6px; background: rgba(255,255,255,.1); font-weight: 600; font-size: 11px; transition: background .35s; }
+  .chip.on { background: var(--accent); color: #1a1205; }
+  .chip b { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .bar .title { margin-left: 8px; font-weight: 600; }
+  .bar .right { margin-left: auto; display: flex; gap: 14px; color: #ddd; }
+  .stage { position: absolute; inset: 34px 0 0 0; padding: 12px; }
+  .desk { position: absolute; inset: 12px; display: grid; gap: 10px; transition: transform .7s cubic-bezier(.2,.8,.2,1), opacity .7s; }
+  .desk.d1 { grid-template-columns: 1.3fr 1fr; grid-template-rows: 1fr 1fr; }
+  .desk.d1 .w:first-child { grid-row: span 2; }
+  .desk.d2 { grid-template-columns: 1fr 1fr 1fr; transform: translateX(105%); }
+  .w { border-radius: 10px; background: #1c1f27; border: 1px solid rgba(255,255,255,.08); overflow: hidden; position: relative; }
+  .w::before { content: ""; position: absolute; left: 10px; top: 9px; width: 34px; height: 8px;
+    background: radial-gradient(circle at 4px 4px, #ff5f57 3.5px, transparent 4px), radial-gradient(circle at 17px 4px, #febc2e 3.5px, transparent 4px), radial-gradient(circle at 30px 4px, #28c840 3.5px, transparent 4px); }
+  .w .t { position: absolute; left: 12px; right: 12px; top: 30px; display: grid; gap: 7px; }
+  .w .t i { height: 7px; border-radius: 4px; background: rgba(255,255,255,.09); }
+  .w .t i:nth-child(2n) { width: 72%; } .w .t i:nth-child(3n) { width: 54%; background: rgba(43,179,163,.35); }
+  .w.focus { outline: 4px solid var(--accent); outline-offset: 2px; }
+  .w.float { outline: 4px solid var(--teal); outline-offset: 2px; }
+  .screen.swiped .d1 { transform: translateX(-105%); }
+  .screen.swiped .d2 { transform: none; }
+
+  section { padding: 96px 0 0; }
+  h2 { font-size: clamp(28px, 4vw, 40px); letter-spacing: -.015em; margin: 0 0 10px; }
+  .sub { color: var(--muted); max-width: 640px; margin: 0 0 40px; font-size: 17px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; }
+  .card h3 { margin: 0 0 6px; font-size: 17px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  .ico { width: 34px; height: 34px; border-radius: 9px; background: rgba(255,147,0,.12); color: var(--accent); display: grid; place-items: center; margin-bottom: 14px; font-size: 18px; }
+
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+  .keys { display: grid; gap: 10px; }
+  .key { display: flex; justify-content: space-between; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; font-size: 15px; }
+  kbd { font: 13px ui-monospace, "SF Mono", Menlo, monospace; background: #1f222b; border: 1px solid #333846; border-bottom-width: 2px; border-radius: 6px; padding: 3px 8px; color: #e1e3e8; white-space: nowrap; }
+
+  .steps { counter-reset: s; display: grid; gap: 14px; }
+  .step { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px 20px 64px; position: relative; }
+  .step::before { counter-increment: s; content: counter(s); position: absolute; left: 20px; top: 18px; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #1a1205; font-weight: 700; display: grid; place-items: center; font-size: 14px; }
+  .step h3 { margin: 0 0 4px; font-size: 16px; }
+  .step p { margin: 0; color: var(--muted); font-size: 15px; }
+  .step pre { margin: 10px 0 0; background: #0f1116; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font: 13px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: #d6d8de; }
+
+  footer { margin-top: 110px; border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 14px; }
+  footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+
+  @media (max-width: 760px) {
+    nav ul { display: none; }
+    .split { grid-template-columns: 1fr; }
+    .bar .right, .bar .title { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .desk { transition: none; } }
+</style>
+</head>
+<body>
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#"><span class="logo"><i></i><i></i><i></i></span>BetterWM</a>
+    <ul>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#keys">Hotkeys</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="https://github.com/nanot1m/better-win-manager/tree/master/docs">Docs</a></li>
+      <li><a href="https://github.com/nanot1m/better-win-manager">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">Free and open source · macOS 13 and later</span>
+    <h1>Column tiling<br>that stays <span>out of your way</span></h1>
+    <p class="lede">BetterWM arranges windows in columns when you ask it to and leaves them alone when you don't. Hold ⌥ while dragging to drop a window into place, switch desktops instantly, and swipe between them like Spaces.</p>
+    <div class="cta">
+      <a class="btn primary" href="#install">Install with Homebrew</a>
+      <a class="btn" href="https://github.com/nanot1m/better-win-manager/releases/latest">Download the latest release</a>
+    </div>
+    <div class="install">
+      <code id="cmd">brew install --cask nanot1m/tap/betterwm</code>
+      <button type="button" id="copy" aria-label="Copy install command">Copy</button>
+    </div>
+
+    <div class="screen" id="screen" aria-hidden="true">
+      <div class="bar">
+        <span class="chip on" data-d="1">1 <b style="background:#4285f4"></b><b style="background:#2bb3a3"></b><b style="background:#e8eaed"></b></span>
+        <span class="chip" data-d="2">2 <b style="background:#2f80ed"></b><b style="background:#f2994a"></b><b style="background:#9b51e0"></b></span>
+        <span class="chip">3 <b style="background:#e01e5a"></b></span>
+        <span class="title" id="title">Code</span>
+        <span class="right"><span>EN</span><span>Wed 21 Oct&nbsp;&nbsp;10:18</span></span>
+      </div>
+      <div class="stage">
+        <div class="desk d1">
+          <div class="w focus"><div class="t"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+          <div class="w"><div class="t"><i></i><i></i><i></i><i></i></div></div>
+          <div class="w"><div class="t"><i></i><i></i><i></i></div></div>
+        </div>
+        <div class="desk d2">
+          <div class="w"><div class="t"><i></i><i></i><i></i><i></i><i></i></div></div>
+          <div class="w focus"><div class="t"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+          <div class="w"><div class="t"><i></i><i></i><i></i><i></i></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Everything a tiling manager needs, nothing it doesn't</h2>
+    <p class="sub">Windows you haven't tiled stay normal, freely movable windows. Tiling is a gesture, not a mode you live in.</p>
+    <div class="grid">
+      <div class="card"><div class="ico">▥</div><h3>Columns and stacks</h3><p>Columns across the screen, windows stacked within a column. Drag the gaps to resize, or switch a screen to a stacked deck.</p></div>
+      <div class="card"><div class="ico">⌥</div><h3>⌥-drag to tile</h3><p>Hold ⌥ during a drag and drop zones light up. Release to tile; a plain drag keeps the window floating where you put it.</p></div>
+      <div class="card"><div class="ico">⚡</div><h3>Instant virtual desktops</h3><p>Workspaces per macOS desktop, created on demand, reorderable, remembered across launches. No slide animation to wait for.</p></div>
+      <div class="card"><div class="ico">⛶</div><h3>Overview</h3><p>A Mission Control style overview of every desktop with live previews. Open it with the Mission Control key or a swipe up.</p></div>
+      <div class="card"><div class="ico">⇆</div><h3>Swipe between desktops</h3><p>Three- or four-finger swipes slide desktops in like Spaces, following your fingers, and reach fullscreen apps past the last one.</p></div>
+      <div class="card"><div class="ico">▤</div><h3>A status bar that earns its space</h3><p>Desktops with app icons, the focused window, now playing, sound, Wi-Fi, battery and a clock. Reorder or drop any widget.</p></div>
+      <div class="card"><div class="ico">◎</div><h3>Focus ring</h3><p>An outline that matches each window's corner radius, in one colour for tiled windows and another for floating ones.</p></div>
+      <div class="card"><div class="ico">↺</div><h3>Layouts that survive</h3><p>Grids, floating windows and the active desktop come back after a relaunch, an app restart or a display being unplugged.</p></div>
+      <div class="card"><div class="ico">🐈</div><h3>And cats</h3><p>Optional pixel cats roam the status bar, chase your cursor, nap, and leap through portals around the notch.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="keys">
+  <div class="wrap split">
+    <div>
+      <h2>Keyboard first, when you want it</h2>
+      <p class="sub">Every action has a global hotkey and a place in the menu. All bindings are editable in Settings, and a popup on ⌥⌘Space lists them when you forget.</p>
+      <a class="btn" href="https://github.com/nanot1m/better-win-manager/blob/master/docs/actions.md">All actions and defaults</a>
+    </div>
+    <div class="keys">
+      <div class="key">Switch desktop <kbd>⌃1 … ⌃9</kbd></div>
+      <div class="key">Send window to desktop <kbd>⌃⌥1 … ⌃⌥9</kbd></div>
+      <div class="key">Move window <kbd>⌃⌥ ←↑↓→</kbd></div>
+      <div class="key">Tile or untile <kbd>⌃⌥T</kbd></div>
+      <div class="key">Retile the screen <kbd>⌃⌥R</kbd></div>
+      <div class="key">Window switcher <kbd>⌥Tab</kbd></div>
+      <div class="key">Overview <kbd>F3</kbd></div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <h2>Install in a minute</h2>
+    <p class="sub">BetterWM is ad-hoc signed rather than notarized, so macOS needs one extra line before the first launch.</p>
+    <div class="steps">
+      <div class="step"><h3>Install with Homebrew</h3><p>Or download the zip from the latest release and move the app to Applications.</p>
+<pre>brew install --cask nanot1m/tap/betterwm
+xattr -dr com.apple.quarantine /Applications/BetterWM.app</pre></div>
+      <div class="step"><h3>Grant Accessibility</h3><p>A welcome window links straight to the right System Settings pane. Screen Recording is optional and only adds window previews.</p></div>
+      <div class="step"><h3>Hold ⌥ and drag a window</h3><p>That's the whole tutorial. The <a href="https://github.com/nanot1m/better-win-manager/blob/master/docs/getting-started.md">getting started guide</a> covers the rest.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>BetterWM is free and open source.</span>
+    <span><a href="https://github.com/nanot1m/better-win-manager">Source</a> · <a href="https://github.com/nanot1m/better-win-manager/blob/master/CHANGELOG.md">Changelog</a> · <a href="https://github.com/nanot1m/better-win-manager/issues">Issues</a></span>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('copy').addEventListener('click', e => {
+    navigator.clipboard.writeText(document.getElementById('cmd').textContent).then(() => {
+      e.target.textContent = 'Copied';
+      setTimeout(() => e.target.textContent = 'Copy', 1500);
+    });
+  });
+  const screen = document.getElementById('screen');
+  const chips = screen.querySelectorAll('.chip[data-d]');
+  const title = document.getElementById('title');
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    setInterval(() => {
+      const swiped = screen.classList.toggle('swiped');
+      chips[0].classList.toggle('on', !swiped);
+      chips[1].classList.toggle('on', swiped);
+      title.textContent = swiped ? 'Figma' : 'Code';
+    }, 3200);
+  }
+</script>
+</body>
+</html>
