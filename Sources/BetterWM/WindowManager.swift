@@ -788,8 +788,11 @@ final class WindowManager {
     private var pendingSnapshot: Snapshot?
 
     /// Throttled, not debounced: the reconcile ticks every second, so a debounce would never fire.
+    /// Set by a layout reset: the state file was deleted on purpose and must not be written again on the way out.
+    var suppressSaves = false
+
     private func scheduleSave(_ snap: Snapshot) {
-        guard config.restoreLayouts else { return }
+        guard config.restoreLayouts, !suppressSaves else { return }
         pendingSnapshot = snap
         guard saveWork == nil else { return }
         let work = DispatchWorkItem { [weak self] in self?.saveNow() }
@@ -799,7 +802,7 @@ final class WindowManager {
 
     private func saveNow() {
         saveWork = nil
-        guard config.restoreLayouts, var snap = pendingSnapshot else { return }
+        guard config.restoreLayouts, !suppressSaves, var snap = pendingSnapshot else { return }
         // Parked windows sit in the screen corner; save the slot they belong to instead of that position.
         snap.windows = snap.windows.map { w in
             let v = virtualSet(ofWindow: w.id)

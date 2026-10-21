@@ -51,6 +51,43 @@ enum Log {
         return text.split(separator: "\n").suffix(lines).joined(separator: "\n")
     }
 
+    /// Every ordinary on-screen window as BetterWM sees it: whether Accessibility lists it, its role, and why it
+    /// would be skipped. Titles are left out. The probe uses a longer timeout than the app does, to tell a slow
+    /// app from one that does not answer at all.
+    static func windowInventory() -> String {
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return "(no window list)" }
+        var lines: [String] = []
+        var axCache: [pid_t: (AXError, [AXUIElement], Int)] = [:]
+        for info in list {
+            guard (info[kCGWindowLayer as String] as? Int) == 0, let pid = info[kCGWindowOwnerPID as String] as? pid_t, pid != getpid(),
+                  let id = info[kCGWindowNumber as String] as? CGWindowID, let b = info[kCGWindowBounds as String] as? [String: CGFloat] else { continue }
+            let app = NSRunningApplication(processIdentifier: pid)
+            let bundle = app?.bundleIdentifier ?? info[kCGWindowOwnerName as String] as? String ?? "?"
+            if axCache[pid] == nil {
+                let el = AXUIElementCreateApplication(pid)
+                AXUIElementSetMessagingTimeout(el, 2)
+                var v: CFTypeRef?
+                let t0 = Date()
+                let err = AXUIElementCopyAttributeValue(el, kAXWindowsAttribute as CFString, &v)
+                axCache[pid] = (err, v as? [AXUIElement] ?? [], Int(Date().timeIntervalSince(t0) * 1000))
+            }
+            let (err, axWindows, ms) = axCache[pid]!
+            var match = "not in AX list"
+            for el in axWindows {
+                var wid: CGWindowID = 0
+                guard _AXUIElementGetWindow(el, &wid) == .success, wid == id else { continue }
+                var role: CFTypeRef?, sub: CFTypeRef?, minimized: CFTypeRef?
+                AXUIElementCopyAttributeValue(el, kAXRoleAttribute as CFString, &role)
+                AXUIElementCopyAttributeValue(el, kAXSubroleAttribute as CFString, &sub)
+                AXUIElementCopyAttributeValue(el, kAXMinimizedAttribute as CFString, &minimized)
+                match = "role \(role as? String ?? "-") subrole \(sub as? String ?? "-")\((minimized as? Bool) == true ? " minimized" : "")"
+            }
+            let size = "\(Int(b["Width"] ?? 0))x\(Int(b["Height"] ?? 0))"
+            lines.append("#\(id) \(bundle) \(size): AX \(err == .success ? "ok" : "error \(err.rawValue)") in \(ms) ms, \(axWindows.count) AX window(s); \(match)\(AXResponsiveness.isUnresponsive(pid) ? "; marked unresponsive" : "")")
+        }
+        return lines.isEmpty ? "(none)" : lines.joined(separator: "\n")
+    }
+
     /// Saved window titles are what layout restore matches on, but they do not belong in a report from a release build.
     static func redactTitles(_ json: String) -> String {
         guard !includeTitles, let re = try? NSRegularExpression(pattern: #""title"\s*:\s*"(?:[^"\\]|\\.)*""#) else { return json }
@@ -74,6 +111,9 @@ enum Log {
 
         === state.json ===
         \(stateJSON.map(redactTitles) ?? "(none)")
+
+        === windows ===
+        \(windowInventory())
 
         === log tail ===
         \(tail())

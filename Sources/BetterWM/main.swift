@@ -178,6 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+        if CommandLine.arguments.contains("--inventory") { print(Log.windowInventory()) }
         if CommandLine.arguments.contains("--sound-popover") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [bar] in bar?.showSoundPopover() }
         }
@@ -299,7 +300,7 @@ extension AppDelegate {
         add("Move This Desktop Right", #selector(moveDesktopRight), action: "desktopMoveRight")
 
         section("Tiling")
-        let pause = menu.addItem(withTitle: "Pause Tiling", action: #selector(togglePause), keyEquivalent: "")
+        let pause = menu.addItem(withTitle: manager.enabled ? "Pause Tiling" : "Resume Tiling", action: #selector(togglePause), keyEquivalent: "")
         pause.target = self
         if let spec = manager.config.hotkeys["pause"] { HotKey.applyKeyEquivalent(spec, to: pause) }
         pauseItem = pause
@@ -329,7 +330,8 @@ extension AppDelegate {
         add("Reload Config", #selector(reloadConfig))
         let diag = NSMenu(title: "Diagnostics")
         for (title, sel, action) in [("Re-measure Window Corners", #selector(refreshRing), "refreshRing"), ("Open Log File", #selector(openLog), ""),
-                                     ("Copy Diagnostics Report", #selector(copyDiagnostics), ""), ("Report a Bug…", #selector(reportBug), "")] {
+                                     ("Copy Diagnostics Report", #selector(copyDiagnostics), ""), ("Report a Bug…", #selector(reportBug), ""),
+                                     ("Reset Layout State…", #selector(resetState), "")] {
             let item = diag.addItem(withTitle: title, action: sel, keyEquivalent: "")
             item.target = self
             if let spec = manager.config.hotkeys[action] { HotKey.applyKeyEquivalent(spec, to: item) }
@@ -344,7 +346,7 @@ extension AppDelegate {
     @objc func desktopNext() { manager.switchDesktop(next: true) }
     @objc func desktopPrevious() { manager.switchDesktop(next: false) }
     @objc func sendToDesktop(_ sender: NSMenuItem) { manager.sendFocusedWindow(toDesktop: sender.tag) }
-    @objc func toggleFocused() { manager.toggleFocused() }
+    @objc func toggleFocused() { resumeForTiling(); manager.toggleFocused() }
     @objc func showPopup() { popup.toggle() }
 
     func perform(action name: String) -> Bool {
@@ -371,8 +373,8 @@ extension AppDelegate {
             "moveDown": { [weak self] in self?.manager.moveFocused(.down) },
             "mergeLeft": { [weak self] in self?.manager.moveFocused(.mergeLeft) },
             "mergeRight": { [weak self] in self?.manager.moveFocused(.mergeRight) },
-            "toggleTile": { [weak self] in self?.manager.toggleFocused() },
-            "retile": { [weak self] in self?.manager.retileCurrentScreen() },
+            "toggleTile": { [weak self] in self?.resumeForTiling(); self?.manager.toggleFocused() },
+            "retile": { [weak self] in self?.resumeForTiling(); self?.manager.retileCurrentScreen() },
             "toggleStack": { [weak self] in self?.manager.toggleStackedLayout() },
             "refreshRing": { [weak self] in self?.manager.focusRing.remeasureCorners() },
             "equalize": { [weak self] in self?.manager.equalize() },
@@ -421,7 +423,7 @@ extension AppDelegate {
     @objc func moveFocused(_ sender: NSMenuItem) {
         if let dir = sender.representedObject as? Move { manager.moveFocused(dir) }
     }
-    @objc func retile() { manager.retileCurrentScreen() }
+    @objc func retile() { resumeForTiling(); manager.retileCurrentScreen() }
     @objc func moveDesktopLeft() { manager.moveCurrentDesktop(left: true) }
     @objc func moveDesktopRight() { manager.moveCurrentDesktop(left: false) }
     @objc func toggleStack() { manager.toggleStackedLayout() }
@@ -575,6 +577,28 @@ extension AppDelegate {
         Log.write("app", "bug report prepared in \(folder.path) (\(files.count) file(s))")
     }
 
+    /// Starts over: every window back on screen, the saved layout deleted, and a fresh launch with no memory of
+    /// desktops, grids or floating spots. Settings are kept.
+    @objc func resetState() {
+        let alert = NSAlert()
+        alert.messageText = "Reset layout state?"
+        alert.informativeText = "All windows come back on screen, the saved grids, floating positions and desktop assignments are deleted, and BetterWM restarts. Your settings and hotkeys are kept."
+        alert.addButton(withTitle: "Reset and Restart")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        Log.write("app", "layout state reset requested")
+        manager.suppressSaves = true
+        manager.prepareForQuit()
+        try? FileManager.default.removeItem(at: Config.statePath)
+        let relaunch = Process()
+        relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")
+        relaunch.arguments = ["-c", "sleep 1; open \"$0\"", Bundle.main.bundlePath]
+        try? relaunch.run()
+        NSApp.terminate(nil)
+    }
+
     @objc func showPermissions() { onboarding.show() }
     @objc func showSettings() {
         configWindow.show(config: manager.config) { [weak self] cfg in
@@ -588,10 +612,21 @@ extension AppDelegate {
             self.syncAutoTileItems()
         }
     }
-    @objc func togglePause() {
-        manager.enabled.toggle()
-        pauseItem?.title = manager.enabled ? "Pause Tiling" : "Resume Tiling"
-        statusItem.button?.image = StatusIcon.make(paused: !manager.enabled)
+    @objc func togglePause() { setTiling(enabled: !manager.enabled) }
+
+    /// Pausing changes what every other action does, so it is always announced, overlay setting or not.
+    func setTiling(enabled: Bool, reason: String? = nil) {
+        manager.enabled = enabled
+        pauseItem?.title = enabled ? "Pause Tiling" : "Resume Tiling"
+        statusItem.button?.image = StatusIcon.make(paused: !enabled)
+        hud.show(keys: nil, action: reason ?? (enabled ? "Tiling resumed" : "Tiling paused"), preformatted: true, force: true)
+        Log.write("tile", enabled ? "tiling resumed" : "tiling paused")
+    }
+
+    /// Asking to tile while paused means tiling is wanted: resume first rather than silently doing nothing.
+    private func resumeForTiling() {
+        guard !manager.enabled else { return }
+        setTiling(enabled: true, reason: "Tiling resumed")
     }
 }
 

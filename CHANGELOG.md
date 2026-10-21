@@ -4,6 +4,15 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.16.4] - 2026-10-21
+
+### Added
+- Diagnostics › Reset Layout State…: brings every window back on screen, deletes the saved grids, floating positions and desktop assignments, and restarts BetterWM. Settings are kept.
+- The diagnostics report lists every on-screen window as BetterWM sees it (whether Accessibility lists it, how long the app took to answer, its role), without titles, so a window that cannot be tiled can be diagnosed from one report.
+
+### Fixed
+- Pausing tiling was easy to do by accident and hard to notice: the bar's menu button always offered "Pause Tiling", even while paused, and nothing on screen said tiling had stopped. The menu now says "Resume Tiling" while paused, pausing and resuming always flash a notice, and Tile / Untile or Retile Current Screen resume tiling first instead of silently doing nothing.
+
 ## [0.16.3] - 2026-10-21
 
 ### Added
