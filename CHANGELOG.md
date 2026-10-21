@@ -4,6 +4,17 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [Unreleased]
+
+### Changed
+- The bar's now-playing widget updates the moment Music or Spotify changes track or play state, instead of polling every 3 seconds.
+- The bar refreshes once when a drag ends instead of re-checking every 0.1 s during it.
+
+### Fixed
+- Two Space switches in quick succession could end the first one's settle period while the second was still sliding.
+- Frames a window refused before sleep or lock were still counted against it afterwards; sleep, lock and display changes now clear refusals for both the layout and parking.
+- Closed windows left their focus memory, thumbnail and background-adoption marks behind.
+
 ## [0.16.6] - 2026-10-21
 
 ### Fixed
