@@ -171,8 +171,10 @@ final class VirtualWorkspaces {
                     // counts as refusing; after three refusals it is visible anyway, so it joins the active workspace.
                     let last = reparkAttempts[w]
                     if let last, Date().timeIntervalSince(last.at) < 0.5 { continue }
-                    let refused = last.map { $0.seen == f.origin ? $0.refused + 1 : 0 } ?? 0
-                    if refused >= 5, Date() >= claimsSuspendedUntil {
+                    // Ignored moves while displays are being rearranged say nothing about the window; don't count them.
+                    let settling = Date() < claimsSuspendedUntil
+                    let refused = settling ? 0 : (last.map { $0.seen == f.origin ? $0.refused + 1 : 0 } ?? 0)
+                    if refused >= 5 {
                         claimForActive(w)
                         reparkAttempts[w] = nil
                         Log.write("park", "#\(w) will not leave the screen; it now belongs to workspace \(active + 1)")

@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.16.5] - 2026-10-21
+
+### Fixed
+- Closing the lid with an external display attached gathered parked windows on the active desktop: macOS ignored window moves for some 20 seconds while it rearranged the screens, longer than the 15-second grace period, and the ignored moves were counted during it. The grace period is now a minute and nothing is counted while it lasts. The same pause applies while the Mac sleeps, the displays sleep, the screen is locked or another user is active, and for a minute after.
+
 ## [0.16.4] - 2026-10-21
 
 ### Added

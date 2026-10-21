@@ -29,6 +29,7 @@ final class WindowManager {
     private func virtualSet(realSpace: SpaceID) -> VirtualWorkspaces {
         if let v = virtualSets[realSpace] { return v }
         let v = VirtualWorkspaces(realSpace: realSpace, count: 1)
+        v.claimsSuspendedUntil = claimsSuspendedUntil
         // Come back to the workspace that was active when the last run ended.
         if config.restoreLayouts, let active = saved.activeWorkspaces[String(realSpace)], active > 0 {
             if active >= v.count { v.setCount(active + 1) }
@@ -535,14 +536,23 @@ final class WindowManager {
         }
         installSpaceModel()
         configureWorkspaces()
+        // Sleep, display sleep, the lock screen and fast user switching all leave macOS ignoring window moves for
+        // a while; no window may be judged as refusing to leave until a minute after the Mac is back.
+        let ws = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
+            ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in self?.suspendClaims(until: .distantFuture) }
+        }
+        for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
+            ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in self?.suspendClaims(until: Date().addingTimeInterval(60)) }
+        }
+        let dnc = DistributedNotificationCenter.default()
+        dnc.addObserver(forName: NSNotification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in self?.suspendClaims(until: .distantFuture) }
+        dnc.addObserver(forName: NSNotification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in self?.suspendClaims(until: Date().addingTimeInterval(60)) }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
             Log.write("screen", "display configuration changed: \(NSScreen.screens.count) screen(s)")
-            for v in self.virtualSets.values {
-                v.claimsSuspendedUntil = Date().addingTimeInterval(15)
-                v.forgetReparkAttempts()
-            }
+            self.suspendClaims(until: max(Date().addingTimeInterval(60), self.claimsSuspendedUntil))
             // Frames refused while screens were rearranged are worth asking for again on the new layout.
             self.state.attempts.removeAll()
             self.tick()
@@ -788,6 +798,17 @@ final class WindowManager {
     private var pendingSnapshot: Snapshot?
 
     /// Throttled, not debounced: the reconcile ticks every second, so a debounce would never fire.
+    private(set) var claimsSuspendedUntil = Date.distantPast
+    /// Pauses the "window will not leave the screen" rule; `.distantFuture` until a matching resume.
+    func suspendClaims(until date: Date) {
+        claimsSuspendedUntil = date
+        for v in virtualSets.values {
+            v.claimsSuspendedUntil = claimsSuspendedUntil
+            v.forgetReparkAttempts()
+        }
+        Log.write("park", claimsSuspendedUntil == .distantFuture ? "pausing the refusal rule (sleep or lock)" : "refusal rule resumes in \(Int(claimsSuspendedUntil.timeIntervalSinceNow)) s")
+    }
+
     /// Set by a layout reset: the state file was deleted on purpose and must not be written again on the way out.
     var suppressSaves = false
 
