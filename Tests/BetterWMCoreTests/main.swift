@@ -10,8 +10,8 @@ struct ReconcilerTests {
         WindowInfo(id: id, pid: pid_t(id), bundleID: bundle, frame: frame, spaces: spaces ?? [space])
     }
 
-    func snapshot(_ windows: [WindowInfo], focused: WindowID? = nil) -> Snapshot {
-        Snapshot(screens: [ScreenInfo(space: space, area: area)], windows: windows, focused: focused)
+    func snapshot(_ windows: [WindowInfo], focused: WindowID? = nil, now: Date = Date(timeIntervalSinceReferenceDate: 0)) -> Snapshot {
+        Snapshot(screens: [ScreenInfo(space: space, area: area)], windows: windows, focused: focused, now: now)
     }
 
     var config: Config {
@@ -297,7 +297,7 @@ struct ReconcilerTests {
         let snap = Snapshot(screens: [], windows: [
             WindowInfo(id: 1, pid: 1, bundleID: "com.a", frame: CGRect(x: 0, y: 0, width: 800, height: 600), spaces: [space], title: "tiled"),
             WindowInfo(id: 2, pid: 2, bundleID: "com.b", frame: CGRect(x: 100, y: 100, width: 400, height: 300), spaces: [space], title: "float"),
-        ], focused: nil)
+        ], focused: nil, now: Date(timeIntervalSinceReferenceDate: 0))
         let saved = SavedLayout.capture(state, snap, floatingSpace: { _ in space })
         expect(saved.spaces.count == 1 && saved.spaces[0].floating.map { $0.title } == ["float"], #function, #line)
         let encoded = try! JSONEncoder().encode(saved)
@@ -367,6 +367,105 @@ struct ReconcilerTests {
         (state, _) = r.reconcile(state, snapshot([win(1, area), win(2, area), win(3, area), win(4, area)], focused: 1))
         expect(state.grid(for: space).columns.map(\.windows) == [[1], [4], [2], [3]], #function, 159)
     }
+
+    func testRefusedFrameGivesUpThenRetries() {
+        let r = Reconciler(config: config)
+        let t0 = Date(timeIntervalSinceReferenceDate: 0)
+        let stuck = CGRect(x: 0, y: 0, width: 10, height: 10)
+        var (state, commands) = r.reconcile(DesiredState(), snapshot([win(1, stuck)], now: t0))
+        for _ in 1..<DesiredState.maxAttempts { (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: t0)) }
+        expect(!commands.isEmpty, #function, #line)
+        (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: t0.addingTimeInterval(1)))
+        expect(commands.isEmpty, #function, #line)
+        (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: t0.addingTimeInterval(DesiredState.retryAfter + 1)))
+        expect(commands.count == 1, #function, #line)
+    }
+
+    func testForgetClearsEveryRecord() {
+        let r = Reconciler(config: config)
+        var (state, _) = r.reconcile(DesiredState(), snapshot([win(1, .zero), win(2, .zero)]))
+        state.floating.insert(1)
+        state.forget(1)
+        expect(!state.isTiled(1) && !state.floating.contains(1) && state.requested[1] == nil && state.attempts[1] == nil
+               && !(state.seen[space] ?? []).contains(1), #function, #line)
+        expect(state.isTiled(2), #function, #line)
+    }
+
+    final class FakeScreen {
+        var frames: [WindowID: CGRect] = [:]
+        var hidden: Set<pid_t> = []
+        var ignoresMoves: Set<WindowID> = []
+        let corner = CGPoint(x: 1598, y: 998)
+        func park(_ v: VirtualWorkspaces, now: Date, hideable: Bool = false, suspended: Bool = false) {
+            v.apply(windows: Array(frames.keys).sorted(), pid: { pid_t($0) }, hideable: { _ in hideable },
+                    isTiled: { _ in false }, frame: { self.frames[$0] },
+                    setFrame: { w, f in if !self.ignoresMoves.contains(w) { self.frames[w] = f } },
+                    parkOrigin: { _ in self.corner },
+                    isInCorner: { f in abs(f.minX - self.corner.x) <= 100 && abs(f.minY - self.corner.y) <= 100 },
+                    fit: { $0 }, hide: { self.hidden.insert($0) }, unhide: { self.hidden.remove($0) }, now: now)
+        }
+    }
+
+    func testParkingFollowsActiveWorkspace() {
+        let v = VirtualWorkspaces(realSpace: 1, count: 2) { _ in }
+        let screen = FakeScreen()
+        let home = CGRect(x: 100, y: 100, width: 400, height: 300)
+        screen.frames = [1: home, 2: home]
+        let t0 = Date(timeIntervalSinceReferenceDate: 0)
+        screen.park(v, now: t0)
+        v.move(2, to: 1)
+        screen.park(v, now: t0)
+        expect(v.isParked(2) && screen.frames[2]?.origin == screen.corner && !v.isParked(1), #function, #line)
+        v.switchTo(1)
+        screen.park(v, now: t0)
+        expect(v.isParked(1) && !v.isParked(2) && screen.frames[2] == home, #function, #line)
+    }
+
+    func testHideableAppIsHiddenNotParked() {
+        let v = VirtualWorkspaces(realSpace: 1, count: 2) { _ in }
+        let screen = FakeScreen()
+        screen.frames = [3: CGRect(x: 0, y: 0, width: 300, height: 300)]
+        v.move(3, to: 1)
+        screen.park(v, now: Date(timeIntervalSinceReferenceDate: 0), hideable: true)
+        expect(screen.hidden == [3] && v.hiddenPids == [3], #function, #line)
+        v.switchTo(1)
+        screen.park(v, now: Date(timeIntervalSinceReferenceDate: 0), hideable: true)
+        expect(screen.hidden.isEmpty && v.hiddenPids.isEmpty, #function, #line)
+    }
+
+    func testWindowRefusingToParkJoinsActiveWorkspace() {
+        let v = VirtualWorkspaces(realSpace: 1, count: 2) { _ in }
+        let screen = FakeScreen()
+        screen.frames = [4: CGRect(x: 100, y: 100, width: 300, height: 300)]
+        screen.ignoresMoves = [4]
+        v.move(4, to: 1)
+        var now = Date(timeIntervalSinceReferenceDate: 0)
+        for _ in 0..<10 where v.workspace(of: 4) == 1 { screen.park(v, now: now); now += 1 }
+        expect(v.workspace(of: 4) == 0 && !v.isParked(4), #function, #line)
+    }
+
+    func testRefusalsDoNotCountWhileSuspended() {
+        let v = VirtualWorkspaces(realSpace: 1, count: 2) { _ in }
+        let screen = FakeScreen()
+        screen.frames = [5: CGRect(x: 100, y: 100, width: 300, height: 300)]
+        screen.ignoresMoves = [5]
+        v.move(5, to: 1)
+        v.claimsSuspendedUntil = .distantFuture
+        var now = Date(timeIntervalSinceReferenceDate: 0)
+        for _ in 0..<10 { screen.park(v, now: now); now += 1 }
+        expect(v.workspace(of: 5) == 1, #function, #line)
+    }
+
+    func testMoveWorkspaceRemapsAndTrims() {
+        let v = VirtualWorkspaces(realSpace: 1, count: 3) { _ in }
+        v.move(1, to: 0); v.move(2, to: 2)
+        let map = v.moveWorkspace(from: 2, to: 0)
+        expect(map == [0: 1, 1: 2, 2: 0] && v.workspace(of: 2) == 0 && v.workspace(of: 1) == 1, #function, #line)
+        v.forget(2)
+        v.trimEmptyTrailing(minimum: 1)
+        expect(v.count == 2, #function, #line)
+        expect(VirtualWorkspaces.decode(v.spaceID(workspace: 2, screenIndex: 1))! == (1, 2, 1), #function, #line)
+    }
 }
 
 
@@ -403,6 +502,13 @@ let tests: [(String, () -> Void)] = [
     ("stackedModeSurvivesSaveWithoutWindows", t.testStackedModeSurvivesSaveWithoutWindows),
     ("barWidgetsCompatibility", t.testBarWidgetsCompatibility),
     ("savedLayoutV1Migration", t.testSavedLayoutV1Migration),
+    ("refusedFrameGivesUpThenRetries", t.testRefusedFrameGivesUpThenRetries),
+    ("forgetClearsEveryRecord", t.testForgetClearsEveryRecord),
+    ("parkingFollowsActiveWorkspace", t.testParkingFollowsActiveWorkspace),
+    ("hideableAppIsHiddenNotParked", t.testHideableAppIsHiddenNotParked),
+    ("windowRefusingToParkJoinsActiveWorkspace", t.testWindowRefusingToParkJoinsActiveWorkspace),
+    ("refusalsDoNotCountWhileSuspended", t.testRefusalsDoNotCountWhileSuspended),
+    ("moveWorkspaceRemapsAndTrims", t.testMoveWorkspaceRemapsAndTrims),
 ]
 for (name, run) in tests {
     let before = failures

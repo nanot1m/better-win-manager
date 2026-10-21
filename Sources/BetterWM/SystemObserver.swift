@@ -104,7 +104,7 @@ final class SystemObserver {
         }
         for i in infos { lastInfo[i.id] = i }
         inLastSnapshot = Set(infos.map(\.id))
-        return Snapshot(screens: screens(), windows: infos, focused: AXWindow.focused.flatMap { self.id(of: $0) })
+        return Snapshot(screens: screens(), windows: infos, focused: AXWindow.focused.flatMap { self.id(of: $0) }, now: Date())
     }
 
     /// Cheap variant for live interactions: only the tracked windows, read straight from their AX handles.
@@ -113,7 +113,7 @@ final class SystemObserver {
             guard let w = axWindow(id) else { return nil }
             return info(id, w)
         }
-        return Snapshot(screens: screens(), windows: infos, focused: AXWindow.focused.flatMap { self.id(of: $0) })
+        return Snapshot(screens: screens(), windows: infos, focused: AXWindow.focused.flatMap { self.id(of: $0) }, now: Date())
     }
 
     private func info(_ id: WindowID, _ w: AXWindow) -> WindowInfo {

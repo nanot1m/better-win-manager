@@ -13,7 +13,7 @@ public struct DesiredState: Equatable {
     /// How often the same frame has been asked of a window that did not take it. Some windows refuse a size
     /// they cannot grow to; asking every tick makes them jitter, so after a few tries the ask stops until the
     /// target changes.
-    public struct Attempt: Equatable { public var target: CGRect; public var count: Int; public var since: Date = Date() }
+    public struct Attempt: Equatable { public var target: CGRect; public var count: Int; public var since: Date }
     /// After giving up, try again this long later: a refusal is often temporary (a display being rearranged).
     public static let retryAfter: TimeInterval = 3
     public var attempts: [WindowID: Attempt] = [:]
@@ -32,6 +32,15 @@ public struct DesiredState: Equatable {
     public mutating func untile(_ w: WindowID) {
         for k in grids.keys { grids[k]?.remove(w) }
         floating.insert(w)
+    }
+
+    /// Drops every per-window record of a window that no longer exists.
+    public mutating func forget(_ w: WindowID) {
+        for k in grids.keys { grids[k]?.remove(w) }
+        for k in seen.keys { seen[k]?.remove(w) }
+        floating.remove(w)
+        requested[w] = nil
+        attempts[w] = nil
     }
 
     public mutating func mutate(_ space: SpaceID, _ body: (inout Grid) -> Void) {
@@ -120,13 +129,13 @@ public struct Reconciler {
             guard case let .setFrame(w, f) = cmd else { return true }
             if let a = state.attempts[w], a.target == f {
                 if a.count >= DesiredState.maxAttempts {
-                    guard Date().timeIntervalSince(a.since) >= DesiredState.retryAfter else { return false }
-                    state.attempts[w] = DesiredState.Attempt(target: f, count: 1)
+                    guard snapshot.now.timeIntervalSince(a.since) >= DesiredState.retryAfter else { return false }
+                    state.attempts[w] = DesiredState.Attempt(target: f, count: 1, since: snapshot.now)
                     return true
                 }
-                state.attempts[w] = DesiredState.Attempt(target: f, count: a.count + 1)
+                state.attempts[w] = DesiredState.Attempt(target: f, count: a.count + 1, since: snapshot.now)
             } else {
-                state.attempts[w] = DesiredState.Attempt(target: f, count: 1)
+                state.attempts[w] = DesiredState.Attempt(target: f, count: 1, since: snapshot.now)
             }
             return true
         }

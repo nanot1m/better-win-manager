@@ -28,7 +28,7 @@ final class WindowManager {
 
     private func virtualSet(realSpace: SpaceID) -> VirtualWorkspaces {
         if let v = virtualSets[realSpace] { return v }
-        let v = VirtualWorkspaces(realSpace: realSpace, count: 1)
+        let v = VirtualWorkspaces(realSpace: realSpace, count: 1) { Log.write("park", $0) }
         v.claimsSuspendedUntil = claimsSuspendedUntil
         // Come back to the workspace that was active when the last run ended.
         if config.restoreLayouts, let active = saved.activeWorkspaces[String(realSpace)], active > 0 {
@@ -498,7 +498,7 @@ final class WindowManager {
                     NSRunningApplication(processIdentifier: pid)?.unhide()
                     // Frames set while an app is still unhiding can be lost; look again shortly after.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self?.scheduleTick(); self?.focusRing.reorder() }
-                })
+                }, now: snap.now)
         }
     }
 
@@ -670,9 +670,10 @@ final class WindowManager {
         for v in virtualSets.values {
             for id in v.knownWindows where !alive.contains(id) {
                 v.forget(id)
-                state.floating.remove(id)
-                state.requested[id] = nil
+                state.forget(id)
                 floatingFrames[id] = nil
+                adoptedInBackground[id] = nil
+                lastFocusedByWorkspace = lastFocusedByWorkspace.filter { $0.value != id }
             }
         }
     }
