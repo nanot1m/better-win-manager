@@ -83,6 +83,31 @@ final class ActionPopup: NSPanel {
         setFrameOrigin(origin)
     }
 
+    private func digitPressed(_ digit: Int, index: Int, option: Bool, shift: Bool) -> Bool {
+        if option {
+            guard index < view.presets.count else { return true }
+            onAction?("⌥\(digit)", "Layout: \(view.presets[index].name)")
+            manager.applyPreset(view.presets[index])
+            refresh()
+            regainKey()
+            return true
+        }
+        guard index < manager.desktopCount else { return true }
+        if shift {
+            close()
+            onAction?("⇧\(digit)", "Send to desktop \(index + 1)")
+            manager.sendFocusedWindow(toDesktop: index)
+            return true
+        }
+        onAction?("\(digit)", "Switch to desktop \(index + 1)")
+        manager.switchDesktop(index)
+        // The switch is asynchronous; re-read the focused window once it has landed.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.regainKey() }
+        return true
+    }
+
+    private static let digitByCode: [UInt16: Int] = [18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9]
+
     private func handle(_ e: NSEvent) -> Bool {
         let shift = e.modifierFlags.contains(.shift)
         let option = e.modifierFlags.contains(.option)
@@ -90,7 +115,6 @@ final class ActionPopup: NSPanel {
         let code = e.keyCode
         var dir: Move?
         func pressed(_ k: String) -> String { (shift ? "⇧" : "") + k }
-        let digitByCode: [UInt16: Int] = [18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9]
         switch (code, key) {
         case (123, _), (_, "h"): dir = shift ? .mergeLeft : .left
         case (124, _), (_, "l"): dir = shift ? .mergeRight : .right
@@ -111,33 +135,13 @@ final class ActionPopup: NSPanel {
             manager.sendFocusedWindow(toNext: key == "n")
             return true
         case (53, _): close(); return true
-        case (let c, _) where digitByCode[c] != nil && option:
-            let digit = digitByCode[c]!
-            let index = digit - 1
-            guard index < view.presets.count else { return true }
-            onAction?("⌥\(digit)", "Layout: \(view.presets[index].name)")
-            manager.applyPreset(view.presets[index])
-            refresh()
-            regainKey()
-            return true
-        case (let c, _) where digitByCode[c] != nil:
-            let digit = digitByCode[c]!
-            let index = digit - 1
-            guard index < manager.desktopCount else { return true }
-            if shift {
-                close()
-                onAction?("⇧\(digit)", "Send to desktop \(index + 1)")
-                manager.sendFocusedWindow(toDesktop: index)
-                return true
-            }
-            onAction?("\(digit)", "Switch to desktop \(index + 1)")
-            manager.switchDesktop(index)
-            // The switch is asynchronous; re-read the focused window once it has landed.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.regainKey() }
-            return true
+        case (let c, _) where Self.digitByCode[c] != nil:
+            let digit = Self.digitByCode[c]!
+            return digitPressed(digit, index: digit - 1, option: option, shift: shift)
         default: return false
         }
         if let dir {
+
             guard manager.canMoveFocused(dir) else { return true }
             let names: [Move: String] = [.left: "Move left", .right: "Move right", .up: "Move up", .down: "Move down",
                                          .mergeLeft: "Merge into left column", .mergeRight: "Merge into right column"]

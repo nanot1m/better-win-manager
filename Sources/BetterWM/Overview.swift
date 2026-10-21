@@ -22,13 +22,7 @@ final class Overview {
 
     init(manager: WindowManager) {
         self.manager = manager
-        panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.level = .screenSaver
-        panel.hasShadow = false
-        panel.animationBehavior = .none
-        panel.collectionBehavior = [.canJoinAllSpaces, .transient, .fullScreenAuxiliary]
+        panel = .overlay(level: .screenSaver)
         panel.contentView = view
         view.onPickWindow = { [weak self] item in self?.pick(item) }
         view.onPickDesktop = { [weak self] d in self?.pickDesktop(d) }
@@ -89,23 +83,20 @@ final class Overview {
         if (velocity > 1.2 || travel > 0.5), view.hasNeighbour(-1) { target = -1 }
         let destination = (manager.currentDesktop ?? 0) + target
         if target != 0 { manager.switchDesktop(destination) }
-        let from = hOffset, to = CGFloat(-target) * w, start = Date()
+        let from = hOffset, to = CGFloat(-target) * w
         let duration = max(0.12, 0.3 * Double(abs(to - from) / w))
         hAnimator?.invalidate()
-        hAnimator = Timer.scheduledTimer(withTimeInterval: 1 / 120, repeats: true) { [weak self] t in
-            guard let self else { t.invalidate(); return }
-            let x = min(1, Date().timeIntervalSince(start) / duration)
-            self.hOffset = from + (to - from) * CGFloat(1 - pow(1 - x, 3))
+        hAnimator = Tween.run(duration: duration, step: { [weak self] e in
+            guard let self else { return }
+            self.hOffset = from + (to - from) * e
             self.view.horizontalOffset = self.hOffset
-            if x >= 1 {
-                t.invalidate()
-                self.hAnimator = nil
-                // The new current's layers land exactly where the neighbour's were drawn, so the swap is seamless.
-                self.view.endHorizontal()
-                if target != 0 { self.refresh() }
-            }
-        }
-        RunLoop.main.add(hAnimator!, forMode: .common)
+        }, done: { [weak self] in
+            guard let self else { return }
+            self.hAnimator = nil
+            // The new current's layers land exactly where the neighbour's were drawn, so the swap is seamless.
+            self.view.endHorizontal()
+            if target != 0 { self.refresh() }
+        })
     }
 
     private func animate(to target: CGFloat) {
@@ -113,20 +104,12 @@ final class Overview {
         if target > 0, !panel.isVisible { present() }
         let from = progress
         guard from != target else { if target == 0 { dismiss() }; return }
-        let start = Date()
-        let duration = 0.28 * Double(abs(target - from))
-        animator = Timer.scheduledTimer(withTimeInterval: 1 / 120, repeats: true) { [weak self] t in
-            guard let self else { t.invalidate(); return }
-            let x = min(1, Date().timeIntervalSince(start) / max(0.01, duration))
-            let eased = 1 - pow(1 - x, 3)
-            self.set(progress: from + (target - from) * CGFloat(eased))
-            if x >= 1 {
-                t.invalidate()
-                self.animator = nil
-                if target == 0 { self.dismiss() }
-            }
-        }
-        RunLoop.main.add(animator!, forMode: .common)
+        animator = Tween.run(duration: 0.28 * Double(abs(target - from)), step: { [weak self] e in
+            self?.set(progress: from + (target - from) * e)
+        }, done: { [weak self] in
+            self?.animator = nil
+            if target == 0 { self?.dismiss() }
+        })
     }
 
     private func set(progress p: CGFloat) {
@@ -223,7 +206,7 @@ final class Overview {
                 let app = NSRunningApplication(processIdentifier: w.pid)
                 var item = OverviewModel.Window(window: w, id: id, desktop: d, frame: frame, title: w.title,
                                                 icon: app?.icon, thumbnail: Thumbnails.cached(id))
-                item.radius = manager.config.focusRingAutoRadius ? (WindowServerEvents.cornerRadius(of: id) ?? manager.config.focusRingRadius) : manager.config.focusRingRadius
+                item.radius = manager.config.ringRadius(for: id)
                 return item
             }
             desktops.append(OverviewModel.Desktop(index: d, windows: windows))
@@ -232,9 +215,7 @@ final class Overview {
         if manager.config.focusRing, let f = AXWindow.focused, let id = f.windowID {
             let tiled = manager.isTiled(f)
             model.focused = id
-            let tiledColor = NSColor(hex: manager.config.focusRingColor) ?? .controlAccentColor
-            model.ringColor = !tiled && manager.config.focusRingFloatingColor.lowercased() != "same"
-                ? (NSColor(hex: manager.config.focusRingFloatingColor) ?? tiledColor) : tiledColor
+            model.ringColor = manager.config.ringColor(floating: !tiled)
             model.ringWidth = manager.config.focusRingWidth
         }
         return model
@@ -276,17 +257,10 @@ final class Overview {
     }
 
     private static func captureBackdropNow(_ area: CGRect, topInset: CGFloat) -> CGImage? {
-        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else { return nil }
-        var backmost: CGWindowID?
-        var bar: [CGWindowID] = []
-        for info in list {
-            guard let id = info[kCGWindowNumber as String] as? CGWindowID, let layer = info[kCGWindowLayer as String] as? Int else { continue }
-            if layer >= 0 { backmost = id }
-            if (info[kCGWindowOwnerPID as String] as? pid_t) == getpid(), let b = info[kCGWindowBounds as String] as? [String: CGFloat],
-               (b["Y"] ?? 0) + (b["Height"] ?? 0) <= area.minY + topInset + 1 {
-                bar.append(id)
-            }
-        }
+        let list = CGWindowInfo.list(.optionOnScreenOnly)
+        guard !list.isEmpty else { return nil }
+        let backmost = list.last { $0.layer >= 0 }?.id
+        let bar = list.filter { $0.pid == getpid() && $0.bounds.maxY <= area.minY + topInset + 1 }
         let wallpaper = backmost.flatMap { CGWindowListCreateImage(area, .optionOnScreenBelowWindow, $0, [.bestResolution]) }
             ?? CGWindowListCreateImage(area, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution])
         guard let wallpaper else { return nil }
@@ -294,12 +268,11 @@ final class Overview {
                                                 space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue) else { return wallpaper }
         let scale = CGFloat(wallpaper.width) / area.width
         ctx.draw(wallpaper, in: CGRect(x: 0, y: 0, width: wallpaper.width, height: wallpaper.height))
-        for id in bar.reversed() {
-            guard let img = CGWindowListCreateImage(.null, .optionIncludingWindow, id, [.bestResolution, .boundsIgnoreFraming]),
-                  let info = list.first(where: { ($0[kCGWindowNumber as String] as? CGWindowID) == id }),
-                  let b = info[kCGWindowBounds as String] as? [String: CGFloat] else { continue }
-            let x = ((b["X"] ?? 0) - area.minX) * scale, w = (b["Width"] ?? 0) * scale, h = (b["Height"] ?? 0) * scale
-            let yTop = ((b["Y"] ?? 0) - area.minY) * scale
+        for info in bar.reversed() {
+            guard let img = CGWindowListCreateImage(.null, .optionIncludingWindow, info.id, [.bestResolution, .boundsIgnoreFraming]) else { continue }
+            let b = info.bounds
+            let x = (b.minX - area.minX) * scale, w = b.width * scale, h = b.height * scale
+            let yTop = (b.minY - area.minY) * scale
             ctx.draw(img, in: CGRect(x: x, y: CGFloat(wallpaper.height) - yTop - h, width: w, height: h))
         }
         return ctx.makeImage() ?? wallpaper

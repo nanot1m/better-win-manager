@@ -13,13 +13,24 @@ final class MediaService {
 
     private(set) var current: NowPlaying?
     var onUpdate: ((NowPlaying?) -> Void)?
-    private var timer: Timer?
+    private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     private let players = ["com.spotify.client", "com.apple.Music"]
 
+    /// Both players announce every play, pause and track change; launches and quits cover the rest.
     func start() {
-        guard timer == nil else { return }
-        Log.write("media", "polling Music/Spotify")
-        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.poll() }
+        guard observers.isEmpty else { return }
+        Log.write("media", "watching Music/Spotify")
+        let dnc = DistributedNotificationCenter.default()
+        for name in ["com.spotify.client.PlaybackStateChanged", "com.apple.Music.playerInfo"] {
+            observers.append((dnc, dnc.addObserver(forName: Notification.Name(name), object: nil, queue: .main) { [weak self] _ in self?.poll() }))
+        }
+        let ws = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
+            observers.append((ws, ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] n in
+                let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+                if let self, self.players.contains(app?.bundleIdentifier ?? "") { self.poll() }
+            }))
+        }
         poll()
     }
 
@@ -48,7 +59,8 @@ final class MediaService {
     }
 
     func stop() {
-        timer?.invalidate(); timer = nil
+        observers.forEach { $0.0.removeObserver($0.1) }
+        observers.removeAll()
         if current != nil { current = nil; onUpdate?(nil) }
     }
 
@@ -59,7 +71,7 @@ final class MediaService {
             if current != nil { current = nil; onUpdate?(nil) }
             return
         }
-        // NSAppleScript is main-thread only; a poll takes tens of milliseconds and runs every few seconds.
+        // NSAppleScript is main-thread only; a poll takes tens of milliseconds.
         var error: NSDictionary?
         let out = script.executeAndReturnError(&error).stringValue ?? ""
         if let error { Log.write("media", "script error: \(error[NSAppleScript.errorMessage] ?? error)") }
@@ -81,7 +93,5 @@ final class MediaService {
             event.cgEvent?.post(tap: .cghidEventTap)
         }
         press(true); press(false)
-        // Refresh soon; players take a moment to flip state.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.poll() }
     }
 }

@@ -71,9 +71,7 @@ final class WindowServerEvents {
     }
 
     private func openChannel() {
-        let ids = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? [])
-            .compactMap { $0[kCGWindowNumber as String] as? CGWindowID }
-        watch(ids)
+        watch(CGWindowInfo.list(.optionOnScreenOnly).map(\.id))
     }
 
     /// Move/resize events are only delivered for windows explicitly requested.

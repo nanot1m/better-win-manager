@@ -24,14 +24,7 @@ final class DesktopSlide {
 
     init(manager: WindowManager) {
         self.manager = manager
-        panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.level = .screenSaver
-        panel.hasShadow = false
-        panel.ignoresMouseEvents = true
-        panel.animationBehavior = .none
-        panel.collectionBehavior = [.canJoinAllSpaces, .transient, .fullScreenAuxiliary]
+        panel = .overlay(level: .screenSaver, ignoresMouse: true)
         panel.contentView = view
     }
 
@@ -69,16 +62,14 @@ final class DesktopSlide {
         width = areaAX.width
         hasPrevious = current > 0
         hasNext = current + 1 < manager.desktopCount
-        let ringColor = NSColor(hex: manager.config.focusRingColor) ?? .controlAccentColor
-        let floatingColor = manager.config.focusRingFloatingColor.lowercased() == "same" ? ringColor : (NSColor(hex: manager.config.focusRingFloatingColor) ?? ringColor)
         func slide(_ d: Int) -> [SlideView.Item] {
             let items = manager.previewItems(desktop: d)
             let top = manager.lastFocusedWindow(onDesktop: d) ?? items.first?.id
             return items.map { w in
                 let local = CGRect(x: w.frame.minX - areaAX.minX, y: w.frame.minY - areaAX.minY, width: w.frame.width, height: w.frame.height)
-                let ring: NSColor? = manager.config.focusRing && w.id == top && (manager.config.focusRingFloating || w.tiled) ? (w.tiled ? ringColor : floatingColor) : nil
+                let ring: NSColor? = manager.config.focusRing && w.id == top && (manager.config.focusRingFloating || w.tiled) ? manager.config.ringColor(floating: !w.tiled) : nil
                 return SlideView.Item(id: w.id, frame: local, icon: NSRunningApplication(processIdentifier: w.pid)?.icon, thumbnail: Thumbnails.cached(w.id),
-                                      radius: manager.config.focusRingAutoRadius ? (WindowServerEvents.cornerRadius(of: w.id) ?? manager.config.focusRingRadius) : manager.config.focusRingRadius,
+                                      radius: manager.config.ringRadius(for: w.id),
                                       ring: ring, ringWidth: manager.config.focusRingWidth)
             }
         }
@@ -150,21 +141,14 @@ final class DesktopSlide {
     private func animate(to target: CGFloat, then: @escaping () -> Void) -> TimeInterval {
         animator?.invalidate()
         let from = offset
-        let start = Date()
         let duration = max(0.12, 0.3 * Double(abs(target - from) / width))
-        animator = Timer.scheduledTimer(withTimeInterval: 1 / 120, repeats: true) { [weak self] t in
-            guard let self else { t.invalidate(); return }
-            let x = min(1, Date().timeIntervalSince(start) / duration)
-            let eased = 1 - pow(1 - x, 3)
-            self.set(offset: from + (target - from) * CGFloat(eased))
-            if x >= 1 {
-                t.invalidate()
-                self.animator = nil
-                if target == 0 { self.dismiss() }
-                then()
-            }
-        }
-        RunLoop.main.add(animator!, forMode: .common)
+        animator = Tween.run(duration: duration, step: { [weak self] e in
+            self?.set(offset: from + (target - from) * e)
+        }, done: { [weak self] in
+            self?.animator = nil
+            if target == 0 { self?.dismiss() }
+            then()
+        })
         return duration
     }
 

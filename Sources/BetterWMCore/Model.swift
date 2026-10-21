@@ -39,11 +39,14 @@ public struct Snapshot: Equatable {
     /// Standard windows on the active Spaces, plus any tiled window the shell could still resolve.
     public var windows: [WindowInfo]
     public var focused: WindowID?
+    /// When it was taken; the core never reads the clock itself.
+    public var now: Date
 
-    public init(screens: [ScreenInfo], windows: [WindowInfo], focused: WindowID?) {
+    public init(screens: [ScreenInfo], windows: [WindowInfo], focused: WindowID?, now: Date) {
         self.screens = screens
         self.windows = windows
         self.focused = focused
+        self.now = now
     }
 
     public func window(_ id: WindowID) -> WindowInfo? { windows.first { $0.id == id } }

@@ -165,9 +165,7 @@ final class FocusRing {
             events.watch([id])
             onFocusChange?()
         }
-        let tiledColor = NSColor(hex: config.focusRingColor) ?? .controlAccentColor
-        let color = floating && config.focusRingFloatingColor.lowercased() != "same"
-            ? (NSColor(hex: config.focusRingFloatingColor) ?? tiledColor) : tiledColor
+        let color = config.ringColor(floating: floating)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         layer.cornerRadius = radius(for: id) + pad
@@ -188,7 +186,7 @@ final class FocusRing {
     private func radius(for id: CGWindowID) -> CGFloat {
         guard config.focusRingAutoRadius else { return config.focusRingRadius }
         if let r = radiusCache[id] { return r }
-        let r = WindowServerEvents.cornerRadius(of: id) ?? config.focusRingRadius
+        let r = config.ringRadius(for: id)
         radiusCache[id] = r
         return r
     }
@@ -228,5 +226,17 @@ extension NSColor {
         let r = Int(round(c.redComponent * 255)), g = Int(round(c.greenComponent * 255)), b = Int(round(c.blueComponent * 255))
         let a = Int(round(c.alphaComponent * 255))
         return a == 255 ? String(format: "%02X%02X%02X", r, g, b) : String(format: "%02X%02X%02X%02X", r, g, b, a)
+    }
+}
+
+extension Config {
+    var ringTiledColor: NSColor { NSColor(hex: focusRingColor) ?? .controlAccentColor }
+    /// nil when the floating colour is "same" as the tiled one.
+    var ringFloatingColorOverride: NSColor? {
+        focusRingFloatingColor.lowercased() == "same" ? nil : (NSColor(hex: focusRingFloatingColor) ?? ringTiledColor)
+    }
+    func ringColor(floating: Bool) -> NSColor { floating ? (ringFloatingColorOverride ?? ringTiledColor) : ringTiledColor }
+    func ringRadius(for id: CGWindowID) -> CGFloat {
+        focusRingAutoRadius ? (WindowServerEvents.cornerRadius(of: id) ?? focusRingRadius) : focusRingRadius
     }
 }

@@ -25,13 +25,7 @@ final class WindowSwitcher {
 
     init(manager: WindowManager) {
         self.manager = manager
-        panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.level = .popUpMenu
-        panel.hasShadow = true
-        panel.animationBehavior = .none
-        panel.collectionBehavior = [.canJoinAllSpaces, .transient, .fullScreenAuxiliary]
+        panel = .overlay(level: .popUpMenu, shadow: true)
         panel.contentView = view
         view.onPick = { [weak self] index in self?.selected = index; self?.commit() }
     }

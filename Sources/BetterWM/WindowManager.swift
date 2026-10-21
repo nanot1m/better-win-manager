@@ -28,8 +28,7 @@ final class WindowManager {
 
     private func virtualSet(realSpace: SpaceID) -> VirtualWorkspaces {
         if let v = virtualSets[realSpace] { return v }
-        let v = VirtualWorkspaces(realSpace: realSpace, count: 1)
-        v.claimsSuspendedUntil = claimsSuspendedUntil
+        let v = VirtualWorkspaces(realSpace: realSpace, count: 1) { Log.write("park", $0) }
         // Come back to the workspace that was active when the last run ended.
         if config.restoreLayouts, let active = saved.activeWorkspaces[String(realSpace)], active > 0 {
             if active >= v.count { v.setCount(active + 1) }
@@ -58,8 +57,16 @@ final class WindowManager {
     private var axObserver: WindowObserver?
     /// Set while a Space switch is in flight; the window list mixes both desktops during the slide.
     private var switching = false
+    /// Bumped per Space switch so only the latest one's settle clears `switching`.
+    private var spaceSwitchGeneration = 0
     /// Set while the user drags a window or a gap handle; reconciling mid-gesture would fight it.
-    var interacting = false { didSet { interactionScreens = nil } }
+    var interacting = false {
+        didSet {
+            interactionScreens = nil
+            if oldValue, !interacting { onInteractionEnd?() }
+        }
+    }
+    var onInteractionEnd: (() -> Void)?
     /// Screen geometry is stable for the length of a drag; asking SkyLight for it on every mouse move is not free.
     private var interactionScreens: [ScreenInfo]?
     private func screens() -> [ScreenInfo] {
@@ -171,7 +178,6 @@ final class WindowManager {
     }
 
     private func currentAppsByDesktop() -> [Int: [(pid: pid_t, windows: [WindowID])]] {
-        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return [:] }
         var out: [Int: [(pid: pid_t, windows: [WindowID])]] = [:]
         var counted = Set<WindowID>()
         func add(_ pid: pid_t, _ id: WindowID, to desktop: Int) {
@@ -180,12 +186,9 @@ final class WindowManager {
             else { out[desktop, default: []].append((pid, [id])) }
         }
         let v = virtualWS
-        for info in list {
-            guard (info[kCGWindowLayer as String] as? Int) == 0,
-                  let pid = info[kCGWindowOwnerPID as String] as? pid_t, pid != getpid(),
-                  let id = info[kCGWindowNumber as String] as? CGWindowID,
-                  virtualSet(ofWindow: id) === v, v.isKnown(id) else { continue }
-            add(pid, id, to: v.workspace(of: id))
+        for info in CGWindowInfo.list([.optionOnScreenOnly, .excludeDesktopElements]) where info.isOrdinaryOtherApp {
+            guard virtualSet(ofWindow: info.id) === v, v.isKnown(info.id) else { continue }
+            add(info.pid, info.id, to: v.workspace(of: info.id))
         }
         for id in v.knownWindows where v.isParked(id) && system.inLastSnapshot.contains(id) {
             guard let pid = system.pid(of: id) else { continue }
@@ -232,7 +235,7 @@ final class WindowManager {
         Log.write("desktop", "switch to workspace \(index + 1) (real space \(v.realSpace))")
         rememberFocus(in: v)
         v.switchTo(index)
-        ignoreFocusSwitchUntil = Date().addingTimeInterval(0.8)
+        ignoreOwnFocusChanges()
         lastFocusedID = AXWindow.focused.flatMap(id)
         let t0 = Date()
         tick(settle: false)
@@ -356,6 +359,21 @@ final class WindowManager {
         if let frame = targetFrame(of: id) ?? system.axWindow(id)?.frame { focusRing.show(windowID: id, frame: frame) } else { focusRing.suspended = false }
         onDesktopChange?()
     }
+
+    private var focusFollowScheduled = false
+    /// AX focus events can arrive before the frontmost app updates, and activation notifications after; one
+    /// look once both have landed.
+    private func scheduleFocusFollow() {
+        guard !focusFollowScheduled else { return }
+        focusFollowScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.focusFollowScheduled = false
+            self?.followFocusedWindowsWorkspace()
+        }
+    }
+
+    /// Parking, hiding and raising after our own switch move focus around for a moment; none of that is the user.
+    private func ignoreOwnFocusChanges() { ignoreFocusSwitchUntil = Date().addingTimeInterval(0.8) }
 
     private func activateTopApp(in v: VirtualWorkspaces) {
         let top = zOrder.first { virtualSet(ofWindow: $0) === v && v.workspace(of: $0) == v.active && !v.isParked($0) }
@@ -502,7 +520,9 @@ final class WindowManager {
                     NSRunningApplication(processIdentifier: pid)?.unhide()
                     // Frames set while an app is still unhiding can be lost; look again shortly after.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self?.scheduleTick(); self?.focusRing.reorder() }
-                })
+                },
+                // Moves ignored while macOS is waking or rearranging displays say nothing about the window.
+                countRefusals: snap.now >= claimsSuspendedUntil, now: snap.now)
         }
     }
 
@@ -553,17 +573,19 @@ final class WindowManager {
             guard let self else { return }
             Log.write("screen", "display configuration changed: \(NSScreen.screens.count) screen(s)")
             self.suspendClaims(until: max(Date().addingTimeInterval(60), self.claimsSuspendedUntil))
-            // Frames refused while screens were rearranged are worth asking for again on the new layout.
-            self.state.attempts.removeAll()
             self.tick()
         }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
                                                           object: nil, queue: .main) { [weak self] _ in
-            // The window list is still in flux while the slide animation runs; settle first.
-            self?.switching = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                self?.switching = false
-                self?.tick()
+            // The window list is still in flux while the slide animation runs, and macOS reports no end to it.
+            guard let self else { return }
+            self.switching = true
+            self.spaceSwitchGeneration += 1
+            let generation = self.spaceSwitchGeneration
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                guard let self, generation == self.spaceSwitchGeneration else { return }
+                self.switching = false
+                self.tick()
             }
         }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
@@ -573,7 +595,7 @@ final class WindowManager {
         // the frontmost app updates, so re-check shortly after activation as well.
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
                                                           object: nil, queue: .main) { [weak self] _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self?.followFocusedWindowsWorkspace() }
+            self?.scheduleFocusFollow()
         }
         // WindowServer reports a new front window before Accessibility does; stacked screens re-fan on it.
         wsEvents.onEvent = { [weak self] event, _ in
@@ -588,7 +610,7 @@ final class WindowManager {
                                     onFocusChange: { [weak self] in
                                         self?.followFocusedWindowsWorkspace()
                                         self?.refanStackedScreens()
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self?.followFocusedWindowsWorkspace() }
+                                        self?.scheduleFocusFollow()
                                         self?.focusRing.update()
                                         self?.onFocusChange?()
                                     },
@@ -670,14 +692,15 @@ final class WindowManager {
     /// app on a desktop chip or count as a sibling.
     private func pruneDeadWindows() {
         guard !virtualSets.isEmpty,
-              let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else { return }
-        let alive = Set(list.compactMap { $0[kCGWindowNumber as String] as? CGWindowID })
+              case let alive = CGWindowInfo.aliveIDs(), !alive.isEmpty else { return }
         for v in virtualSets.values {
             for id in v.knownWindows where !alive.contains(id) {
                 v.forget(id)
-                state.floating.remove(id)
-                state.requested[id] = nil
+                state.forget(id)
                 floatingFrames[id] = nil
+                adoptedInBackground[id] = nil
+                Thumbnails.forget(id)
+                lastFocusedByWorkspace = lastFocusedByWorkspace.filter { $0.value != id }
             }
         }
     }
@@ -797,21 +820,27 @@ final class WindowManager {
 
     private var pendingSnapshot: Snapshot?
 
-    /// Throttled, not debounced: the reconcile ticks every second, so a debounce would never fire.
-    private(set) var claimsSuspendedUntil = Date.distantPast
-    /// Pauses the "window will not leave the screen" rule; `.distantFuture` until a matching resume.
-    func suspendClaims(until date: Date) {
+    private var claimsSuspendedUntil = Date.distantPast
+    /// Pauses the "window will not leave the screen" rule; `.distantFuture` until a matching resume. Refusals
+    /// counted so far, by parking and by the layout, are dropped: they were likely macOS, not the window.
+    private func suspendClaims(until date: Date) {
         claimsSuspendedUntil = date
-        for v in virtualSets.values {
-            v.claimsSuspendedUntil = claimsSuspendedUntil
-            v.forgetReparkAttempts()
-        }
+        state.attempts.removeAll()
+        virtualSets.values.forEach { $0.forgetReparkAttempts() }
         Log.write("park", claimsSuspendedUntil == .distantFuture ? "pausing the refusal rule (sleep or lock)" : "refusal rule resumes in \(Int(claimsSuspendedUntil.timeIntervalSinceNow)) s")
     }
 
     /// Set by a layout reset: the state file was deleted on purpose and must not be written again on the way out.
-    var suppressSaves = false
+    private var suppressSaves = false
 
+    /// Unparks everything and deletes the saved layout for good: no later save, including the one on quit, rewrites it.
+    func resetLayout() {
+        suppressSaves = true
+        prepareForQuit()
+        try? FileManager.default.removeItem(at: Config.statePath)
+    }
+
+    /// Throttled, not debounced: the reconcile ticks every second, so a debounce would never fire.
     private func scheduleSave(_ snap: Snapshot) {
         guard config.restoreLayouts, !suppressSaves else { return }
         pendingSnapshot = snap
@@ -1148,7 +1177,7 @@ final class WindowManager {
         untile(w)
         v.move(id, to: index)
         // The sent window is still focused for a moment; don't let that pull us into its workspace.
-        ignoreFocusSwitchUntil = Date().addingTimeInterval(0.8)
+        ignoreOwnFocusChanges()
         if wasTiled {
             // Pre-place it in the target workspace's grid so it is tiled when that workspace shows.
             let screenIndex = NSScreen.screens.firstIndex { $0.visibleFrame.toCocoa().contains(w.frame.center) } ?? 0
