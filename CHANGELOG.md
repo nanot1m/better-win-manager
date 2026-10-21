@@ -4,7 +4,7 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
-## [Unreleased]
+## [0.17.1] - 2026-10-21
 
 ### Fixed
 - Clicking a control that changes a window's frame by itself (YouTube's fullscreen button, a double-click zoom) untiled the window as if it had been dragged by hand. Only a press that moves the mouse at least 20 points counts now; a plain click also no longer saves the fullscreen frame as the window's floating spot. A shorter drag snaps the window back to its slot on release.
