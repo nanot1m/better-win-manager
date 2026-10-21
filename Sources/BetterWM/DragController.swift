@@ -136,8 +136,8 @@ final class DragController {
             let original = originalFrame
             let id = draggedID
             // A click that changes the window's frame by itself (a fullscreen button, a double-click zoom) is
-            // not the user placing it; only a press with real mouse motion is.
-            let byHand = manager.interacting
+            // not the user placing it; only a press that carried the mouse at least 20pt is.
+            let byHand = manager.interacting && hypot(p.x - dragStart.x, p.y - dragStart.y) >= 20
             let finish = { [manager] in
                 manager.interacting = false
                 if let w, let zone {
