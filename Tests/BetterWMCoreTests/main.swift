@@ -396,13 +396,14 @@ struct ReconcilerTests {
         var hidden: Set<pid_t> = []
         var ignoresMoves: Set<WindowID> = []
         let corner = CGPoint(x: 1598, y: 998)
-        func park(_ v: VirtualWorkspaces, now: Date, hideable: Bool = false, suspended: Bool = false) {
+        func park(_ v: VirtualWorkspaces, now: Date, hideable: Bool = false, countRefusals: Bool = true) {
             v.apply(windows: Array(frames.keys).sorted(), pid: { pid_t($0) }, hideable: { _ in hideable },
                     isTiled: { _ in false }, frame: { self.frames[$0] },
                     setFrame: { w, f in if !self.ignoresMoves.contains(w) { self.frames[w] = f } },
                     parkOrigin: { _ in self.corner },
                     isInCorner: { f in abs(f.minX - self.corner.x) <= 100 && abs(f.minY - self.corner.y) <= 100 },
-                    fit: { $0 }, hide: { self.hidden.insert($0) }, unhide: { self.hidden.remove($0) }, now: now)
+                    fit: { $0 }, hide: { self.hidden.insert($0) }, unhide: { self.hidden.remove($0) },
+                    countRefusals: countRefusals, now: now)
         }
     }
 
@@ -450,9 +451,8 @@ struct ReconcilerTests {
         screen.frames = [5: CGRect(x: 100, y: 100, width: 300, height: 300)]
         screen.ignoresMoves = [5]
         v.move(5, to: 1)
-        v.claimsSuspendedUntil = .distantFuture
         var now = Date(timeIntervalSinceReferenceDate: 0)
-        for _ in 0..<10 { screen.park(v, now: now); now += 1 }
+        for _ in 0..<10 { screen.park(v, now: now, countRefusals: false); now += 1 }
         expect(v.workspace(of: 5) == 1, #function, #line)
     }
 

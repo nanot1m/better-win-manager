@@ -15,9 +15,8 @@ public final class VirtualWorkspaces {
     private var hiddenByPid: [pid_t: Set<WindowID>] = [:]
     /// Consecutive re-parks a window ignored outright, with the frame seen before the last one and its time.
     private var reparkAttempts: [WindowID: (refused: Int, at: Date, seen: CGPoint)] = [:]
-    /// While a display is being connected or removed macOS ignores moves for a while; that is not a window
-    /// refusing to leave, so no window is claimed for the active workspace until this passes.
-    public var claimsSuspendedUntil = Date.distantPast
+    /// Ignored re-parks in a row before a window is taken to belong where it is.
+    public static let maxRefusals = 5
     public func forgetReparkAttempts() { reparkAttempts.removeAll() }
     public var knownWindows: [WindowID] { Array(membership.keys) }
     public var hiddenPids: [pid_t] { Array(hiddenByPid.keys) }
@@ -126,7 +125,8 @@ public final class VirtualWorkspaces {
     public func apply(windows: [WindowID], pid: (WindowID) -> pid_t?, hideable: (pid_t) -> Bool,
                isTiled: (WindowID) -> Bool, frame: (WindowID) -> CGRect?,
                setFrame: (WindowID, CGRect) -> Void, parkOrigin: (CGRect) -> CGPoint, isInCorner: (CGRect) -> Bool,
-               fit: (CGRect) -> CGRect, hide: (pid_t) -> Void, unhide: (pid_t) -> Void, now: Date) {
+               fit: (CGRect) -> CGRect, hide: (pid_t) -> Void, unhide: (pid_t) -> Void,
+               countRefusals: Bool, now: Date) {
         for w in windows { adopt(w) }
         // Hidden apps come back as soon as one of their windows is on the active workspace, whether or not
         // that window is in this snapshot (floating windows of a hidden app are not on screen).
@@ -171,13 +171,11 @@ public final class VirtualWorkspaces {
                 } else if shouldPark, parked.contains(w), let f = frame(w), !isInCorner(f) {
                     // Already parked but not in the corner: the move was lost (the app was mid-unhide, or it
                     // repositioned itself). Park again, spaced out. Only a window that ignored the move outright
-                    // counts as refusing; after three refusals it is visible anyway, so it joins the active workspace.
+                    // counts as refusing; after `maxRefusals` it is visible anyway, so it joins the active workspace.
                     let last = reparkAttempts[w]
                     if let last, now.timeIntervalSince(last.at) < 0.5 { continue }
-                    // Ignored moves while displays are being rearranged say nothing about the window; don't count them.
-                    let settling = now < claimsSuspendedUntil
-                    let refused = settling ? 0 : (last.map { $0.seen == f.origin ? $0.refused + 1 : 0 } ?? 0)
-                    if refused >= 5 {
+                    let refused = countRefusals ? (last.map { $0.seen == f.origin ? $0.refused + 1 : 0 } ?? 0) : 0
+                    if refused >= Self.maxRefusals {
                         claimForActive(w)
                         reparkAttempts[w] = nil
                         log("#\(w) will not leave the screen; it now belongs to workspace \(active + 1)")

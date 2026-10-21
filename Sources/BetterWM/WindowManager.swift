@@ -29,7 +29,6 @@ final class WindowManager {
     private func virtualSet(realSpace: SpaceID) -> VirtualWorkspaces {
         if let v = virtualSets[realSpace] { return v }
         let v = VirtualWorkspaces(realSpace: realSpace, count: 1) { Log.write("park", $0) }
-        v.claimsSuspendedUntil = claimsSuspendedUntil
         // Come back to the workspace that was active when the last run ended.
         if config.restoreLayouts, let active = saved.activeWorkspaces[String(realSpace)], active > 0 {
             if active >= v.count { v.setCount(active + 1) }
@@ -498,7 +497,9 @@ final class WindowManager {
                     NSRunningApplication(processIdentifier: pid)?.unhide()
                     // Frames set while an app is still unhiding can be lost; look again shortly after.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self?.scheduleTick(); self?.focusRing.reorder() }
-                }, now: snap.now)
+                },
+                // Moves ignored while macOS is waking or rearranging displays say nothing about the window.
+                countRefusals: snap.now >= claimsSuspendedUntil, now: snap.now)
         }
     }
 
@@ -549,8 +550,6 @@ final class WindowManager {
             guard let self else { return }
             Log.write("screen", "display configuration changed: \(NSScreen.screens.count) screen(s)")
             self.suspendClaims(until: max(Date().addingTimeInterval(60), self.claimsSuspendedUntil))
-            // Frames refused while screens were rearranged are worth asking for again on the new layout.
-            self.state.attempts.removeAll()
             self.tick()
         }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
@@ -793,21 +792,20 @@ final class WindowManager {
 
     private var pendingSnapshot: Snapshot?
 
-    /// Throttled, not debounced: the reconcile ticks every second, so a debounce would never fire.
-    private(set) var claimsSuspendedUntil = Date.distantPast
-    /// Pauses the "window will not leave the screen" rule; `.distantFuture` until a matching resume.
-    func suspendClaims(until date: Date) {
+    private var claimsSuspendedUntil = Date.distantPast
+    /// Pauses the "window will not leave the screen" rule; `.distantFuture` until a matching resume. Refusals
+    /// counted so far, by parking and by the layout, are dropped: they were likely macOS, not the window.
+    private func suspendClaims(until date: Date) {
         claimsSuspendedUntil = date
-        for v in virtualSets.values {
-            v.claimsSuspendedUntil = claimsSuspendedUntil
-            v.forgetReparkAttempts()
-        }
+        state.attempts.removeAll()
+        virtualSets.values.forEach { $0.forgetReparkAttempts() }
         Log.write("park", claimsSuspendedUntil == .distantFuture ? "pausing the refusal rule (sleep or lock)" : "refusal rule resumes in \(Int(claimsSuspendedUntil.timeIntervalSinceNow)) s")
     }
 
     /// Set by a layout reset: the state file was deleted on purpose and must not be written again on the way out.
     var suppressSaves = false
 
+    /// Throttled, not debounced: the reconcile ticks every second, so a debounce would never fire.
     private func scheduleSave(_ snap: Snapshot) {
         guard config.restoreLayouts, !suppressSaves else { return }
         pendingSnapshot = snap
