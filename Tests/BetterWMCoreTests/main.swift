@@ -381,6 +381,17 @@ struct ReconcilerTests {
         expect(commands.count == 1, #function, #line)
     }
 
+    func testWindowThatMovedHasNotRefused() {
+        let r = Reconciler(config: config)
+        let t0 = Date(timeIntervalSinceReferenceDate: 0)
+        let stuck = CGRect(x: 0, y: 0, width: 10, height: 10)
+        let parked = CGRect(x: 1598, y: 998, width: 10, height: 10)
+        var (state, commands) = r.reconcile(DesiredState(), snapshot([win(1, stuck)], now: t0))
+        for _ in 1..<DesiredState.maxAttempts { (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: t0)) }
+        (state, commands) = r.reconcile(state, snapshot([win(1, parked)], now: t0))
+        expect(commands.count == 1, #function, #line)
+    }
+
     func testForgetClearsEveryRecord() {
         let r = Reconciler(config: config)
         var (state, _) = r.reconcile(DesiredState(), snapshot([win(1, .zero), win(2, .zero)]))
@@ -504,6 +515,7 @@ let tests: [(String, () -> Void)] = [
     ("savedLayoutV1Migration", t.testSavedLayoutV1Migration),
     ("refusedFrameGivesUpThenRetries", t.testRefusedFrameGivesUpThenRetries),
     ("forgetClearsEveryRecord", t.testForgetClearsEveryRecord),
+    ("windowThatMovedHasNotRefused", t.testWindowThatMovedHasNotRefused),
     ("parkingFollowsActiveWorkspace", t.testParkingFollowsActiveWorkspace),
     ("hideableAppIsHiddenNotParked", t.testHideableAppIsHiddenNotParked),
     ("windowRefusingToParkJoinsActiveWorkspace", t.testWindowRefusingToParkJoinsActiveWorkspace),

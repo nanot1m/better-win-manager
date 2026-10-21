@@ -10,10 +10,10 @@ public struct DesiredState: Equatable {
     public var retileRequested: Set<SpaceID> = []
     /// Frames last requested per window; a window still larger than a frame we asked for has a minimum size.
     public var requested: [WindowID: CGRect] = [:]
-    /// How often the same frame has been asked of a window that did not take it. Some windows refuse a size
-    /// they cannot grow to; asking every tick makes them jitter, so after a few tries the ask stops until the
-    /// target changes.
-    public struct Attempt: Equatable { public var target: CGRect; public var count: Int; public var since: Date }
+    /// How often in a row the same frame was asked of a window that did not move at all in between. Some windows
+    /// refuse a size they cannot grow to; asking every tick makes them jitter, so after a few tries the ask stops
+    /// until the target changes. A window that moved meanwhile (parked and back, leaving fullscreen) did not refuse.
+    public struct Attempt: Equatable { public var target: CGRect; public var seen: CGRect; public var count: Int; public var since: Date }
     /// After giving up, try again this long later: a refusal is often temporary (a display being rearranged).
     public static let retryAfter: TimeInterval = 3
     public var attempts: [WindowID: Attempt] = [:]
@@ -126,16 +126,16 @@ public struct Reconciler {
         }
         var cmds = commands(for: state, snapshot)
         cmds = cmds.filter { cmd in
-            guard case let .setFrame(w, f) = cmd else { return true }
-            if let a = state.attempts[w], a.target == f {
+            guard case let .setFrame(w, f) = cmd, let seen = snapshot.window(w)?.frame else { return true }
+            if let a = state.attempts[w], a.target == f, a.seen.approximatelyEquals(seen, tolerance: 0.75) {
                 if a.count >= DesiredState.maxAttempts {
                     guard snapshot.now.timeIntervalSince(a.since) >= DesiredState.retryAfter else { return false }
-                    state.attempts[w] = DesiredState.Attempt(target: f, count: 1, since: snapshot.now)
+                    state.attempts[w] = DesiredState.Attempt(target: f, seen: seen, count: 1, since: snapshot.now)
                     return true
                 }
-                state.attempts[w] = DesiredState.Attempt(target: f, count: a.count + 1, since: snapshot.now)
+                state.attempts[w] = DesiredState.Attempt(target: f, seen: seen, count: a.count + 1, since: snapshot.now)
             } else {
-                state.attempts[w] = DesiredState.Attempt(target: f, count: 1, since: snapshot.now)
+                state.attempts[w] = DesiredState.Attempt(target: f, seen: seen, count: 1, since: snapshot.now)
             }
             return true
         }

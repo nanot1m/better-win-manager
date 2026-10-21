@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [Unreleased]
+
+### Fixed
+- A tiled window could stay stuck in the parking corner after leaving fullscreen and switching desktops quickly: frames it missed during the fullscreen animation counted as refusals, and the layout stopped moving it. Only a window that did not move at all since the last request counts as refusing now, the same rule parking uses.
+
 ## [0.17.1] - 2026-10-21
 
 ### Fixed
