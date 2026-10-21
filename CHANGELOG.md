@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.15.3] - 2026-10-21
+
+### Fixed
+- A window that refuses the frame it is given no longer jitters: after four identical attempts the reconciler leaves it where it is until the layout changes, and the log names the window.
+
 ## [0.15.2] - 2026-10-21
 
 ### Changed

@@ -10,6 +10,12 @@ public struct DesiredState: Equatable {
     public var retileRequested: Set<SpaceID> = []
     /// Frames last requested per window; a window still larger than a frame we asked for has a minimum size.
     public var requested: [WindowID: CGRect] = [:]
+    /// How often the same frame has been asked of a window that did not take it. Some windows refuse a size
+    /// they cannot grow to; asking every tick makes them jitter, so after a few tries the ask stops until the
+    /// target changes.
+    public struct Attempt: Equatable { public var target: CGRect; public var count: Int }
+    public var attempts: [WindowID: Attempt] = [:]
+    public static let maxAttempts = 4
     /// Windows floating on purpose (untiled by hand or restored as floating); never arrivals, even on a first visit.
     public var floating: Set<WindowID> = []
 
@@ -93,6 +99,7 @@ public struct Reconciler {
             let geo = geometry(grid, screen)
             for (w, target) in geo.windowFrames() {
                 guard let actual = snapshot.window(w)?.frame, state.requested[w] == target else { continue }
+                if actual.approximatelyEquals(target, tolerance: 0.75) { state.attempts[w] = nil; continue }
                 let wide = actual.width > target.width + 1, tall = actual.height > target.height + 1
                 guard wide || tall else { continue }
                 var m = grid.minSizes[w] ?? .zero
@@ -106,7 +113,17 @@ public struct Reconciler {
             state.floating.subtract(grid.windows)
             state.retileRequested.remove(space)
         }
-        let cmds = commands(for: state, snapshot)
+        var cmds = commands(for: state, snapshot)
+        cmds = cmds.filter { cmd in
+            guard case let .setFrame(w, f) = cmd else { return true }
+            if let a = state.attempts[w], a.target == f {
+                if a.count >= DesiredState.maxAttempts { return false }
+                state.attempts[w] = DesiredState.Attempt(target: f, count: a.count + 1)
+            } else {
+                state.attempts[w] = DesiredState.Attempt(target: f, count: 1)
+            }
+            return true
+        }
         for case let .setFrame(w, f) in cmds { state.requested[w] = f }
         return (state, cmds)
     }

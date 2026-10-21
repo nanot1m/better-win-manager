@@ -840,6 +840,9 @@ final class WindowManager {
             if !added.isEmpty { Log.write("reconcile", "space \(space): tiled \(added.map { describe($0) }) (first visit: \(a.seen[space] == nil), floating: \(a.floating.sorted()))") }
             if !removed.isEmpty { Log.write("reconcile", "space \(space): dropped \(removed.map { describe($0) })") }
         }
+        for (w, now) in b.attempts where now.count >= DesiredState.maxAttempts && (a.attempts[w]?.count ?? 0) < DesiredState.maxAttempts {
+            Log.write("layout", "\(describe(w)) refuses frame \(now.target); leaving it be until the layout changes")
+        }
     }
 
     /// Puts the ring where the focused window is about to be, before the app has even applied the move.
