@@ -26,6 +26,9 @@ final class SystemObserver {
     func pid(of id: WindowID) -> pid_t? { ax[id]?.pid ?? lastInfo[id]?.pid }
     /// Frame from the last snapshot, without touching Accessibility.
     func lastFrame(of id: WindowID) -> CGRect? { lastInfo[id]?.frame }
+    /// Windows in the most recent full snapshot. A window the user closed can stay alive in WindowServer
+    /// (apps keep them for reuse) yet is gone from here.
+    private(set) var inLastSnapshot: Set<WindowID> = []
 
     func axWindow(_ id: WindowID) -> AXWindow? {
         if let w = ax[id], w.isValid { return w }
@@ -101,6 +104,7 @@ final class SystemObserver {
             }
         }
         for i in infos { lastInfo[i.id] = i }
+        inLastSnapshot = Set(infos.map(\.id))
         return Snapshot(screens: screens(), windows: infos, focused: AXWindow.focused.flatMap { self.id(of: $0) })
     }
 

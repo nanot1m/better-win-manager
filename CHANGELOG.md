@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.16.6] - 2026-10-21
+
+### Fixed
+- Desktop chips showed icons for windows that had been closed: some apps (ChatGPT, Calendar) keep a closed window alive off screen, and a parked window stayed counted as long as it existed. Chips now count only windows present in the latest snapshot.
+
 ## [0.16.5] - 2026-10-21
 
 ### Fixed

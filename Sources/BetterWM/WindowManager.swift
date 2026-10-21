@@ -187,7 +187,7 @@ final class WindowManager {
                   virtualSet(ofWindow: id) === v, v.isKnown(id) else { continue }
             add(pid, id, to: v.workspace(of: id))
         }
-        for id in v.knownWindows where v.isParked(id) {
+        for id in v.knownWindows where v.isParked(id) && system.inLastSnapshot.contains(id) {
             guard let pid = system.pid(of: id) else { continue }
             add(pid, id, to: v.workspace(of: id))
         }
