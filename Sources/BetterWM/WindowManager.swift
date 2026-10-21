@@ -536,7 +536,15 @@ final class WindowManager {
         installSpaceModel()
         configureWorkspaces()
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
-                                               object: nil, queue: .main) { [weak self] _ in self?.tick() }
+                                               object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            Log.write("screen", "display configuration changed: \(NSScreen.screens.count) screen(s)")
+            for v in self.virtualSets.values {
+                v.claimsSuspendedUntil = Date().addingTimeInterval(15)
+                v.forgetReparkAttempts()
+            }
+            self.tick()
+        }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
                                                           object: nil, queue: .main) { [weak self] _ in
             // The window list is still in flux while the slide animation runs; settle first.

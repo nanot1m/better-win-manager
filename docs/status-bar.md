@@ -25,6 +25,7 @@ One bar per screen at the top edge, where the hidden system menu bar lives. Enab
 | `battery` | Battery icon; red under 15 % unless charging | `barBatteryPercent` adds the number |
 | `clock` | Date and time | `barClockFormat`, a Unicode date pattern; default `EEE d MMM  HH:mm` |
 | `menu` | Grid button that opens the BetterWM menu | |
+| `sound` | Speaker icon showing the output level | Click for a popover with output volume and mute, output device, input volume and input device; scrolling over the icon changes the volume |
 | `media` | Now Playing with a play/pause button | Track info only from Music and Spotify, read through their scripting interfaces while they run; macOS no longer exposes Now Playing to third-party apps. The button presses the system media key, so it controls any player |
 
 Older configs have `barWeather`, `barCpu` and similar booleans. They are still read and written as views onto the list, so files round-trip between versions.

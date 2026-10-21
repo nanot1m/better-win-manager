@@ -10,6 +10,8 @@ final class StatusBar {
     private let events = WindowServerEvents()
     private var clock: Timer?
     private let media = MediaService()
+    private let sound = SoundService()
+    private lazy var soundPopover = SoundPopover(service: sound)
     private var inputSourceObserver: NSObjectProtocol?
     var onSelectDesktop: ((Int) -> Void)?
     var onSelectFullscreen: ((UInt64) -> Void)?
@@ -33,6 +35,8 @@ final class StatusBar {
         weather.onUpdate = { [weak self] _ in self?.refresh() }
         media.onUpdate = { [weak self] _ in self?.refresh() }
         if config.bar && config.barWidgets.contains(.media) { media.start() }
+        if config.bar && config.barWidgets.contains(.sound) { sound.start() }
+        sound.onChange = { [weak self] in self?.refresh(); self?.soundPopover.refreshIfShown() }
         events.onEvent = { [weak self] event, _ in
             switch event {
             case .frontChange, .spaceChange, .windowDestroy, .windowReorder: self?.refresh()
@@ -48,6 +52,9 @@ final class StatusBar {
     /// Distance from the screen's top edge to the bar's bottom edge; zero when the bar is off.
     func inset(for screen: NSScreen) -> CGFloat { config.bar ? config.barTopOffset + height(for: screen) : 0 }
 
+    /// Dev aid: opens the sound popover on the first bar.
+    func showSoundPopover() { if let v = windows.first?.view.soundAnchor { soundPopover.toggle(relativeTo: v) } }
+
     /// At offset zero with no side margin the bar shares the top edge with the notch.
     private func atScreenTop(_ screen: NSScreen) -> Bool { config.barTopOffset == 0 && config.barMargin == 0 }
 
@@ -58,6 +65,7 @@ final class StatusBar {
 
     func apply(_ config: Config) {
         if config.bar && config.barWidgets.contains(.media) { media.start() } else { media.stop() }
+        if config.bar && config.barWidgets.contains(.sound) { sound.start() } else { sound.stop() }
         self.config = config
         weather.apply(config)
         rebuild()
@@ -94,6 +102,11 @@ final class StatusBar {
             w.view.onReorderDesktop = { [weak self] from, to in self?.onReorderDesktop?(from, to) }
             w.view.onMenuRequested = { [weak self] v in self?.onMenuRequested?(v) }
             w.view.onPlayPause = { [weak self] in self?.media.togglePlayPause() }
+            w.view.onSoundRequested = { [weak self] v in self?.soundPopover.toggle(relativeTo: v) }
+            w.view.onSoundScroll = { [weak self] delta in
+                guard let self else { return }
+                self.sound.setOutputVolume(self.sound.state.outputVolume + Float(delta) * 0.03)
+            }
             windows.append(w)
             w.orderBack(nil)
         }
@@ -148,6 +161,7 @@ final class StatusBar {
             disk: config.barDisk ? SystemStatus.diskFree() : nil,
             inputSource: config.barInputSource ? InputSource.current() : nil,
             media: config.barWidgets.contains(.media) ? media.current : nil,
+            sound: config.barWidgets.contains(.sound) ? sound.symbolName : nil,
             titleFormat: config.barTitleFormat
         )
         windows.forEach { $0.view.render(model) }
@@ -207,6 +221,17 @@ final class BarWindow: NSPanel {
 /// A non-key panel swallows the first click unless the control accepts it.
 private final class ChipButton: NSButton {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+/// A chip button that also reports trackpad and wheel scrolling, for the volume.
+private final class ScrollButton: NSButton {
+    var onScroll: ((CGFloat) -> Void)?
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func scrollWheel(with event: NSEvent) {
+        let d = event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.scrollingDeltaX
+        guard d != 0 else { return }
+        onScroll?(event.hasPreciseScrollingDeltas ? d / 4 : d)
+    }
 }
 
 /// Desktop number plus the icons of the apps open there. A non-key panel swallows the first click unless the
@@ -310,6 +335,7 @@ final class BarView: NSView {
         var disk: Int64?
         var inputSource: String?
         var media: MediaService.NowPlaying?
+        var sound: String?
         var titleFormat: String
     }
 
@@ -318,6 +344,9 @@ final class BarView: NSView {
     var onReorderDesktop: ((Int, Int) -> Void)?
     var onMenuRequested: ((NSView) -> Void)?
     var onPlayPause: (() -> Void)?
+    var onSoundRequested: ((NSView) -> Void)?
+    /// Scroll over the sound widget: positive delta turns the volume up.
+    var onSoundScroll: ((CGFloat) -> Void)?
     private let screen: NSScreen
     private let background = NSVisualEffectView()
     private let solid = NSView()
@@ -348,6 +377,8 @@ final class BarView: NSView {
     private let menuButton = ChipButton(title: "", target: nil, action: nil)
     private let mediaButton = ChipButton(title: "", target: nil, action: nil)
     private let mediaLabel = NSTextField(labelWithString: "")
+    private let soundButton = ScrollButton(title: "", target: nil, action: nil)
+    var soundAnchor: NSView { soundButton }
     private let cat = BarCat(frame: .zero)
     /// One container per right-side widget; `apply` arranges them in the configured order.
     private var widgetViews: [Config.BarWidget: NSStackView] = [:]
@@ -442,6 +473,14 @@ final class BarView: NSView {
         mediaLabel.maximumNumberOfLines = 1
         mediaLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 220).isActive = true
         widget(.media, [mediaButton, mediaLabel], spacing: 2)
+        soundButton.isBordered = false
+        soundButton.imageScaling = .scaleProportionallyDown
+        soundButton.widthAnchor.constraint(equalToConstant: 24).isActive = true
+        soundButton.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        soundButton.target = self
+        soundButton.action = #selector(soundPressed)
+        soundButton.onScroll = { [weak self] d in self?.onSoundScroll?(d) }
+        widget(.sound, [soundButton])
         right.spacing = 12
         for v in [left, right] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
         cat.translatesAutoresizingMaskIntoConstraints = false
@@ -491,6 +530,7 @@ final class BarView: NSView {
         menuButton.contentTintColor = textColor
         mediaButton.contentTintColor = textColor
         mediaLabel.textColor = textColor
+        soundButton.contentTintColor = textColor
         cat.isHidden = !config.barCat
         catsEnabled = config.barCat
         notchPortals = config.barNotchPortals
@@ -583,6 +623,8 @@ final class BarView: NSView {
         appLabel.isHidden = true
         titleLabel.attributedStringValue = BarView.formatTitle(m.titleFormat, app: m.app, title: m.title, color: textColor)
         show(.media, m.media != nil)
+        show(.sound, m.sound != nil)
+        if let s = m.sound { soundButton.image = NSImage(systemSymbolName: s, accessibilityDescription: "Sound") }
         if let np = m.media {
             mediaButton.image = NSImage(systemSymbolName: np.playing ? "pause.fill" : "play.fill", accessibilityDescription: np.playing ? "Pause" : "Play")
             mediaLabel.stringValue = np.text
@@ -655,6 +697,7 @@ final class BarView: NSView {
 
     @objc private func menuPressed() { onMenuRequested?(menuButton) }
     @objc private func playPausePressed() { onPlayPause?() }
+    @objc private func soundPressed() { onSoundRequested?(soundButton) }
 
     /// Expands {app} and {title} in `format`; the app name is bold, everything else dimmer. With no title (or a
     /// title equal to the app name) only the app is shown.

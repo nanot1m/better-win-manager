@@ -15,6 +15,10 @@ final class VirtualWorkspaces {
     private var hiddenByPid: [pid_t: Set<WindowID>] = [:]
     /// Consecutive re-parks a window ignored outright, with the frame seen before the last one and its time.
     private var reparkAttempts: [WindowID: (refused: Int, at: Date, seen: CGPoint)] = [:]
+    /// While a display is being connected or removed macOS ignores moves for a while; that is not a window
+    /// refusing to leave, so no window is claimed for the active workspace until this passes.
+    var claimsSuspendedUntil = Date.distantPast
+    func forgetReparkAttempts() { reparkAttempts.removeAll() }
     var knownWindows: [WindowID] { Array(membership.keys) }
     var hiddenPids: [pid_t] { Array(hiddenByPid.keys) }
     /// Last workspace each app had a window in, kept after the window is gone: an app that recreates its only
@@ -168,7 +172,7 @@ final class VirtualWorkspaces {
                     let last = reparkAttempts[w]
                     if let last, Date().timeIntervalSince(last.at) < 0.5 { continue }
                     let refused = last.map { $0.seen == f.origin ? $0.refused + 1 : 0 } ?? 0
-                    if refused >= 3 {
+                    if refused >= 5, Date() >= claimsSuspendedUntil {
                         claimForActive(w)
                         reparkAttempts[w] = nil
                         Log.write("park", "#\(w) will not leave the screen; it now belongs to workspace \(active + 1)")

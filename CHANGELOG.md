@@ -4,6 +4,14 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.16.0] - 2026-10-21
+
+### Fixed
+- Connecting or removing a display moved parked windows to the active desktop: macOS ignores window moves while it rearranges screens, which looked like windows refusing to leave. No window is claimed for 15 seconds after a display change, and it now takes five ignored moves rather than three.
+
+### Added
+- Sound widget for the status bar: a speaker icon with the output level; click it for output volume and mute, the output device, input volume and the input device; scroll over it to change the volume. Enable it in Settings › Widgets.
+
 ## [0.15.3] - 2026-10-21
 
 ### Fixed

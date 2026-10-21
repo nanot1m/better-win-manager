@@ -76,7 +76,7 @@ public struct Config {
     /// Right-side widgets of the bar, in display order. The per-widget booleans below are views onto this list,
     /// kept so older config files (and older app versions reading new ones) keep working.
     public enum BarWidget: String, CaseIterable {
-        case weather, cpu, memory, disk, keyboard, wifi, battery, clock, menu, media
+        case weather, cpu, memory, disk, keyboard, wifi, battery, clock, menu, media, sound
         public var title: String {
             switch self {
             case .weather: return "Weather"
@@ -89,6 +89,7 @@ public struct Config {
             case .clock: return "Clock"
             case .menu: return "BetterWM menu button"
             case .media: return "Now playing (Music, Spotify)"
+            case .sound: return "Sound (volume, output and input devices)"
             }
         }
     }
@@ -270,7 +271,7 @@ public struct Config {
         barClockFormat = \(barClockFormat)
         # Active window label: {app} and {title} are replaced; the rest is shown as is.
         barTitleFormat = \(barTitleFormat)
-        # Right-side widgets in display order: weather, cpu, memory, disk, keyboard, wifi, battery, clock, menu, media.
+        # Right-side widgets in display order: weather, cpu, memory, disk, keyboard, wifi, battery, clock, menu, media, sound.
         # Leave one out to hide it. (The barWeather/barBattery/... flags below mirror this list for older versions.)
         barWidgets = \(barWidgets.map(\.rawValue).joined(separator: ", "))
         barWeather = \(barWeather)

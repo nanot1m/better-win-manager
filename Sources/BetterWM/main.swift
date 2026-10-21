@@ -178,6 +178,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+        if CommandLine.arguments.contains("--sound-popover") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [bar] in bar?.showSoundPopover() }
+        }
         if CommandLine.arguments.contains("--overview") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [overview] in overview?.toggle() }
         }
