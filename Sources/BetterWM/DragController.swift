@@ -140,7 +140,9 @@ final class DragController {
                 if let w, let zone {
                     manager.drop(w, into: zone, at: p, from: original)
                 } else {
-                    if let id { manager.releaseDisplacedWindow(id) }
+                    // Only a window that actually moved or resized during this drag was placed by hand; one that
+                    // was merely off its slot already (macOS moved it, it refused a size) must not be untiled.
+                    if let id, let w, !w.frame.approximatelyEquals(original, tolerance: 10) { manager.releaseDisplacedWindow(id) }
                     // Only a plain drag or resize settles a new floating spot; a ⌥-drag that misses every zone does not.
                     if let w, !alt { manager.rememberFloatingFrame(w) }
                 }

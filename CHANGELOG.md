@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.16.1] - 2026-10-21
+
+### Fixed
+- Disconnecting a display could untile windows: macOS moved them while rearranging screens, the jitter guard gave up on them for good, and the next click on such a window counted as a hand move. Refused frames are now asked for again after three seconds and after any display change, and mouse-up only untiles a window that actually moved or resized during the drag.
+
 ## [0.16.0] - 2026-10-21
 
 ### Fixed

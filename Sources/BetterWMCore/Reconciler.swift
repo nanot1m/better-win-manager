@@ -13,7 +13,9 @@ public struct DesiredState: Equatable {
     /// How often the same frame has been asked of a window that did not take it. Some windows refuse a size
     /// they cannot grow to; asking every tick makes them jitter, so after a few tries the ask stops until the
     /// target changes.
-    public struct Attempt: Equatable { public var target: CGRect; public var count: Int }
+    public struct Attempt: Equatable { public var target: CGRect; public var count: Int; public var since: Date = Date() }
+    /// After giving up, try again this long later: a refusal is often temporary (a display being rearranged).
+    public static let retryAfter: TimeInterval = 3
     public var attempts: [WindowID: Attempt] = [:]
     public static let maxAttempts = 4
     /// Windows floating on purpose (untiled by hand or restored as floating); never arrivals, even on a first visit.
@@ -117,7 +119,11 @@ public struct Reconciler {
         cmds = cmds.filter { cmd in
             guard case let .setFrame(w, f) = cmd else { return true }
             if let a = state.attempts[w], a.target == f {
-                if a.count >= DesiredState.maxAttempts { return false }
+                if a.count >= DesiredState.maxAttempts {
+                    guard Date().timeIntervalSince(a.since) >= DesiredState.retryAfter else { return false }
+                    state.attempts[w] = DesiredState.Attempt(target: f, count: 1)
+                    return true
+                }
                 state.attempts[w] = DesiredState.Attempt(target: f, count: a.count + 1)
             } else {
                 state.attempts[w] = DesiredState.Attempt(target: f, count: 1)

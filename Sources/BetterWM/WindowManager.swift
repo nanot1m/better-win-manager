@@ -543,6 +543,8 @@ final class WindowManager {
                 v.claimsSuspendedUntil = Date().addingTimeInterval(15)
                 v.forgetReparkAttempts()
             }
+            // Frames refused while screens were rearranged are worth asking for again on the new layout.
+            self.state.attempts.removeAll()
             self.tick()
         }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
