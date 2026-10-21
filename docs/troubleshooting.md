@@ -49,4 +49,4 @@ Windows that were parked in the old screen's corner are pulled onto the remainin
 
 ## Reporting a bug
 
-Use Copy Diagnostics Report in the menu (BetterWM › Diagnostics). It puts the app and macOS versions, screen setup, your config (location redacted), `state.json` and the recent log on the clipboard. Paste it into an issue at https://github.com/nanot1m/better-win-manager/issues together with what you did and what you expected.
+The quickest way is BetterWM › Diagnostics › Report a Bug…: it saves the diagnostics report (and, if you agree, a screenshot) into a folder, opens a prefilled GitHub issue and shows the folder so you can drag the files in; nothing is sent until you submit. To do it by hand, use Copy Diagnostics Report in the same menu. It puts the app and macOS versions, screen setup, your config (location redacted), `state.json` and the recent log on the clipboard. Paste it into an issue at https://github.com/nanot1m/better-win-manager/issues together with what you did and what you expected.

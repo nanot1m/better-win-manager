@@ -51,6 +51,12 @@ enum Log {
         return text.split(separator: "\n").suffix(lines).joined(separator: "\n")
     }
 
+    /// Saved window titles are what layout restore matches on, but they do not belong in a report from a release build.
+    static func redactTitles(_ json: String) -> String {
+        guard !includeTitles, let re = try? NSRegularExpression(pattern: #""title"\s*:\s*"(?:[^"\\]|\\.)*""#) else { return json }
+        return re.stringByReplacingMatches(in: json, range: NSRange(json.startIndex..., in: json), withTemplate: #""title" : "<redacted>""#)
+    }
+
     /// Everything a bug report needs, as one text block.
     static func diagnostics(config: Config, stateJSON: String?) -> String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
@@ -67,7 +73,7 @@ enum Log {
         \(cfg.serialized())
 
         === state.json ===
-        \(stateJSON ?? "(none)")
+        \(stateJSON.map(redactTitles) ?? "(none)")
 
         === log tail ===
         \(tail())

@@ -329,7 +329,7 @@ extension AppDelegate {
         add("Reload Config", #selector(reloadConfig))
         let diag = NSMenu(title: "Diagnostics")
         for (title, sel, action) in [("Re-measure Window Corners", #selector(refreshRing), "refreshRing"), ("Open Log File", #selector(openLog), ""),
-                                     ("Copy Diagnostics Report", #selector(copyDiagnostics), "")] {
+                                     ("Copy Diagnostics Report", #selector(copyDiagnostics), ""), ("Report a Bug…", #selector(reportBug), "")] {
             let item = diag.addItem(withTitle: title, action: sel, keyEquivalent: "")
             item.target = self
             if let spec = manager.config.hotkeys[action] { HotKey.applyKeyEquivalent(spec, to: item) }
@@ -509,6 +509,72 @@ extension AppDelegate {
         hud.show(keys: nil, action: "Diagnostics copied to clipboard", preformatted: true, force: true)
         Log.write("app", "diagnostics report copied (\(report.count) chars)")
     }
+    /// Builds a report folder (diagnostics, optional screenshot), opens a prefilled GitHub issue and shows the
+    /// folder so the files can be dragged in. GitHub takes attachments only from a signed-in browser, and the
+    /// user should see what is about to become public anyway.
+    @objc func reportBug() {
+        let alert = NSAlert()
+        alert.messageText = "Report a bug"
+        alert.informativeText = "BetterWM will collect the diagnostics report into a folder, open a new GitHub issue with the basics filled in, and show the folder so you can drag the files into the issue. Nothing is sent until you submit it.\n\nA screenshot shows whatever is on your screen; leave it out if anything private is visible."
+        let shot = NSButton(checkboxWithTitle: "Include a screenshot of the main screen", target: nil, action: nil)
+        shot.state = .on
+        alert.accessoryView = shot
+        alert.addButton(withTitle: "Continue")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let stamp = { () -> String in let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd-HHmmss"; return f.string(from: Date()) }()
+        let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/BetterWM/report-\(stamp)")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let state = try? String(contentsOf: Config.statePath, encoding: .utf8)
+        let report = Log.diagnostics(config: manager.config, stateJSON: state)
+        let reportURL = folder.appendingPathComponent("diagnostics.txt")
+        try? report.write(to: reportURL, atomically: true, encoding: .utf8)
+        var files = [reportURL]
+        if shot.state == .on {
+            // Let the alert disappear before capturing.
+            Thread.sleep(forTimeInterval: 0.3)
+            let png = folder.appendingPathComponent("screenshot.png")
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            p.arguments = ["-x", "-m", png.path]
+            try? p.run()
+            p.waitUntilExit()
+            if FileManager.default.fileExists(atPath: png.path) { files.append(png) }
+        }
+
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+        let tail = Log.tail(25)
+        let body = """
+        **What happened**
+
+
+        **What you expected**
+
+
+        **Steps to reproduce**
+        1.
+
+        ---
+        BetterWM \(v), macOS \(ProcessInfo.processInfo.operatingSystemVersionString), \(NSScreen.screens.count) display(s)
+
+        Please drag `\(files.map(\.lastPathComponent).joined(separator: "` and `"))` from the Finder window into this issue.
+
+        <details><summary>Recent log</summary>
+
+        ```
+        \(tail.prefix(3500))
+        ```
+        </details>
+        """
+        var comps = URLComponents(string: "https://github.com/nanot1m/better-win-manager/issues/new")!
+        comps.queryItems = [URLQueryItem(name: "title", value: ""), URLQueryItem(name: "body", value: body)]
+        if let url = comps.url { NSWorkspace.shared.open(url) }
+        NSWorkspace.shared.activateFileViewerSelecting(files)
+        Log.write("app", "bug report prepared in \(folder.path) (\(files.count) file(s))")
+    }
+
     @objc func showPermissions() { onboarding.show() }
     @objc func showSettings() {
         configWindow.show(config: manager.config) { [weak self] cfg in

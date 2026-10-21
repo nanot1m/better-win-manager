@@ -4,6 +4,14 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.16.3] - 2026-10-21
+
+### Added
+- Diagnostics › Report a Bug…: collects the diagnostics report and, if you agree, a screenshot into a folder, opens a prefilled GitHub issue and shows the folder so the files can be dragged in. Nothing is sent until you submit the issue.
+
+### Changed
+- Release builds redact saved window titles from the state included in the diagnostics report.
+
 ## [0.16.2] - 2026-10-21
 
 ### Changed
