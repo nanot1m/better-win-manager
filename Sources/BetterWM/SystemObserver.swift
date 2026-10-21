@@ -69,8 +69,7 @@ final class SystemObserver {
         var aliveCache: Set<WindowID>?
         func alive(_ id: WindowID) -> Bool {
             if aliveCache == nil {
-                let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
-                aliveCache = Set(list.compactMap { $0[kCGWindowNumber as String] as? CGWindowID })
+                aliveCache = CGWindowInfo.aliveIDs()
             }
             return aliveCache!.contains(id)
         }

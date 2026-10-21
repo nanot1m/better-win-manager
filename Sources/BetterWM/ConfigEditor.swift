@@ -830,10 +830,9 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         for (k, r) in recorders { r.spec = config.hotkeys[k] }
         on(ringSwitch, config.focusRing)
         on(ringFloating, config.focusRingFloating)
-        ringColor.color = NSColor(hex: config.focusRingColor) ?? .controlAccentColor
-        let sameFloating = config.focusRingFloatingColor.lowercased() == "same"
-        ringFloatingMode.selectItem(at: sameFloating ? 0 : 1)
-        ringFloatingColor.color = sameFloating ? ringColor.color : (NSColor(hex: config.focusRingFloatingColor) ?? ringColor.color)
+        ringColor.color = config.ringTiledColor
+        ringFloatingMode.selectItem(at: config.ringFloatingColorOverride == nil ? 0 : 1)
+        ringFloatingColor.color = config.ringColor(floating: true)
         floatingColorModeChanged()
         ringWidth.doubleValue = Double(config.focusRingWidth)
         ringRadius.doubleValue = Double(config.focusRingRadius)
@@ -885,14 +884,16 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     /// Reads every control back into a Config without touching disk.
     private func collect() -> Config {
         var config = self.config
+        let defaults = Config()
+        func number(_ field: NSTextField, or fallback: CGFloat) -> CGFloat { Double(field.stringValue).map { CGFloat($0) } ?? fallback }
         for (_, kp, slider, _) in sliders { config[keyPath: kp] = CGFloat(slider.doubleValue.rounded()) }
         config.autoTile = isOn(autoTileSwitch)
         config.tileExistingOnStart = isOn(tileOnStartSwitch)
         config.restoreLayouts = isOn(restoreSwitch)
         config.hideApps = isOn(hideAppsSwitch)
         config.debugLog = isOn(debugLogSwitch)
-        config.stackOffset = CGFloat(Double(stackOffsetField.stringValue) ?? 48)
-        config.stackScreensNarrowerThan = CGFloat(Double(stackNarrowField.stringValue) ?? 0)
+        config.stackOffset = number(stackOffsetField, or: defaults.stackOffset)
+        config.stackScreensNarrowerThan = number(stackNarrowField, or: defaults.stackScreensNarrowerThan)
         config.switcherThumbnails = isOn(switcherThumbsSwitch)
         config.switcher = isOn(switcherSwitch)
         config.overview = isOn(overviewSwitch)
@@ -905,7 +906,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             config.autoTileStrategy = st
         }
         config.dragModifiers = ["cmd", "alt", "ctrl", "shift"].filter { modifierButtons[$0]?.state == .on }.joined(separator: "+")
-        if config.dragModifiers.isEmpty { config.dragModifiers = "alt" }
+        if config.dragModifiers.isEmpty { config.dragModifiers = defaults.dragModifiers }
         config.hotkeys = recorders.compactMapValues(\.spec)
         config.focusRing = isOn(ringSwitch)
         config.focusRingFloating = isOn(ringFloating)
@@ -915,9 +916,9 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.focusRingRadius = CGFloat(ringRadius.doubleValue.rounded())
         config.focusRingAutoRadius = isOn(ringAutoRadius)
         config.bar = isOn(barSwitch)
-        config.barHeight = CGFloat(Double(barHeightField.stringValue) ?? 28)
-        config.barClockFormat = barClockField.stringValue.isEmpty ? "EEE d MMM  HH:mm" : barClockField.stringValue
-        config.barTitleFormat = barTitleField.stringValue.isEmpty ? "{app}" : barTitleField.stringValue
+        config.barHeight = number(barHeightField, or: defaults.barHeight)
+        config.barClockFormat = barClockField.stringValue.isEmpty ? defaults.barClockFormat : barClockField.stringValue
+        config.barTitleFormat = barTitleField.stringValue.isEmpty ? defaults.barTitleFormat : barTitleField.stringValue
         config.barDesktopApps = isOn(barDesktopAppsSwitch)
         config.barBatteryPercent = isOn(barBatteryPercentSwitch)
         config.barCat = isOn(barCatSwitch)
@@ -931,15 +932,15 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.barBorderColor = barBorderColorWell.color.hexString
         config.barActiveColor = barActiveMode.indexOfSelectedItem == 0 ? "accent" : barActiveColorWell.color.hexString
         config.barFocusOutlineColor = barOutlineMode.indexOfSelectedItem == 0 ? "auto" : barOutlineColorWell.color.hexString
-        config.barBorderWidth = CGFloat(Double(barBorderWidthField.stringValue) ?? 0)
-        config.barRadius = CGFloat(Double(barRadiusField.stringValue) ?? 0)
-        config.barPadding = CGFloat(Double(barPaddingField.stringValue) ?? 12)
-        config.barMargin = CGFloat(Double(barMarginField.stringValue) ?? 0)
-        config.barTopOffset = CGFloat(Double(barTopOffsetField.stringValue) ?? 0)
+        config.barBorderWidth = number(barBorderWidthField, or: defaults.barBorderWidth)
+        config.barRadius = number(barRadiusField, or: defaults.barRadius)
+        config.barPadding = number(barPaddingField, or: defaults.barPadding)
+        config.barMargin = number(barMarginField, or: defaults.barMargin)
+        config.barTopOffset = number(barTopOffsetField, or: defaults.barTopOffset)
         config.ignoreApps = ignoreText.string.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         config.floatSmallWindows = isOn(floatSmallSwitch)
-        config.smallWindowWidth = CGFloat(Double(smallW.stringValue) ?? 500)
-        config.smallWindowHeight = CGFloat(Double(smallH.stringValue) ?? 400)
+        config.smallWindowWidth = number(smallW, or: defaults.smallWindowWidth)
+        config.smallWindowHeight = number(smallH, or: defaults.smallWindowHeight)
         return config
     }
 

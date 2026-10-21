@@ -38,7 +38,7 @@ final class SystemReveal {
     }
 
     static func isShowingDesktop() -> Bool {
-        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else { return false }
-        return list.contains { ($0[kCGWindowOwnerName as String] as? String) == "Dock" && ($0[kCGWindowLayer as String] as? Int) == 18 }
+        // Show Desktop puts a Dock-owned window at this layer for as long as the desktop is revealed.
+        CGWindowInfo.list(.optionOnScreenOnly).contains { $0.owner == "Dock" && $0.layer == 18 }
     }
 }

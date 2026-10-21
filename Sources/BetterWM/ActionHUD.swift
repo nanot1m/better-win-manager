@@ -9,14 +9,8 @@ final class ActionHUD {
     private var hideWork: DispatchWorkItem?
 
     init() {
-        window = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        window.level = .screenSaver
-        window.ignoresMouseEvents = true
-        window.animationBehavior = .none
-        window.hasShadow = true
-        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        window = .overlay(level: .screenSaver, shadow: true, ignoresMouse: true,
+                         behavior: [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary])
         let bg = NSVisualEffectView()
         bg.material = .hudWindow
         bg.state = .active

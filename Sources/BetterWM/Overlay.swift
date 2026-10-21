@@ -143,3 +143,34 @@ extension CGPoint {
         return CGPoint(x: x, y: h - y)
     }
 }
+
+extension NSPanel {
+    /// Borderless, transparent, never takes focus, on every space.
+    static func overlay(level: NSWindow.Level, shadow: Bool = false, ignoresMouse: Bool = false,
+                        behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .transient, .fullScreenAuxiliary]) -> NSPanel {
+        let p = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        p.isOpaque = false
+        p.backgroundColor = .clear
+        p.level = level
+        p.hasShadow = shadow
+        p.ignoresMouseEvents = ignoresMouse
+        p.animationBehavior = .none
+        p.collectionBehavior = behavior
+        return p
+    }
+}
+
+enum Tween {
+    /// Ease-out cubic (or linear) from 0 to 1 over `duration`; runs during event tracking too.
+    @discardableResult
+    static func run(duration: TimeInterval, linear: Bool = false, step: @escaping (CGFloat) -> Void, done: @escaping () -> Void = {}) -> Timer {
+        let start = Date()
+        let timer = Timer(timeInterval: 1 / 120, repeats: true) { t in
+            let x = min(1, Date().timeIntervalSince(start) / max(0.01, duration))
+            step(CGFloat(linear ? x : 1 - pow(1 - x, 3)))
+            if x >= 1 { t.invalidate(); done() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        return timer
+    }
+}

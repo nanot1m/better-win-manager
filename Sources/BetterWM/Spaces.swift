@@ -59,19 +59,12 @@ enum Spaces {
 
     /// Ordinary windows on `space`, front to back, with their owners; a fullscreen Space has one (two in split view).
     static func windows(on space: SpaceID) -> [(id: CGWindowID, pid: pid_t)] {
-        guard let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else { return [] }
-        var out: [(id: CGWindowID, pid: pid_t)] = []
-        for info in list {
-            // A fullscreen window sits at layer 26, not 0; the owner being an ordinary app is the real test.
-            guard let layer = info[kCGWindowLayer as String] as? Int, (0...100).contains(layer),
-                  let pid = info[kCGWindowOwnerPID as String] as? pid_t, pid != getpid(),
-                  NSRunningApplication(processIdentifier: pid)?.activationPolicy == .regular,
-                  let id = info[kCGWindowNumber as String] as? CGWindowID,
-                  let b = info[kCGWindowBounds as String] as? [String: CGFloat], (b["Width"] ?? 0) > 200,
-                  spaces(of: id).contains(space) else { continue }
-            out.append((id, pid))
-        }
-        return out
+        // A fullscreen window sits at layer 26, not 0; the owner being an ordinary app is the real test.
+        CGWindowInfo.list(.optionAll).filter { w in
+            (0...100).contains(w.layer) && w.pid != getpid() && w.bounds.width > 200
+                && NSRunningApplication(processIdentifier: w.pid)?.activationPolicy == .regular
+                && spaces(of: w.id).contains(space)
+        }.map { ($0.id, $0.pid) }
     }
 
     static func owners(on space: SpaceID) -> [pid_t] {
@@ -88,16 +81,11 @@ enum Spaces {
     /// Standard windows visible right now, i.e. on the active Spaces, front to back.
     /// Matched to Accessibility windows by window ID; frames are ambiguous when two windows overlap exactly.
     static func visibleWindows() -> [AXWindow] {
-        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return [] }
         var axByPid: [pid_t: [(CGWindowID?, CGRect, AXWindow)]] = [:]
         var out: [AXWindow] = []
         var taken = Set<CGWindowID>()
-        for info in list {
-            guard (info[kCGWindowLayer as String] as? Int) == 0,
-                  let pid = info[kCGWindowOwnerPID as String] as? pid_t, pid != getpid(),
-                  let number = info[kCGWindowNumber as String] as? CGWindowID,
-                  let b = info[kCGWindowBounds as String] as? [String: CGFloat] else { continue }
-            let bounds = CGRect(x: b["X"] ?? 0, y: b["Y"] ?? 0, width: b["Width"] ?? 0, height: b["Height"] ?? 0)
+        for info in CGWindowInfo.list([.optionOnScreenOnly, .excludeDesktopElements]) where info.isOrdinaryOtherApp {
+            let pid = info.pid, number = info.id, bounds = info.bounds
             if axByPid[pid] == nil {
                 guard !AXResponsiveness.isUnresponsive(pid) else { axByPid[pid] = []; continue }
                 var v: CFTypeRef?
@@ -115,4 +103,30 @@ enum Spaces {
         }
         return out
     }
+}
+
+/// One entry of WindowServer's window list.
+struct CGWindowInfo {
+    let id: CGWindowID
+    let pid: pid_t
+    let layer: Int
+    let owner: String?
+    let bounds: CGRect
+
+    var isOrdinaryOtherApp: Bool { layer == 0 && pid != getpid() }
+
+    /// Front to back.
+    static func list(_ options: CGWindowListOption) -> [CGWindowInfo] {
+        let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
+        return raw.compactMap { d in
+            guard let id = d[kCGWindowNumber as String] as? CGWindowID, let pid = d[kCGWindowOwnerPID as String] as? pid_t,
+                  let layer = d[kCGWindowLayer as String] as? Int else { return nil }
+            let b = d[kCGWindowBounds as String] as? [String: CGFloat] ?? [:]
+            return CGWindowInfo(id: id, pid: pid, layer: layer, owner: d[kCGWindowOwnerName as String] as? String,
+                                bounds: CGRect(x: b["X"] ?? 0, y: b["Y"] ?? 0, width: b["Width"] ?? 0, height: b["Height"] ?? 0))
+        }
+    }
+
+    /// Window IDs WindowServer still knows, hidden or off screen included.
+    static func aliveIDs() -> Set<CGWindowID> { Set(list(.optionAll).map(\.id)) }
 }

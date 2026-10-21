@@ -134,32 +134,25 @@ public struct Reconciler {
         return (state, cmds)
     }
 
-    /// Frame changes needed so every tiled window on an active screen sits in its slot.
-    public func commands(for state: DesiredState, _ snapshot: Snapshot) -> [Command] {
-        var out: [Command] = []
-        for screen in snapshot.screens {
-            let geo = geometry(state.grid(for: screen.space), screen)
-            for (w, target) in geo.windowFrames() {
-                guard let actual = snapshot.window(w)?.frame else { continue }
-                // AX rounds to whole pixels; sub-pixel differences are not worth a round trip.
-                if !actual.approximatelyEquals(target, tolerance: 0.75) { out.append(.setFrame(w, target)) }
+    /// Every tiled window on an active screen with its slot and its real frame.
+    func slots(_ state: DesiredState, _ snapshot: Snapshot) -> [(window: WindowID, target: CGRect, actual: CGRect)] {
+        snapshot.screens.flatMap { screen in
+            geometry(state.grid(for: screen.space), screen).windowFrames().compactMap { w, target in
+                snapshot.window(w).map { (w, target, $0.frame) }
             }
         }
-        return out
+    }
+
+    /// Frame changes needed so every tiled window on an active screen sits in its slot.
+    public func commands(for state: DesiredState, _ snapshot: Snapshot) -> [Command] {
+        // AX rounds to whole pixels; sub-pixel differences are not worth a round trip.
+        slots(state, snapshot).filter { !$0.actual.approximatelyEquals($0.target, tolerance: 0.75) }.map { .setFrame($0.window, $0.target) }
     }
 
     /// Tiled windows whose real frame no longer matches their slot: the user moved or resized them by hand.
     /// A nudge under 10pt snaps back instead of floating the window.
     public func displaced(_ state: DesiredState, _ snapshot: Snapshot) -> [WindowID] {
-        var out: [WindowID] = []
-        for screen in snapshot.screens {
-            let geo = geometry(state.grid(for: screen.space), screen)
-            for (w, target) in geo.windowFrames() {
-                guard let actual = snapshot.window(w)?.frame else { continue }
-                if !actual.approximatelyEquals(target, tolerance: 10) { out.append(w) }
-            }
-        }
-        return out
+        slots(state, snapshot).filter { !$0.actual.approximatelyEquals($0.target, tolerance: 10) }.map(\.window)
     }
 
     func autoTileZone(for w: WindowInfo, grid: inout Grid, geo: GridGeometry, snapshot: Snapshot) -> DropZone {

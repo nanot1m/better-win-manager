@@ -171,7 +171,6 @@ final class WindowManager {
     }
 
     private func currentAppsByDesktop() -> [Int: [(pid: pid_t, windows: [WindowID])]] {
-        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return [:] }
         var out: [Int: [(pid: pid_t, windows: [WindowID])]] = [:]
         var counted = Set<WindowID>()
         func add(_ pid: pid_t, _ id: WindowID, to desktop: Int) {
@@ -180,12 +179,9 @@ final class WindowManager {
             else { out[desktop, default: []].append((pid, [id])) }
         }
         let v = virtualWS
-        for info in list {
-            guard (info[kCGWindowLayer as String] as? Int) == 0,
-                  let pid = info[kCGWindowOwnerPID as String] as? pid_t, pid != getpid(),
-                  let id = info[kCGWindowNumber as String] as? CGWindowID,
-                  virtualSet(ofWindow: id) === v, v.isKnown(id) else { continue }
-            add(pid, id, to: v.workspace(of: id))
+        for info in CGWindowInfo.list([.optionOnScreenOnly, .excludeDesktopElements]) where info.isOrdinaryOtherApp {
+            guard virtualSet(ofWindow: info.id) === v, v.isKnown(info.id) else { continue }
+            add(info.pid, info.id, to: v.workspace(of: info.id))
         }
         for id in v.knownWindows where v.isParked(id) && system.inLastSnapshot.contains(id) {
             guard let pid = system.pid(of: id) else { continue }
@@ -670,8 +666,7 @@ final class WindowManager {
     /// app on a desktop chip or count as a sibling.
     private func pruneDeadWindows() {
         guard !virtualSets.isEmpty,
-              let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else { return }
-        let alive = Set(list.compactMap { $0[kCGWindowNumber as String] as? CGWindowID })
+              case let alive = CGWindowInfo.aliveIDs(), !alive.isEmpty else { return }
         for v in virtualSets.values {
             for id in v.knownWindows where !alive.contains(id) {
                 v.forget(id)

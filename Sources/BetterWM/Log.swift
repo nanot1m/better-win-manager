@@ -55,14 +55,14 @@ enum Log {
     /// would be skipped. Titles are left out. The probe uses a longer timeout than the app does, to tell a slow
     /// app from one that does not answer at all.
     static func windowInventory() -> String {
-        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return "(no window list)" }
+        let list = CGWindowInfo.list([.optionOnScreenOnly, .excludeDesktopElements])
+        guard !list.isEmpty else { return "(no window list)" }
         var lines: [String] = []
         var axCache: [pid_t: (AXError, [AXUIElement], Int)] = [:]
-        for info in list {
-            guard (info[kCGWindowLayer as String] as? Int) == 0, let pid = info[kCGWindowOwnerPID as String] as? pid_t, pid != getpid(),
-                  let id = info[kCGWindowNumber as String] as? CGWindowID, let b = info[kCGWindowBounds as String] as? [String: CGFloat] else { continue }
+        for info in list where info.isOrdinaryOtherApp {
+            let pid = info.pid, id = info.id
             let app = NSRunningApplication(processIdentifier: pid)
-            let bundle = app?.bundleIdentifier ?? info[kCGWindowOwnerName as String] as? String ?? "?"
+            let bundle = app?.bundleIdentifier ?? info.owner ?? "?"
             if axCache[pid] == nil {
                 let el = AXUIElementCreateApplication(pid)
                 AXUIElementSetMessagingTimeout(el, 2)
@@ -82,7 +82,7 @@ enum Log {
                 AXUIElementCopyAttributeValue(el, kAXMinimizedAttribute as CFString, &minimized)
                 match = "role \(role as? String ?? "-") subrole \(sub as? String ?? "-")\((minimized as? Bool) == true ? " minimized" : "")"
             }
-            let size = "\(Int(b["Width"] ?? 0))x\(Int(b["Height"] ?? 0))"
+            let size = "\(Int(info.bounds.width))x\(Int(info.bounds.height))"
             lines.append("#\(id) \(bundle) \(size): AX \(err == .success ? "ok" : "error \(err.rawValue)") in \(ms) ms, \(axWindows.count) AX window(s); \(match)\(AXResponsiveness.isUnresponsive(pid) ? "; marked unresponsive" : "")")
         }
         return lines.isEmpty ? "(none)" : lines.joined(separator: "\n")
