@@ -108,11 +108,15 @@ public struct Reconciler {
                 }
             }
 
-            // Minimum sizes: a window still larger than the frame we asked for refused to shrink; distribute space around it.
+            // Minimum sizes: a window still larger than the frame we asked for refused to shrink; distribute space
+            // around it. Only once it had time to comply and did not change at all: a window passing through a
+            // larger frame (leaving fullscreen, mid-resize) has no such minimum.
             let geo = geometry(grid, screen)
             for (w, target) in geo.windowFrames() {
                 guard let actual = snapshot.window(w)?.frame, state.requested[w] == target else { continue }
                 if actual.approximatelyEquals(target, tolerance: 0.75) { state.attempts[w] = nil; continue }
+                guard let a = state.attempts[w], a.target == target, a.seen.approximatelyEquals(actual, tolerance: 0.75),
+                      snapshot.now.timeIntervalSince(a.since) >= DesiredState.attemptSpacing else { continue }
                 let wide = actual.width > target.width + 1, tall = actual.height > target.height + 1
                 guard wide || tall else { continue }
                 var m = grid.minSizes[w] ?? .zero

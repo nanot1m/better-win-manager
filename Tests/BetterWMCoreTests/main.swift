@@ -86,9 +86,24 @@ struct ReconcilerTests {
                                 win(2, CGRect(x: 800, y: 0, width: 1000, height: 1000))])
         var commands: [Command]
         (state, commands) = r.reconcile(state, refused)
-        expect(state.grid(for: space).minSizes[2]?.width == 1000, #function, 89)
+        expect(state.grid(for: space).minSizes[2] == nil, #function, #line)
+        var later = refused
+        later.now += 1
+        (state, commands) = r.reconcile(state, later)
+        expect(state.grid(for: space).minSizes[2]?.width == 1000, #function, #line)
         expect(commands == [.setFrame(1, CGRect(x: 0, y: 0, width: 600, height: 1000)),
                              .setFrame(2, CGRect(x: 600, y: 0, width: 1000, height: 1000))], #function, #line)
+    }
+
+    func testPassingThroughLargerFrameTeachesNoMinimum() {
+        let r = Reconciler(config: config)
+        var (state, _) = r.reconcile(DesiredState(), snapshot([win(1, area), win(2, area)]))
+        let t0 = Date(timeIntervalSinceReferenceDate: 0)
+        (state, _) = r.reconcile(state, snapshot([win(1, CGRect(x: 0, y: 0, width: 800, height: 1000)),
+                                                  win(2, CGRect(x: 400, y: 0, width: 1200, height: 1000))], now: t0 + 1))
+        (state, _) = r.reconcile(state, snapshot([win(1, CGRect(x: 0, y: 0, width: 800, height: 1000)),
+                                                  win(2, CGRect(x: 800, y: 0, width: 900, height: 1000))], now: t0 + 2))
+        expect(state.grid(for: space).minSizes[2] == nil, #function, #line)
     }
 
     func testNoTilingOnFirstVisitWhenDisabled() {
@@ -521,6 +536,7 @@ let tests: [(String, () -> Void)] = [
     ("refusedFrameGivesUpThenRetries", t.testRefusedFrameGivesUpThenRetries),
     ("forgetClearsEveryRecord", t.testForgetClearsEveryRecord),
     ("windowThatMovedHasNotRefused", t.testWindowThatMovedHasNotRefused),
+    ("passingThroughLargerFrameTeachesNoMinimum", t.testPassingThroughLargerFrameTeachesNoMinimum),
     ("parkingFollowsActiveWorkspace", t.testParkingFollowsActiveWorkspace),
     ("hideableAppIsHiddenNotParked", t.testHideableAppIsHiddenNotParked),
     ("windowRefusingToParkJoinsActiveWorkspace", t.testWindowRefusingToParkJoinsActiveWorkspace),
