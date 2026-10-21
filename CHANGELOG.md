@@ -7,7 +7,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 ## [Unreleased]
 
 ### Fixed
-- Clicking a control that changes a window's frame by itself (YouTube's fullscreen button, a double-click zoom) untiled the window as if it had been dragged by hand. Only a press that moves the mouse at least 20 points counts now; a plain click also no longer saves the fullscreen frame as the window's floating spot.
+- Clicking a control that changes a window's frame by itself (YouTube's fullscreen button, a double-click zoom) untiled the window as if it had been dragged by hand. Only a press that moves the mouse at least 20 points counts now; a plain click also no longer saves the fullscreen frame as the window's floating spot. A shorter drag snaps the window back to its slot on release.
 
 ## [0.17.0] - 2026-10-21
 

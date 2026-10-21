@@ -137,7 +137,8 @@ final class DragController {
             let id = draggedID
             // A click that changes the window's frame by itself (a fullscreen button, a double-click zoom) is
             // not the user placing it; only a press that carried the mouse at least 20pt is.
-            let byHand = manager.interacting && hypot(p.x - dragStart.x, p.y - dragStart.y) >= 20
+            let moved = manager.interacting
+            let byHand = moved && hypot(p.x - dragStart.x, p.y - dragStart.y) >= 20
             let finish = { [manager] in
                 manager.interacting = false
                 if let w, let zone {
@@ -148,6 +149,9 @@ final class DragController {
                     if let id, let w, !w.frame.approximatelyEquals(original, tolerance: 10) { manager.releaseDisplacedWindow(id) }
                     // Only a plain drag or resize settles a new floating spot; a ⌥-drag that misses every zone does not.
                     if let w, !alt { manager.rememberFloatingFrame(w) }
+                } else if moved {
+                    // A nudge short of the threshold: tiled windows go straight back to their slots.
+                    manager.apply()
                 }
             }
             // Let the app complete its own move or resize before we inspect frames.
