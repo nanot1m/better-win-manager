@@ -42,7 +42,15 @@ final class WindowManager {
     /// The set a window belongs to: that of the macOS desktop it is on.
     private func virtualSet(ofWindow id: WindowID) -> VirtualWorkspaces {
         guard let real = Spaces.spaces(of: id).first else { return virtualWS }
+        // A window gone fullscreen is away from its desktop, not on a new one: it keeps its workspace and slot.
+        if Spaces.isFullscreen(real), let home = virtualSets.values.first(where: { $0.realSpace != real && $0.isKnown(id) }) { return home }
         return virtualSet(realSpace: real)
+    }
+
+    /// On a fullscreen Space: macOS owns its frame until it comes back.
+    private func isAway(_ id: WindowID) -> Bool { Spaces.spaces(of: id).first.map(Spaces.isFullscreen) ?? false }
+    private func movable(_ commands: [Command]) -> [Command] {
+        commands.filter { if case let .setFrame(w, _) = $0 { return !isAway(w) } else { return true } }
     }
     /// Visible window IDs front to back from the last full tick; avoids re-enumerating on every gesture frame.
     private var zOrder: [WindowID] = []
@@ -479,7 +487,7 @@ final class WindowManager {
     /// Parks windows of inactive workspaces and restores returning floating ones; tiled ones follow their grid.
     private func applyVirtualParking(_ snap: Snapshot) {
         var bySet: [SpaceID: [WindowID]] = [:]
-        for w in snap.windows { bySet[virtualSet(ofWindow: w.id).realSpace, default: []].append(w.id) }
+        for w in snap.windows where !isAway(w.id) { bySet[virtualSet(ofWindow: w.id).realSpace, default: []].append(w.id) }
         for (real, ids) in bySet {
             let v = virtualSet(realSpace: real)
             v.apply(windows: ids,
@@ -667,7 +675,8 @@ final class WindowManager {
             virtualSets.values.forEach { $0.rememberHomes(snap.windows) }
             restoreSavedModes(snap)
             let before = state
-            let (next, commands) = reconciler.reconcile(state, snap)
+            let (next, proposed) = reconciler.reconcile(state, snap)
+            let commands = movable(proposed)
             state = next
             logReconcileChanges(from: before, to: next)
             let ids = Set(snap.windows.map(\.id))
@@ -885,7 +894,7 @@ final class WindowManager {
     /// Push the current desired state to the screen without re-reconciling; used during gestures and after edits.
     func apply() {
         let snap = system.lightSnapshot(tracked: tracked)
-        let cmds = reconciler.commands(for: state, snap)
+        let cmds = movable(reconciler.commands(for: state, snap))
         for case let .setFrame(w, f) in cmds { state.requested[w] = f }
         anticipateRing(cmds, snap.focused)
         system.execute(cmds)

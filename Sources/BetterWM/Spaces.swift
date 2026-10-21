@@ -24,15 +24,23 @@ enum Spaces {
         return current(cid, CFUUIDCreateString(nil, uuid))
     }
 
+    /// Fullscreen Spaces only come and go with a Space change, so the answer is kept until the next one.
+    private static var fullscreenCache: Set<SpaceID>?
+    private static let invalidateOnSpaceChange: Void = {
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in
+            fullscreenCache = nil
+        }
+    }()
+
     /// True when the Space is not a user desktop, i.e. a fullscreen app or split view (type 4).
     static func isFullscreen(_ space: SpaceID) -> Bool {
-        guard let cid = mainConnection?(), let arr = managedDisplaySpaces?(cid) as? [[String: Any]] else { return false }
-        for display in arr {
-            for sp in display["Spaces"] as? [[String: Any]] ?? [] where (sp["id64"] as? SpaceID) == space {
-                return (sp["type"] as? Int) != 0
-            }
+        _ = invalidateOnSpaceChange
+        if fullscreenCache == nil {
+            guard let cid = mainConnection?(), let arr = managedDisplaySpaces?(cid) as? [[String: Any]] else { return false }
+            fullscreenCache = Set(arr.flatMap { $0["Spaces"] as? [[String: Any]] ?? [] }
+                .filter { ($0["type"] as? Int) != 0 }.compactMap { $0["id64"] as? SpaceID })
         }
-        return false
+        return fullscreenCache!.contains(space)
     }
 
     /// Fullscreen and split-view Spaces on the display showing `space`, in Mission Control order.
