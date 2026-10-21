@@ -26,23 +26,30 @@ enum Spaces {
 
     /// Asked per window during an update, so `body` shares one answer; macOS lists a new fullscreen Space only
     /// some time after the switch to it, so nothing longer-lived is safe.
-    private static var fullscreenCache: Set<SpaceID>?
+    private static var typesCache: (desktops: Set<SpaceID>, fullscreen: Set<SpaceID>)?
     private static var caching = false
     static func withSpaceTypesCached<T>(_ body: () -> T) -> T {
         caching = true
-        defer { caching = false; fullscreenCache = nil }
+        defer { caching = false; typesCache = nil }
         return body()
     }
 
-    /// True when the Space is not a user desktop, i.e. a fullscreen app or split view (type 4).
-    static func isFullscreen(_ space: SpaceID) -> Bool {
-        if let c = fullscreenCache { return c.contains(space) }
-        guard let cid = mainConnection?(), let arr = managedDisplaySpaces?(cid) as? [[String: Any]] else { return false }
-        let all = Set(arr.flatMap { $0["Spaces"] as? [[String: Any]] ?? [] }
-            .filter { ($0["type"] as? Int) != 0 }.compactMap { $0["id64"] as? SpaceID })
-        if caching { fullscreenCache = all }
-        return all.contains(space)
+    private static func spaceTypes() -> (desktops: Set<SpaceID>, fullscreen: Set<SpaceID>)? {
+        if let c = typesCache { return c }
+        guard let cid = mainConnection?(), let arr = managedDisplaySpaces?(cid) as? [[String: Any]] else { return nil }
+        let all = arr.flatMap { $0["Spaces"] as? [[String: Any]] ?? [] }
+        func ids(_ keep: (Int?) -> Bool) -> Set<SpaceID> { Set(all.filter { keep($0["type"] as? Int) }.compactMap { $0["id64"] as? SpaceID }) }
+        let types = (desktops: ids { $0 == 0 }, fullscreen: ids { $0 != 0 })
+        if caching { typesCache = types }
+        return types
     }
+
+    /// True when the Space is not a user desktop, i.e. a fullscreen app or split view (type 4).
+    static func isFullscreen(_ space: SpaceID) -> Bool { spaceTypes()?.fullscreen.contains(space) ?? false }
+
+    /// True for a listed user desktop. A fullscreen Space being torn down is no longer listed while its window
+    /// is still on it, so "not fullscreen" is not the same as "a desktop".
+    static func isDesktop(_ space: SpaceID) -> Bool { spaceTypes()?.desktops.contains(space) ?? true }
 
     /// Fullscreen and split-view Spaces on the display showing `space`, in Mission Control order.
     static func fullscreenSpaces(alongside space: SpaceID) -> [SpaceID] {

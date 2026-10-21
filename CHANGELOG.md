@@ -8,7 +8,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ### Fixed
 - A tiled window could stay stuck in the parking corner after leaving fullscreen and switching desktops quickly: frames it missed during the fullscreen animation counted as refusals, and the layout stopped moving it. Only a window that did not move at all since the last request counts as refusing now, and requests less than half a second apart (the settle passes of one update) count once, the same rules parking uses.
-- A window put into fullscreen was treated as arriving on a new desktop: it lost its workspace and grid slot, was tiled on the fullscreen Space, and came back with that size. It now stays a member of its desktop, keeps its slot, and is left alone until it returns.
+- A window put into fullscreen was treated as arriving on a new desktop: it lost its workspace and grid slot, was tiled on the fullscreen Space, and came back with that size. It now stays a member of its desktop, keeps its slot, and is left alone until it returns. That includes the moment macOS tears the fullscreen Space down, when the window sits on a Space that is no longer listed.
 - A window leaving fullscreen came back too large: while it animated out it was briefly bigger than its slot, and that was learned as its minimum size, so every later slot was built around a screen-sized window. A minimum is learned now only from a window that had time to shrink and stayed exactly the same.
 
 ## [0.17.1] - 2026-10-21

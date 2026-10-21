@@ -113,7 +113,7 @@ public struct Reconciler {
             // larger frame (leaving fullscreen, mid-resize) has no such minimum.
             let geo = geometry(grid, screen)
             for (w, target) in geo.windowFrames() {
-                guard let actual = snapshot.window(w)?.frame, state.requested[w] == target else { continue }
+                guard !snapshot.away.contains(w), let actual = snapshot.window(w)?.frame, state.requested[w] == target else { continue }
                 if actual.approximatelyEquals(target, tolerance: 0.75) { state.attempts[w] = nil; continue }
                 guard let a = state.attempts[w], a.target == target, a.seen.approximatelyEquals(actual, tolerance: 0.75),
                       snapshot.now.timeIntervalSince(a.since) >= DesiredState.attemptSpacing else { continue }
@@ -154,7 +154,7 @@ public struct Reconciler {
     func slots(_ state: DesiredState, _ snapshot: Snapshot) -> [(window: WindowID, target: CGRect, actual: CGRect)] {
         snapshot.screens.flatMap { screen in
             geometry(state.grid(for: screen.space), screen).windowFrames().compactMap { w, target in
-                snapshot.window(w).map { (w, target, $0.frame) }
+                snapshot.away.contains(w) ? nil : snapshot.window(w).map { (w, target, $0.frame) }
             }
         }
     }

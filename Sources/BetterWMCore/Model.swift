@@ -41,6 +41,8 @@ public struct Snapshot: Equatable {
     public var focused: WindowID?
     /// When it was taken; the core never reads the clock itself.
     public var now: Date
+    /// Windows away from their desktop (fullscreen): they keep their slot, but macOS owns their frame.
+    public var away: Set<WindowID> = []
 
     public init(screens: [ScreenInfo], windows: [WindowInfo], focused: WindowID?, now: Date) {
         self.screens = screens

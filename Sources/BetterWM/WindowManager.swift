@@ -43,15 +43,13 @@ final class WindowManager {
     private func virtualSet(ofWindow id: WindowID) -> VirtualWorkspaces {
         guard let real = Spaces.spaces(of: id).first else { return virtualWS }
         // A window gone fullscreen is away from its desktop, not on a new one: it keeps its workspace and slot.
-        if Spaces.isFullscreen(real), let home = virtualSets.values.first(where: { $0.realSpace != real && $0.isKnown(id) }) { return home }
+        guard Spaces.isDesktop(real) else { return virtualSets.values.first { $0.realSpace != real && $0.isKnown(id) } ?? virtualWS }
         return virtualSet(realSpace: real)
     }
 
-    /// On a fullscreen Space: macOS owns its frame until it comes back.
-    private func isAway(_ id: WindowID) -> Bool { Spaces.spaces(of: id).first.map(Spaces.isFullscreen) ?? false }
-    private func movable(_ commands: [Command]) -> [Command] {
-        commands.filter { if case let .setFrame(w, _) = $0 { return !isAway(w) } else { return true } }
-    }
+    /// Fullscreen, split view, or a fullscreen Space being torn down: macOS owns its frame until it is back.
+    private func isAway(_ id: WindowID) -> Bool { Spaces.spaces(of: id).first.map { !Spaces.isDesktop($0) } ?? false }
+    private func markAway(_ snap: inout Snapshot) { snap.away = Set(snap.windows.map(\.id).filter(isAway)) }
     /// Visible window IDs front to back from the last full tick; avoids re-enumerating on every gesture frame.
     private var zOrder: [WindowID] = []
     /// Front-to-back order of visible windows as of the last full tick.
@@ -487,7 +485,7 @@ final class WindowManager {
     /// Parks windows of inactive workspaces and restores returning floating ones; tiled ones follow their grid.
     private func applyVirtualParking(_ snap: Snapshot) {
         var bySet: [SpaceID: [WindowID]] = [:]
-        for w in snap.windows where !isAway(w.id) { bySet[virtualSet(ofWindow: w.id).realSpace, default: []].append(w.id) }
+        for w in snap.windows where !snap.away.contains(w.id) { bySet[virtualSet(ofWindow: w.id).realSpace, default: []].append(w.id) }
         for (real, ids) in bySet {
             let v = virtualSet(realSpace: real)
             v.apply(windows: ids,
@@ -671,16 +669,16 @@ final class WindowManager {
         for pass in 0..<(settle ? 3 : 1) {
             let t0 = Date()
             var snap = system.snapshot(tracked: tracked)
+            markAway(&snap)
             timing.append("snap\(pass) \(Int(Date().timeIntervalSince(t0) * 1000))")
             zOrder = snap.windows.map(\.id)
             // Placing windows changes what the next snapshot shows, and apps unhiding during launch add windows
             // between snapshots; every window must pass through assignment before parking can adopt it.
-            for _ in 0..<3 where assignNewVirtualWindows(snap) { snap = system.snapshot(tracked: tracked) }
+            for _ in 0..<3 where assignNewVirtualWindows(snap) { snap = system.snapshot(tracked: tracked); markAway(&snap) }
             virtualSets.values.forEach { $0.rememberHomes(snap.windows) }
             restoreSavedModes(snap)
             let before = state
-            let (next, proposed) = reconciler.reconcile(state, snap)
-            let commands = movable(proposed)
+            let (next, commands) = reconciler.reconcile(state, snap)
             state = next
             logReconcileChanges(from: before, to: next)
             let ids = Set(snap.windows.map(\.id))
@@ -725,7 +723,7 @@ final class WindowManager {
     /// Gives every not-yet-assigned window a workspace: its saved slot if one matches, otherwise the active one.
     /// Returns true if any window was placed from the saved layout, so the snapshot should be rebuilt.
     private func assignNewVirtualWindows(_ snap: Snapshot) -> Bool {
-        var pool = snap.windows.filter { !isAway($0.id) && !virtualSet(ofWindow: $0.id).isKnown($0.id) }
+        var pool = snap.windows.filter { !snap.away.contains($0.id) && !virtualSet(ofWindow: $0.id).isKnown($0.id) }
         guard !pool.isEmpty else { return false }
         if Date() < virtualRestoreDeadline { Log.write("restore", "unassigned: \(pool.map { describe($0.id) })") }
         var placed = false
@@ -897,8 +895,9 @@ final class WindowManager {
 
     /// Push the current desired state to the screen without re-reconciling; used during gestures and after edits.
     func apply() {
-        let snap = system.lightSnapshot(tracked: tracked)
-        let cmds = movable(reconciler.commands(for: state, snap))
+        var snap = system.lightSnapshot(tracked: tracked)
+        markAway(&snap)
+        let cmds = reconciler.commands(for: state, snap)
         for case let .setFrame(w, f) in cmds { state.requested[w] = f }
         anticipateRing(cmds, snap.focused)
         system.execute(cmds)

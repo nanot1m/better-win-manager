@@ -106,6 +106,19 @@ struct ReconcilerTests {
         expect(state.grid(for: space).minSizes[2] == nil, #function, #line)
     }
 
+    func testAwayWindowKeepsSlotAndIsLeftAlone() {
+        let r = Reconciler(config: config)
+        var (state, _) = r.reconcile(DesiredState(), snapshot([win(1, area), win(2, area)]))
+        var away = snapshot([win(1, CGRect(x: 0, y: 0, width: 800, height: 1000)), win(2, area)], now: Date(timeIntervalSinceReferenceDate: 5))
+        away.away = [2]
+        var commands: [Command]
+        (state, commands) = r.reconcile(state, away)
+        away.now += 5
+        (state, commands) = r.reconcile(state, away)
+        expect(state.isTiled(2) && state.grid(for: space).minSizes[2] == nil, #function, #line)
+        expect(!commands.contains { if case .setFrame(2, _) = $0 { return true } else { return false } }, #function, #line)
+    }
+
     func testNoTilingOnFirstVisitWhenDisabled() {
         var c = config
         c.tileExistingOnStart = false
@@ -537,6 +550,7 @@ let tests: [(String, () -> Void)] = [
     ("forgetClearsEveryRecord", t.testForgetClearsEveryRecord),
     ("windowThatMovedHasNotRefused", t.testWindowThatMovedHasNotRefused),
     ("passingThroughLargerFrameTeachesNoMinimum", t.testPassingThroughLargerFrameTeachesNoMinimum),
+    ("awayWindowKeepsSlotAndIsLeftAlone", t.testAwayWindowKeepsSlotAndIsLeftAlone),
     ("parkingFollowsActiveWorkspace", t.testParkingFollowsActiveWorkspace),
     ("hideableAppIsHiddenNotParked", t.testHideableAppIsHiddenNotParked),
     ("windowRefusingToParkJoinsActiveWorkspace", t.testWindowRefusingToParkJoinsActiveWorkspace),
