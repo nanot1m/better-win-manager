@@ -76,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.desktopApps = { [weak self] in self?.manager.appsByDesktop() ?? [:] }
         bar.focusedWindow = { [weak self] in self?.manager.focusRing.currentWindowID }
         bar.isInteracting = { [weak self] in self?.manager.interacting ?? false }
+        manager.onInteractionEnd = { [weak self] in self?.bar.interactionEnded() }
         manager.onWindowsChange = { [weak self] in self?.bar.focusChanged() }
         manager.focusRing.onFocusChange = { [weak self] in self?.bar.focusChanged() }
         manager.onDesktopChange = { [weak self] in

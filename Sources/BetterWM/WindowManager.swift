@@ -60,7 +60,13 @@ final class WindowManager {
     /// Bumped per Space switch so only the latest one's settle clears `switching`.
     private var spaceSwitchGeneration = 0
     /// Set while the user drags a window or a gap handle; reconciling mid-gesture would fight it.
-    var interacting = false { didSet { interactionScreens = nil } }
+    var interacting = false {
+        didSet {
+            interactionScreens = nil
+            if oldValue, !interacting { onInteractionEnd?() }
+        }
+    }
+    var onInteractionEnd: (() -> Void)?
     /// Screen geometry is stable for the length of a drag; asking SkyLight for it on every mouse move is not free.
     private var interactionScreens: [ScreenInfo]?
     private func screens() -> [ScreenInfo] {
@@ -693,6 +699,7 @@ final class WindowManager {
                 state.forget(id)
                 floatingFrames[id] = nil
                 adoptedInBackground[id] = nil
+                Thumbnails.forget(id)
                 lastFocusedByWorkspace = lastFocusedByWorkspace.filter { $0.value != id }
             }
         }

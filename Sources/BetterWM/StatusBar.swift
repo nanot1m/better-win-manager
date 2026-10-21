@@ -67,6 +67,7 @@ final class StatusBar {
         if config.bar && config.barWidgets.contains(.media) { media.start() } else { media.stop() }
         if config.bar && config.barWidgets.contains(.sound) { sound.start() } else { sound.stop() }
         self.config = config
+        clockFormatter = makeClockFormatter()
         weather.apply(config)
         rebuild()
     }
@@ -117,13 +118,26 @@ final class StatusBar {
 
     /// Events come in bursts and a refresh scans every window for the desktop chips; one pass per burst.
     private var refreshScheduled = false
+    /// A refresh mid-drag would stutter the gesture; it waits for `interactionEnded`.
+    private var refreshAfterInteraction = false
+    func interactionEnded() {
+        guard refreshAfterInteraction else { return }
+        refreshAfterInteraction = false
+        refresh()
+    }
+    private lazy var clockFormatter = makeClockFormatter()
+    private func makeClockFormatter() -> DateFormatter {
+        let f = DateFormatter()
+        f.dateFormat = config.barClockFormat
+        return f
+    }
     private func refresh() {
         guard !refreshScheduled else { return }
         refreshScheduled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self else { return }
             self.refreshScheduled = false
-            if self.isInteracting() { self.refresh() } else { self.refreshNow() }
+            if self.isInteracting() { self.refreshAfterInteraction = true } else { self.refreshNow() }
         }
     }
 
@@ -138,8 +152,6 @@ final class StatusBar {
         let app = focused.flatMap { NSRunningApplication(processIdentifier: $0.pid)?.localizedName }
             ?? NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
         let title = focused?.title ?? ""
-        let formatter = DateFormatter()
-        formatter.dateFormat = config.barClockFormat
         let model = BarView.Model(
             desktops: desktopCount(),
             current: currentDesktop(),
@@ -148,7 +160,7 @@ final class StatusBar {
             fullscreen: config.barDesktopApps ? fullscreenSpaces() : [],
             app: app,
             title: title,
-            clock: config.barClock ? formatter.string(from: Date()) : nil,
+            clock: config.barClock ? clockFormatter.string(from: Date()) : nil,
             weather: weather.reading.map { r in
                 (String(format: "%.0f°", r.temperature), r.symbol)
             },
