@@ -135,11 +135,14 @@ final class DragController {
             let zone = currentZone?.0
             let original = originalFrame
             let id = draggedID
+            // A click that changes the window's frame by itself (a fullscreen button, a double-click zoom) is
+            // not the user placing it; only a press with real mouse motion is.
+            let byHand = manager.interacting
             let finish = { [manager] in
                 manager.interacting = false
                 if let w, let zone {
                     manager.drop(w, into: zone, at: p, from: original)
-                } else {
+                } else if byHand {
                     // Only a window that actually moved or resized during this drag was placed by hand; one that
                     // was merely off its slot already (macOS moved it, it refused a size) must not be untiled.
                     if let id, let w, !w.frame.approximatelyEquals(original, tolerance: 10) { manager.releaseDisplacedWindow(id) }
