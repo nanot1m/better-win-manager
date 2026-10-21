@@ -662,6 +662,10 @@ final class WindowManager {
     /// since the window-server events the moves cause bring a tick right after anyway.
     func tick(settle: Bool = true) {
         guard !interacting, !switching else { return }
+        Spaces.withSpaceTypesCached { tickNow(settle: settle) }
+    }
+
+    private func tickNow(settle: Bool) {
         pruneDeadWindows()
         var timing: [String] = []
         for pass in 0..<(settle ? 3 : 1) {
@@ -721,7 +725,7 @@ final class WindowManager {
     /// Gives every not-yet-assigned window a workspace: its saved slot if one matches, otherwise the active one.
     /// Returns true if any window was placed from the saved layout, so the snapshot should be rebuilt.
     private func assignNewVirtualWindows(_ snap: Snapshot) -> Bool {
-        var pool = snap.windows.filter { !virtualSet(ofWindow: $0.id).isKnown($0.id) }
+        var pool = snap.windows.filter { !isAway($0.id) && !virtualSet(ofWindow: $0.id).isKnown($0.id) }
         guard !pool.isEmpty else { return false }
         if Date() < virtualRestoreDeadline { Log.write("restore", "unassigned: \(pool.map { describe($0.id) })") }
         var placed = false

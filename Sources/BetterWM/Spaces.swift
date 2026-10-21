@@ -24,23 +24,24 @@ enum Spaces {
         return current(cid, CFUUIDCreateString(nil, uuid))
     }
 
-    /// Fullscreen Spaces only come and go with a Space change, so the answer is kept until the next one.
+    /// Asked per window during an update, so `body` shares one answer; macOS lists a new fullscreen Space only
+    /// some time after the switch to it, so nothing longer-lived is safe.
     private static var fullscreenCache: Set<SpaceID>?
-    private static let invalidateOnSpaceChange: Void = {
-        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in
-            fullscreenCache = nil
-        }
-    }()
+    private static var caching = false
+    static func withSpaceTypesCached<T>(_ body: () -> T) -> T {
+        caching = true
+        defer { caching = false; fullscreenCache = nil }
+        return body()
+    }
 
     /// True when the Space is not a user desktop, i.e. a fullscreen app or split view (type 4).
     static func isFullscreen(_ space: SpaceID) -> Bool {
-        _ = invalidateOnSpaceChange
-        if fullscreenCache == nil {
-            guard let cid = mainConnection?(), let arr = managedDisplaySpaces?(cid) as? [[String: Any]] else { return false }
-            fullscreenCache = Set(arr.flatMap { $0["Spaces"] as? [[String: Any]] ?? [] }
-                .filter { ($0["type"] as? Int) != 0 }.compactMap { $0["id64"] as? SpaceID })
-        }
-        return fullscreenCache!.contains(space)
+        if let c = fullscreenCache { return c.contains(space) }
+        guard let cid = mainConnection?(), let arr = managedDisplaySpaces?(cid) as? [[String: Any]] else { return false }
+        let all = Set(arr.flatMap { $0["Spaces"] as? [[String: Any]] ?? [] }
+            .filter { ($0["type"] as? Int) != 0 }.compactMap { $0["id64"] as? SpaceID })
+        if caching { fullscreenCache = all }
+        return all.contains(space)
     }
 
     /// Fullscreen and split-view Spaces on the display showing `space`, in Mission Control order.
