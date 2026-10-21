@@ -373,11 +373,15 @@ struct ReconcilerTests {
         let t0 = Date(timeIntervalSinceReferenceDate: 0)
         let stuck = CGRect(x: 0, y: 0, width: 10, height: 10)
         var (state, commands) = r.reconcile(DesiredState(), snapshot([win(1, stuck)], now: t0))
-        for _ in 1..<DesiredState.maxAttempts { (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: t0)) }
+        // Settle passes of one tick are a single attempt.
+        for _ in 0..<5 { (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: t0)) }
+        expect(commands.count == 1, #function, #line)
+        var now = t0
+        for _ in 1..<DesiredState.maxAttempts { now += 1; (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: now)) }
         expect(!commands.isEmpty, #function, #line)
-        (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: t0.addingTimeInterval(1)))
+        (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: now + 1))
         expect(commands.isEmpty, #function, #line)
-        (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: t0.addingTimeInterval(DesiredState.retryAfter + 1)))
+        (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: now + DesiredState.retryAfter + 1))
         expect(commands.count == 1, #function, #line)
     }
 
@@ -387,8 +391,9 @@ struct ReconcilerTests {
         let stuck = CGRect(x: 0, y: 0, width: 10, height: 10)
         let parked = CGRect(x: 1598, y: 998, width: 10, height: 10)
         var (state, commands) = r.reconcile(DesiredState(), snapshot([win(1, stuck)], now: t0))
-        for _ in 1..<DesiredState.maxAttempts { (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: t0)) }
-        (state, commands) = r.reconcile(state, snapshot([win(1, parked)], now: t0))
+        var now = t0
+        for _ in 1..<DesiredState.maxAttempts { now += 1; (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: now)) }
+        (state, commands) = r.reconcile(state, snapshot([win(1, parked)], now: now + 1))
         expect(commands.count == 1, #function, #line)
     }
 

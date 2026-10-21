@@ -18,6 +18,8 @@ public struct DesiredState: Equatable {
     public static let retryAfter: TimeInterval = 3
     public var attempts: [WindowID: Attempt] = [:]
     public static let maxAttempts = 4
+    /// Asks closer together than this are one attempt: the app has not had time to act on the first.
+    public static let attemptSpacing: TimeInterval = 0.5
     /// Windows floating on purpose (untiled by hand or restored as floating); never arrivals, even on a first visit.
     public var floating: Set<WindowID> = []
 
@@ -133,6 +135,7 @@ public struct Reconciler {
                     state.attempts[w] = DesiredState.Attempt(target: f, seen: seen, count: 1, since: snapshot.now)
                     return true
                 }
+                guard snapshot.now.timeIntervalSince(a.since) >= DesiredState.attemptSpacing else { return true }
                 state.attempts[w] = DesiredState.Attempt(target: f, seen: seen, count: a.count + 1, since: snapshot.now)
             } else {
                 state.attempts[w] = DesiredState.Attempt(target: f, seen: seen, count: 1, since: snapshot.now)
