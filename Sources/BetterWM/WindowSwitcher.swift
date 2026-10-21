@@ -38,10 +38,31 @@ final class WindowSwitcher {
 
     /// Called from the hotkey: opens the switcher on the first press, cycles on later presses while ⌥ is held.
     func step(reverse: Bool) {
-        if !panel.isVisible { open() }
+        if !panel.isVisible {
+            open()
+            guard !flat.isEmpty else { return }
+            selected = firstTarget(reverse: reverse)
+            view.selected = selected
+            return
+        }
         guard !flat.isEmpty else { return }
         selected = (selected + (reverse ? -1 : 1) + flat.count) % flat.count
         view.selected = selected
+    }
+
+    /// The first press goes to the neighbour of the focused window on the current desktop, wrapping within it;
+    /// only a desktop with no other window hands over to the next (or previous) desktop.
+    private func firstTarget(reverse: Bool) -> Int {
+        let focusedID = AXWindow.focused?.windowID
+        guard let current = groups.first(where: { $0.desktop == manager.currentDesktop }) ?? groups.first else { return 0 }
+        let base = flat.firstIndex { $0.desktop == current.desktop } ?? 0
+        let n = current.items.count
+        if n > 1 {
+            let i = current.items.firstIndex { $0.id == focusedID } ?? (reverse ? 0 : n - 1)
+            return base + (i + (reverse ? -1 : 1) + n) % n
+        }
+        guard flat.count > n else { return base }
+        return reverse ? (base - 1 + flat.count) % flat.count : (base + n) % flat.count
     }
 
     private func open() {
@@ -53,8 +74,7 @@ final class WindowSwitcher {
             })
         }.filter { !$0.items.isEmpty }
         flat = groups.flatMap(\.items)
-        // Like ⌘Tab: start on the most recent *other* window.
-        selected = flat.count > 1 ? 1 : 0
+        selected = 0
         view.configure(groups: groups, current: manager.currentDesktop, flat: flat, thumbnails: manager.config.switcherThumbnails)
         view.selected = selected
         let size = view.fittingSize

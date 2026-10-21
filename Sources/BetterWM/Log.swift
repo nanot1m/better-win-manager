@@ -6,6 +6,8 @@ import Cocoa
 enum Log {
     static let path = Config.path.deletingLastPathComponent().appendingPathComponent("log.txt")
     static var enabled = true
+    /// Window titles can hold anything (message previews, document names, URLs); only a dev build logs them.
+    static let includeTitles = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev") == "dev"
     private static var handle: FileHandle?
     private static let queue = DispatchQueue(label: "betterwm.log")
     private static let stamp: DateFormatter = {

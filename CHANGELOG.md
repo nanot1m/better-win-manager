@@ -4,6 +4,14 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [0.16.2] - 2026-10-21
+
+### Changed
+- Release builds no longer write window titles to the log (and so to the diagnostics report); windows are identified by app and window number. Development builds keep titles.
+
+### Fixed
+- The ⌥Tab switcher skipped a window: the first press landed two entries in, which with two windows on the desktop meant the next desktop. It now starts on the window after the focused one on the current desktop and only moves to another desktop when there is no other window.
+
 ## [0.16.1] - 2026-10-21
 
 ### Fixed

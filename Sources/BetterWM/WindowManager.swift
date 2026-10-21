@@ -1138,7 +1138,8 @@ final class WindowManager {
 
     /// Short, stable description of a window for the log: app, title, id.
     func describe(_ w: AXWindow) -> String {
-        "\(w.bundleID?.split(separator: ".").last.map(String.init) ?? "?")/\"\(w.title.prefix(30))\"#\(w.windowID ?? 0)"
+        let app = w.bundleID?.split(separator: ".").last.map(String.init) ?? "?"
+        return Log.includeTitles ? "\(app)/\"\(w.title.prefix(30))\"#\(w.windowID ?? 0)" : "\(app)#\(w.windowID ?? 0)"
     }
     func describe(_ id: WindowID) -> String { system.axWindow(id).map(describe) ?? "#\(id)" }
 
