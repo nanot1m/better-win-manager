@@ -455,9 +455,7 @@ extension AppDelegate {
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         Log.write("app", "layout state reset requested")
-        manager.suppressSaves = true
-        manager.prepareForQuit()
-        try? FileManager.default.removeItem(at: Config.statePath)
+        manager.resetLayout()
         let relaunch = Process()
         relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")
         relaunch.arguments = ["-c", "sleep 1; open \"$0\"", Bundle.main.bundlePath]

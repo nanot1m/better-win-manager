@@ -57,6 +57,8 @@ final class WindowManager {
     private var axObserver: WindowObserver?
     /// Set while a Space switch is in flight; the window list mixes both desktops during the slide.
     private var switching = false
+    /// Bumped per Space switch so only the latest one's settle clears `switching`.
+    private var spaceSwitchGeneration = 0
     /// Set while the user drags a window or a gap handle; reconciling mid-gesture would fight it.
     var interacting = false { didSet { interactionScreens = nil } }
     /// Screen geometry is stable for the length of a drag; asking SkyLight for it on every mouse move is not free.
@@ -227,7 +229,7 @@ final class WindowManager {
         Log.write("desktop", "switch to workspace \(index + 1) (real space \(v.realSpace))")
         rememberFocus(in: v)
         v.switchTo(index)
-        ignoreFocusSwitchUntil = Date().addingTimeInterval(0.8)
+        ignoreOwnFocusChanges()
         lastFocusedID = AXWindow.focused.flatMap(id)
         let t0 = Date()
         tick(settle: false)
@@ -351,6 +353,21 @@ final class WindowManager {
         if let frame = targetFrame(of: id) ?? system.axWindow(id)?.frame { focusRing.show(windowID: id, frame: frame) } else { focusRing.suspended = false }
         onDesktopChange?()
     }
+
+    private var focusFollowScheduled = false
+    /// AX focus events can arrive before the frontmost app updates, and activation notifications after; one
+    /// look once both have landed.
+    private func scheduleFocusFollow() {
+        guard !focusFollowScheduled else { return }
+        focusFollowScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.focusFollowScheduled = false
+            self?.followFocusedWindowsWorkspace()
+        }
+    }
+
+    /// Parking, hiding and raising after our own switch move focus around for a moment; none of that is the user.
+    private func ignoreOwnFocusChanges() { ignoreFocusSwitchUntil = Date().addingTimeInterval(0.8) }
 
     private func activateTopApp(in v: VirtualWorkspaces) {
         let top = zOrder.first { virtualSet(ofWindow: $0) === v && v.workspace(of: $0) == v.active && !v.isParked($0) }
@@ -554,11 +571,15 @@ final class WindowManager {
         }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
                                                           object: nil, queue: .main) { [weak self] _ in
-            // The window list is still in flux while the slide animation runs; settle first.
-            self?.switching = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                self?.switching = false
-                self?.tick()
+            // The window list is still in flux while the slide animation runs, and macOS reports no end to it.
+            guard let self else { return }
+            self.switching = true
+            self.spaceSwitchGeneration += 1
+            let generation = self.spaceSwitchGeneration
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                guard let self, generation == self.spaceSwitchGeneration else { return }
+                self.switching = false
+                self.tick()
             }
         }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
@@ -568,7 +589,7 @@ final class WindowManager {
         // the frontmost app updates, so re-check shortly after activation as well.
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
                                                           object: nil, queue: .main) { [weak self] _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self?.followFocusedWindowsWorkspace() }
+            self?.scheduleFocusFollow()
         }
         // WindowServer reports a new front window before Accessibility does; stacked screens re-fan on it.
         wsEvents.onEvent = { [weak self] event, _ in
@@ -583,7 +604,7 @@ final class WindowManager {
                                     onFocusChange: { [weak self] in
                                         self?.followFocusedWindowsWorkspace()
                                         self?.refanStackedScreens()
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self?.followFocusedWindowsWorkspace() }
+                                        self?.scheduleFocusFollow()
                                         self?.focusRing.update()
                                         self?.onFocusChange?()
                                     },
@@ -803,7 +824,14 @@ final class WindowManager {
     }
 
     /// Set by a layout reset: the state file was deleted on purpose and must not be written again on the way out.
-    var suppressSaves = false
+    private var suppressSaves = false
+
+    /// Unparks everything and deletes the saved layout for good: no later save, including the one on quit, rewrites it.
+    func resetLayout() {
+        suppressSaves = true
+        prepareForQuit()
+        try? FileManager.default.removeItem(at: Config.statePath)
+    }
 
     /// Throttled, not debounced: the reconcile ticks every second, so a debounce would never fire.
     private func scheduleSave(_ snap: Snapshot) {
@@ -1142,7 +1170,7 @@ final class WindowManager {
         untile(w)
         v.move(id, to: index)
         // The sent window is still focused for a moment; don't let that pull us into its workspace.
-        ignoreFocusSwitchUntil = Date().addingTimeInterval(0.8)
+        ignoreOwnFocusChanges()
         if wasTiled {
             // Pre-place it in the target workspace's grid so it is tiled when that workspace shows.
             let screenIndex = NSScreen.screens.firstIndex { $0.visibleFrame.toCocoa().contains(w.frame.center) } ?? 0
