@@ -4,7 +4,7 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
-## [Unreleased]
+## [0.17.0] - 2026-10-21
 
 ### Changed
 - The bar's now-playing widget updates the moment Music or Spotify changes track or play state, instead of polling every 3 seconds.
