@@ -147,7 +147,8 @@ final class FocusRing {
             window.orderOut(nil)
             return
         }
-        guard config.focusRingFloating || isTiled(w), let id = w.windowID,
+        // An app can report a window it keeps alive after closing (ChatGPT) as focused; ring only what is visible.
+        guard config.focusRingFloating || isTiled(w), let id = w.windowID, CGWindowInfo.isOnScreen(id),
               !Spaces.spaces(of: id).contains(where: Spaces.isFullscreen) else {
             current = nil
             window.orderOut(nil)

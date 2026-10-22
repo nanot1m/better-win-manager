@@ -23,6 +23,10 @@ final class SystemObserver {
     var spaceOf: (NSScreen) -> SpaceID = { Spaces.current(for: $0) }
     var spacesOfWindow: (WindowID) -> [SpaceID] = { Spaces.spaces(of: $0) }
 
+    /// Windows closed by the user that their app keeps alive off every Space; the manager forgets them as if gone.
+    private(set) var closedByApp: Set<WindowID> = []
+    func forgetClosed(_ ids: Set<WindowID>) { closedByApp.subtract(ids) }
+
     func pid(of id: WindowID) -> pid_t? { ax[id]?.pid ?? lastInfo[id]?.pid }
     /// Frame from the last snapshot, without touching Accessibility.
     func lastFrame(of id: WindowID) -> CGRect? { lastInfo[id]?.frame }
@@ -63,6 +67,7 @@ final class SystemObserver {
         for w in Spaces.visibleWindows() {
             guard let id = id(of: w) else { continue }
             seen.insert(id)
+            closedByApp.remove(id)
             infos.append(info(id, w))
         }
         // Window IDs WindowServer still knows, hidden or off screen included; computed only if needed.
@@ -95,6 +100,12 @@ final class SystemObserver {
                 if keptFromCache.insert(id).inserted { Log.write("snapshot", "#\(id) unreadable via Accessibility but alive; keeping last known state") }
             } else {
                 keptFromCache.remove(id)
+                // Some apps (ChatGPT, Calendar) keep a window alive after the user closes it; it is on no Space.
+                // A window on another macOS desktop can be unreadable too, but it still has its Space.
+                if alive(id), Spaces.spaces(of: id).isEmpty {
+                    if closedByApp.insert(id).inserted { Log.write("snapshot", "#\(id) \(lastInfo[id]?.bundleID ?? "?") was closed but its app keeps it alive; forgetting it") }
+                    continue
+                }
                 if let cached = lastInfo[id] {
                     let app = NSRunningApplication(processIdentifier: cached.pid)
                     let age = lastReadAt[id].map { Int(Date().timeIntervalSince($0)) } ?? -1

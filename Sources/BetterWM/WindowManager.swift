@@ -700,12 +700,14 @@ final class WindowManager {
     }
 
     /// Workspace membership outlives windows unless told otherwise; a closed window must not keep showing its
-    /// app on a desktop chip or count as a sibling.
+    /// app on a desktop chip or count as a sibling, even when its app keeps it alive.
     private func pruneDeadWindows() {
         guard !virtualSets.isEmpty,
               case let alive = CGWindowInfo.aliveIDs(), !alive.isEmpty else { return }
+        let closed = system.closedByApp
+        system.forgetClosed(closed)
         for v in virtualSets.values {
-            for id in v.knownWindows where !alive.contains(id) {
+            for id in v.knownWindows where !alive.contains(id) || closed.contains(id) {
                 v.forget(id)
                 state.forget(id)
                 floatingFrames[id] = nil

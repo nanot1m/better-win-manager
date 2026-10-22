@@ -4,6 +4,12 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [Unreleased]
+
+### Fixed
+- A window closed by the user but kept alive by its app (ChatGPT, Calendar) stayed tracked forever: every update tried to read it and logged that it left the snapshot. It is now forgotten as if gone; a window on another macOS desktop is not affected, since it still belongs to a Space.
+- The focus ring blinked while such an app was frontmost: the app reports the closed window as focused. The ring now shows only on windows that are on screen.
+
 ## [0.17.3] - 2026-10-22
 
 ### Changed

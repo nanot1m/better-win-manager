@@ -144,6 +144,14 @@ struct CGWindowInfo {
         }
     }
 
+    static func isOnScreen(_ id: CGWindowID) -> Bool {
+        // The array holds raw window IDs, not CFNumbers; a bridged [NSNumber] silently matches nothing.
+        var raw = UnsafeRawPointer(bitPattern: UInt(id))
+        guard let ids = CFArrayCreate(nil, &raw, 1, nil),
+              let d = CGWindowListCreateDescriptionFromArray(ids) as? [[String: Any]] else { return false }
+        return (d.first?[kCGWindowIsOnscreen as String] as? Bool) ?? false
+    }
+
     /// Window IDs WindowServer still knows, hidden or off screen included.
     static func aliveIDs() -> Set<CGWindowID> { Set(list(.optionAll).map(\.id)) }
 }
