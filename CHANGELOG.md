@@ -7,7 +7,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 ## [Unreleased]
 
 ### Fixed
-- A window closed by the user but kept alive by its app (ChatGPT, Calendar) stayed tracked forever: every update tried to read it and logged that it left the snapshot. It is now forgotten as if gone; a window on another macOS desktop is not affected, since it still belongs to a Space.
+- A window closed by the user but kept alive by its app (ChatGPT, Calendar) stayed tracked forever: every update tried to read it and logged that it left the snapshot. Such a window is gone from Accessibility and either on no Space or off screen on a Space being shown (Codex); it is now forgotten as if gone. Windows on other macOS desktops and minimized windows are not affected.
 - The focus ring blinked while such an app was frontmost: the app reports the closed window as focused. The ring now shows only on windows that are on screen.
 
 ## [0.17.3] - 2026-10-22

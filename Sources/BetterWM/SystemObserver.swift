@@ -27,6 +27,15 @@ final class SystemObserver {
     private(set) var closedByApp: Set<WindowID> = []
     func forgetClosed(_ ids: Set<WindowID>) { closedByApp.subtract(ids) }
 
+    private func closedByItsApp(_ id: WindowID) -> Bool {
+        // A closed window is gone from Accessibility; a minimized one is still there.
+        if ax[id]?.isValid == true { return false }
+        let spaces = Spaces.spaces(of: id)
+        if spaces.isEmpty { return true }
+        let shown = Set(NSScreen.screens.map { Spaces.current(for: $0) })
+        return spaces.allSatisfy(shown.contains) && !CGWindowInfo.isOnScreen(id)
+    }
+
     func pid(of id: WindowID) -> pid_t? { ax[id]?.pid ?? lastInfo[id]?.pid }
     /// Frame from the last snapshot, without touching Accessibility.
     func lastFrame(of id: WindowID) -> CGRect? { lastInfo[id]?.frame }
@@ -100,9 +109,10 @@ final class SystemObserver {
                 if keptFromCache.insert(id).inserted { Log.write("snapshot", "#\(id) unreadable via Accessibility but alive; keeping last known state") }
             } else {
                 keptFromCache.remove(id)
-                // Some apps (ChatGPT, Calendar) keep a window alive after the user closes it; it is on no Space.
-                // A window on another macOS desktop can be unreadable too, but it still has its Space.
-                if alive(id), Spaces.spaces(of: id).isEmpty {
+                // Some apps keep a window alive after the user closes it: on no Space (ChatGPT, Calendar), or on a
+                // Space being shown yet not on screen (Codex). A window on another macOS desktop can be unreadable
+                // too, but its Space is not one being shown. Parked windows stay two points on screen.
+                if alive(id), closedByItsApp(id) {
                     if closedByApp.insert(id).inserted { Log.write("snapshot", "#\(id) \(lastInfo[id]?.bundleID ?? "?") was closed but its app keeps it alive; forgetting it") }
                     continue
                 }
