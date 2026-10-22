@@ -4,7 +4,7 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
-## [Unreleased]
+## [0.17.4] - 2026-10-22
 
 ### Fixed
 - A window closed by the user but kept alive by its app (ChatGPT, Calendar) stayed tracked forever: every update tried to read it and logged that it left the snapshot. Such a window is gone from Accessibility and either on no Space or off screen on a Space being shown (Codex); it is now forgotten as if gone. Windows on other macOS desktops and minimized windows are not affected.
