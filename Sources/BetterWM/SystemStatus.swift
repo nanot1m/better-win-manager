@@ -85,11 +85,37 @@ enum SystemStatus {
     }
 
     /// Signal strength 0...1, or nil when Wi-Fi is off or disconnected. RSSI needs no Location permission.
-    static func wifiStrength() -> Double? {
-        guard let iface = CWWiFiClient.shared().interface(), iface.powerOn(), iface.ssid() != nil || iface.rssiValue() != 0 else { return nil }
-        let rssi = iface.rssiValue()
-        guard rssi != 0 else { return nil }
+}
+
+/// Wi-Fi strength kept current by CoreWLAN events. Every CoreWLAN query is a synchronous round trip to the
+/// Wi-Fi daemon (the network name the slowest), far too costly for each bar refresh.
+final class WiFiMonitor: NSObject, CWEventDelegate {
+    private let client = CWWiFiClient.shared()
+    /// 0...1 in thirds, the steps the wifi symbol can show; nil when off or not associated.
+    private(set) var strength: Double?
+    var onChange: (() -> Void)?
+
+    override init() {
+        super.init()
+        client.delegate = self
+        for event in [CWEventType.powerDidChange, .linkDidChange, .linkQualityDidChange] { try? client.startMonitoringEvent(with: event) }
+        update(rssi: client.interface().flatMap { $0.powerOn() ? $0.rssiValue() : nil })
+    }
+
+    private func update(rssi: Int?) {
         // -50 dBm and above is full; -90 dBm is unusable.
-        return min(1, max(0, (Double(rssi) + 90) / 40))
+        let s = rssi.flatMap { $0 == 0 ? nil : (min(1, max(0, (Double($0) + 90) / 40)) * 3).rounded() / 3 }
+        guard s != strength else { return }
+        strength = s
+        onChange?()
+    }
+
+    private func reread() {
+        DispatchQueue.main.async { self.update(rssi: self.client.interface().flatMap { $0.powerOn() ? $0.rssiValue() : nil }) }
+    }
+    func powerStateDidChangeForWiFiInterface(withName interfaceName: String) { reread() }
+    func linkDidChangeForWiFiInterface(withName interfaceName: String) { reread() }
+    func linkQualityDidChangeForWiFiInterface(withName interfaceName: String, rssi: Int, transmitRate: Double) {
+        DispatchQueue.main.async { self.update(rssi: rssi) }
     }
 }

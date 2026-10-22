@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [Unreleased]
+
+### Changed
+- Lower idle CPU. The bar asked the Wi-Fi daemon for the network name and signal on every refresh, a synchronous round trip each time; Wi-Fi strength now follows CoreWLAN events. Desktop chips also asked SkyLight for the Space list once per window; once per refresh now.
+
 ## [0.17.2] - 2026-10-21
 
 ### Fixed

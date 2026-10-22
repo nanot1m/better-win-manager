@@ -10,6 +10,7 @@ final class StatusBar {
     private let events = WindowServerEvents()
     private var clock: Timer?
     private let media = MediaService()
+    private let wifi = WiFiMonitor()
     private let sound = SoundService()
     private lazy var soundPopover = SoundPopover(service: sound)
     private var inputSourceObserver: NSObjectProtocol?
@@ -34,6 +35,7 @@ final class StatusBar {
         weather = WeatherService(config: config)
         weather.onUpdate = { [weak self] _ in self?.refresh() }
         media.onUpdate = { [weak self] _ in self?.refresh() }
+        wifi.onChange = { [weak self] in self?.refresh() }
         if config.bar && config.barWidgets.contains(.media) { media.start() }
         if config.bar && config.barWidgets.contains(.sound) { sound.start() }
         sound.onChange = { [weak self] in self?.refresh(); self?.soundPopover.refreshIfShown() }
@@ -143,6 +145,10 @@ final class StatusBar {
 
     private func refreshNow() {
         guard config.bar else { return }
+        Spaces.withSpaceTypesCached { buildAndRender() }
+    }
+
+    private func buildAndRender() {
         // A fullscreen app owns the whole screen; stay out of its way.
         for w in windows {
             let fullscreen = Spaces.isFullscreen(Spaces.current(for: w.targetScreen)) || hiddenForSystemReveal
@@ -166,7 +172,7 @@ final class StatusBar {
             },
             battery: config.barBattery ? SystemStatus.battery() : nil,
             batteryPercent: config.barBatteryPercent,
-            wifi: config.barWifi ? SystemStatus.wifiStrength() : nil,
+            wifi: config.barWifi ? wifi.strength : nil,
             showWifi: config.barWifi,
             cpu: config.barCpu ? SystemStatus.cpuLoad() : nil,
             memory: config.barMemory ? SystemStatus.memoryUsed() : nil,

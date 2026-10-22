@@ -29,6 +29,7 @@ enum Spaces {
     private static var typesCache: (desktops: Set<SpaceID>, fullscreen: Set<SpaceID>)?
     private static var caching = false
     static func withSpaceTypesCached<T>(_ body: () -> T) -> T {
+        guard !caching else { return body() }
         caching = true
         defer { caching = false; typesCache = nil }
         return body()
