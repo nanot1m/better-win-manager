@@ -4,7 +4,7 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
-## [Unreleased]
+## [0.19.0] - 2026-10-23
 
 ### Changed
 - The event tap runs on its own thread. It only decides whether an event passes or is swallowed and hands the work to the main thread, so nothing BetterWM does can stall the cursor any more.
