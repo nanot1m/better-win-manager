@@ -13,6 +13,8 @@ final class DragController {
     private var draggedID: WindowID?
     private var dragStart: CGPoint = .zero
     private var pressedAt: Date?
+    /// The hit test for the current press is still on the AX queue; until it answers, no window is assumed.
+    private var hitTestPending = false
     private var originalFrame: CGRect = .zero
     private var currentZone: (DropZone, CGRect)?
     /// A drag inside the window (⌥-drag of a canvas item, text selection) never moves the window; only a drag that
@@ -138,6 +140,11 @@ final class DragController {
 
     // MARK: Main thread
 
+    /// The window's frame right now, from WindowServer; the handle itself only knows what the last snapshot saw.
+    private func liveFrame(_ w: AXWindow) -> CGRect {
+        (draggedID ?? w.windowID).flatMap(WindowServerEvents.bounds(of:)) ?? w.frame
+    }
+
     private func handle(type: CGEventType, event: CGEvent) {
         let p = event.location
         let alt = event.flags.contains(HotKey.eventFlags(manager.config.dragModifiers))
@@ -169,9 +176,12 @@ final class DragController {
             guard manager.enabled else { return }
             let press = Date()
             pressedAt = press
+            hitTestPending = true
             manager.system.hitTest(p) { [weak self] w in
+                guard let self, self.pressedAt == press else { return }
+                self.hitTestPending = false
                 // The button may have gone up, or a drag begun from the focused window, while the app answered.
-                guard let self, let w, self.pressedAt == press, self.dragged == nil else { return }
+                guard let w, self.dragged == nil else { return }
                 self.dragged = w
                 self.draggedID = self.manager.id(w)
                 self.originalFrame = w.frame
@@ -179,7 +189,7 @@ final class DragController {
                 self.windowMoved = false
             }
         case .leftMouseDragged:
-            if dragged == nil, alt, manager.enabled, let w = manager.system.focused {
+            if dragged == nil, !hitTestPending, alt, manager.enabled, let w = manager.system.focused {
                 // Hit-testing failed on mouse-down; the window being dragged is the frontmost app's focused one.
                 dragged = w
                 draggedID = manager.id(w)
@@ -193,7 +203,8 @@ final class DragController {
             manager.interacting = true
             if alt, !windowMoved, Date().timeIntervalSince(lastMoveCheck) > 0.1 {
                 lastMoveCheck = Date()
-                windowMoved = hypot(w.frame.minX - originalFrame.minX, w.frame.minY - originalFrame.minY) >= 4
+                let f = liveFrame(w)
+                windowMoved = hypot(f.minX - originalFrame.minX, f.minY - originalFrame.minY) >= 4
             }
             if alt, windowMoved {
                 currentZone = manager.zone(at: p, draggingID: draggedID)
@@ -204,30 +215,24 @@ final class DragController {
             }
         case .leftMouseUp:
             pressedAt = nil
+            hitTestPending = false
             let w = dragged
             dragged = nil
             manager.overlay.hide()
             let zone = currentZone?.0
             let original = originalFrame
             let id = draggedID
-            // A click that changes the window's frame by itself (a fullscreen button, a double-click zoom) is
-            // not the user placing it; only a press that carried the mouse at least 20pt is.
             let moved = manager.interacting
-            let byHand = moved && hypot(p.x - dragStart.x, p.y - dragStart.y) >= 20
-            let finish = { [manager] in
+            let travel = hypot(p.x - dragStart.x, p.y - dragStart.y)
+            let finish = { [manager, weak self] in
                 manager.interacting = false
-                if let w, let zone {
-                    manager.drop(w, into: zone, at: p, from: original)
-                } else if byHand {
-                    // Only a window that actually moved or resized during this drag was placed by hand; one that
-                    // was merely off its slot already (macOS moved it, it refused a size) must not be untiled.
-                    if let id, let w, !w.frame.approximatelyEquals(original, tolerance: 10) { manager.releaseDisplacedWindow(id) }
-                    // Only a plain drag or resize settles a new floating spot; a ⌥-drag that misses every zone does not.
-                    if let w, !alt { manager.rememberFloatingFrame(w) }
-                } else if moved {
-                    // A nudge short of the threshold: tiled windows go straight back to their slots.
-                    manager.apply()
-                }
+                guard let w else { return }
+                if let zone { manager.drop(w, into: zone, at: p, from: original); return }
+                let now = self?.liveFrame(w) ?? w.frame
+                let outcome = DragRules.outcome(moved: moved, travel: travel, before: original, after: now, alt: alt)
+                if outcome.release, let id { manager.releaseDisplacedWindow(id) }
+                if outcome.rememberFloating { manager.rememberFloatingFrame(w, frame: now) }
+                if outcome.snapBack { manager.apply() }
             }
             // Let the app complete its own move or resize before we inspect frames.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: finish)

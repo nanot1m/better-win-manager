@@ -1067,9 +1067,9 @@ final class WindowManager {
         floatingFrames[id] = frame ?? w.frame
     }
     /// After a drag or resize by hand that left the window floating, that is where it now belongs.
-    func rememberFloatingFrame(_ w: AXWindow) {
+    func rememberFloatingFrame(_ w: AXWindow, frame: CGRect? = nil) {
         guard let id = id(w) else { return }
-        rememberFloatingFrame(w, id)
+        rememberFloatingFrame(w, id, frame: frame)
     }
 
     /// `from` is where the window sat before the drag began; that, not the drop point, is its floating spot.

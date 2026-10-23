@@ -275,6 +275,22 @@ struct ReconcilerTests {
         expect(Dictionary(uniqueKeysWithValues: shrunk.windowFrames())[1]!.approximatelyEquals(before[1]!, tolerance: 1), #function, #line)
     }
 
+    func testDragEndRules() {
+        let slot = CGRect(x: 0, y: 0, width: 800, height: 600)
+        let elsewhere = CGRect(x: 300, y: 200, width: 800, height: 600)
+        let fullscreen = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+        // A click, even one whose button changed the frame, is not a hand move.
+        expect(DragRules.outcome(moved: false, travel: 0, before: slot, after: fullscreen, alt: false) == .init(), #function, #line)
+        // A nudge short of the threshold snaps back and settles nothing.
+        expect(DragRules.outcome(moved: true, travel: 12, before: slot, after: slot.offsetBy(dx: 12, dy: 0), alt: false) == .init(snapBack: true), #function, #line)
+        // A real drag releases the window and remembers where it landed.
+        expect(DragRules.outcome(moved: true, travel: 300, before: slot, after: elsewhere, alt: false) == .init(release: true, rememberFloating: true), #function, #line)
+        // ⌥-drag that missed every zone: released, but the miss is not a new floating spot.
+        expect(DragRules.outcome(moved: true, travel: 300, before: slot, after: elsewhere, alt: true) == .init(release: true), #function, #line)
+        // A long drag inside the window (a canvas item, a text selection) moved nothing: no release.
+        expect(DragRules.outcome(moved: true, travel: 300, before: slot, after: slot, alt: false) == .init(rememberFloating: true), #function, #line)
+    }
+
     func testEdgeMoveCyclesWidth() {
         var g = Grid()
         g.columns = [Column([1]), Column([2])]
@@ -610,6 +626,7 @@ let tests: [(String, () -> Void)] = [
     ("savedLayoutRoundTripAndMatching", t.testSavedLayoutRoundTripAndMatching),
     ("restoreFallsBackToNearestFrame", t.testRestoreFallsBackToNearestFrame),
     ("edgeMoveCyclesWidth", t.testEdgeMoveCyclesWidth),
+    ("dragEndRules", t.testDragEndRules),
     ("resizeByDeltaMovesBoundaries", t.testResizeByDeltaMovesBoundaries),
     ("configV1Migration", t.testConfigV1Migration),
     ("floatingWindowsSavedAndRestored", t.testFloatingWindowsSavedAndRestored),
