@@ -12,6 +12,7 @@ final class DragController {
     private var dragged: AXWindow?
     private var draggedID: WindowID?
     private var dragStart: CGPoint = .zero
+    private var pressedAt: Date?
     private var originalFrame: CGRect = .zero
     private var currentZone: (DropZone, CGRect)?
     /// A drag inside the window (⌥-drag of a canvas item, text selection) never moves the window; only a drag that
@@ -165,14 +166,20 @@ final class DragController {
             }
         case .leftMouseDown:
             dragStart = p
-            guard manager.enabled, let w = AXWindow.at(point: p) else { return }
-            dragged = w
-            draggedID = manager.id(w)
-            originalFrame = w.frame
-            currentZone = nil
-            windowMoved = false
+            guard manager.enabled else { return }
+            let press = Date()
+            pressedAt = press
+            manager.system.hitTest(p) { [weak self] w in
+                // The button may have gone up, or a drag begun from the focused window, while the app answered.
+                guard let self, let w, self.pressedAt == press, self.dragged == nil else { return }
+                self.dragged = w
+                self.draggedID = self.manager.id(w)
+                self.originalFrame = w.frame
+                self.currentZone = nil
+                self.windowMoved = false
+            }
         case .leftMouseDragged:
-            if dragged == nil, alt, manager.enabled, let w = AXWindow.focused {
+            if dragged == nil, alt, manager.enabled, let w = manager.system.focused {
                 // Hit-testing failed on mouse-down; the window being dragged is the frontmost app's focused one.
                 dragged = w
                 draggedID = manager.id(w)
@@ -196,6 +203,7 @@ final class DragController {
                 manager.overlay.hide()
             }
         case .leftMouseUp:
+            pressedAt = nil
             let w = dragged
             dragged = nil
             manager.overlay.hide()

@@ -57,10 +57,8 @@ final class WindowObserver {
             var pid: pid_t = 0
             AXUIElementGetPid(element, &pid)
             let w = AXWindow(element: element, pid: pid)
-            // Subrole is often not set yet at creation time; re-check shortly after.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                if w.isValid, w.isStandard { me.onNewWindow(w) }
-            }
+            // Subrole is often not set yet at creation time; the snapshot that follows checks it.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { me.onNewWindow(w) }
         }
         guard AXObserverCreate(pid, cb, &obs) == .success, let obs else { return }
         let appEl = AXResponsiveness.application(pid)

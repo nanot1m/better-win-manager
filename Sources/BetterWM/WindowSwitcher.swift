@@ -47,7 +47,7 @@ final class WindowSwitcher {
     /// The first press goes to the neighbour of the focused window on the current desktop, wrapping within it;
     /// only a desktop with no other window hands over to the next (or previous) desktop.
     private func firstTarget(reverse: Bool) -> Int {
-        let focusedID = AXWindow.focused?.windowID
+        let focusedID = manager.system.focused?.windowID
         guard let current = groups.first(where: { $0.desktop == manager.currentDesktop }) ?? groups.first else { return 0 }
         let base = flat.firstIndex { $0.desktop == current.desktop } ?? 0
         let n = current.items.count

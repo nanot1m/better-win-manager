@@ -2,56 +2,51 @@ import BetterWMCore
 import Cocoa
 
 /// Builds `Snapshot`s from the window list and Accessibility, and resolves window IDs back to AX handles.
+/// Accessibility work runs on `AX.queue`; results are published to the main thread, which reads only those.
 final class SystemObserver {
+    // MARK: Queue-side state (touched on AX.queue only)
+
     private var ax: [WindowID: AXWindow] = [:]
     /// Last good info per window: a hung app's windows keep their place in the model instead of being dropped.
     private var lastInfo: [WindowID: WindowInfo] = [:]
     private var keptFromCache: Set<WindowID> = []
     private var lastReadAt: [WindowID: Date] = [:]
+    private var closedByAppQ: Set<WindowID> = []
 
-    private func hasExcuse(_ w: WindowInfo) -> Bool {
-        if let readAt = lastReadAt[w.id], Date().timeIntervalSince(readAt) < 2 { return true }
-        if AXResponsiveness.isUnresponsive(w.pid) { return true }
-        if NSRunningApplication(processIdentifier: w.pid)?.isHidden == true { return true }
-        if let session = CGSessionCopyCurrentDictionary() as? [String: Any], (session["CGSSessionScreenIsLocked"] as? Bool) == true { return true }
-        return false
-    }
+    // MARK: Published state (main thread), refreshed after every snapshot
+
+    private var axMain: [WindowID: AXWindow] = [:]
+    private var lastInfoMain: [WindowID: WindowInfo] = [:]
+    /// Windows in the most recent full snapshot. A window the user closed can stay alive in WindowServer
+    /// (apps keep them for reuse) yet is gone from here.
+    private(set) var inLastSnapshot: Set<WindowID> = []
+    private(set) var lastSnapshotWindows: [WindowInfo] = []
+    /// Windows closed by the user that their app keeps alive off every Space; the manager forgets them as if gone.
+    private(set) var closedByApp: Set<WindowID> = []
+    /// The frontmost app's focused standard window as of the last snapshot or `refreshFocused`.
+    private(set) var focused: AXWindow?
+
     /// Space to keep free at the top of each screen (the status bar), in points.
     var topInset: (NSScreen) -> CGFloat = { _ in 0 }
-    /// Virtual workspaces: overrides the Space a screen shows and the Spaces a window belongs to.
     /// Model Space of a screen / of a window: the virtual workspace ids the manager assigns.
     var spaceOf: (NSScreen) -> SpaceID = { Spaces.current(for: $0) }
     var spacesOfWindow: (WindowID) -> [SpaceID] = { Spaces.spaces(of: $0) }
 
-    /// Windows closed by the user that their app keeps alive off every Space; the manager forgets them as if gone.
-    private(set) var closedByApp: Set<WindowID> = []
-    func forgetClosed(_ ids: Set<WindowID>) { closedByApp.subtract(ids) }
-
-    private func closedByItsApp(_ id: WindowID) -> Bool {
-        // A closed window is gone from Accessibility; a minimized one is still there.
-        if ax[id]?.isValid == true { return false }
-        let spaces = Spaces.spaces(of: id)
-        if spaces.isEmpty { return true }
-        let shown = Set(NSScreen.screens.map { Spaces.current(for: $0) })
-        return spaces.allSatisfy(shown.contains) && !CGWindowInfo.isOnScreen(id)
+    func forgetClosed(_ ids: Set<WindowID>) {
+        closedByApp.subtract(ids)
+        AX.queue.async { self.closedByAppQ.subtract(ids) }
     }
 
-    func pid(of id: WindowID) -> pid_t? { ax[id]?.pid ?? lastInfo[id]?.pid }
+    func pid(of id: WindowID) -> pid_t? { axMain[id]?.pid ?? lastInfoMain[id]?.pid }
     /// Frame from the last snapshot, without touching Accessibility.
-    func lastFrame(of id: WindowID) -> CGRect? { lastInfo[id]?.frame }
-    /// Windows in the most recent full snapshot. A window the user closed can stay alive in WindowServer
-    /// (apps keep them for reuse) yet is gone from here.
-    private(set) var inLastSnapshot: Set<WindowID> = []
+    func lastFrame(of id: WindowID) -> CGRect? { lastInfoMain[id]?.frame }
 
-    func axWindow(_ id: WindowID) -> AXWindow? {
-        if let w = ax[id], w.isValid { return w }
-        ax[id] = nil
-        return nil
-    }
+    /// The handle the last snapshot resolved for a window; answers from its cache off the queue.
+    func axWindow(_ id: WindowID) -> AXWindow? { axMain[id] }
 
     func id(of w: AXWindow) -> WindowID? {
         guard let id = w.windowID else { return nil }
-        ax[id] = w
+        axMain[id] = w
         return id
     }
 
@@ -68,23 +63,37 @@ final class SystemObserver {
         }
     }
 
+    // MARK: Snapshots
+
     /// Full picture: everything on the active Spaces, plus any `tracked` window still resolvable even if
-    /// momentarily off the on-screen list (mid-transition or on another Space).
-    func snapshot(tracked: [WindowID]) -> Snapshot {
+    /// momentarily off the on-screen list (mid-transition or on another Space). Taken on the AX queue;
+    /// `completion` runs on the main thread with the result.
+    func snapshot(tracked: [WindowID], completion: @escaping (Snapshot) -> Void) {
+        let shownSpaces = Set(NSScreen.screens.map { Spaces.current(for: $0) })
+        AX.queue.async {
+            let (infos, focused, closed) = self.take(tracked: tracked, shownSpaces: shownSpaces)
+            let handles = self.ax
+            DispatchQueue.main.async {
+                self.publish(infos, handles: handles, focused: focused, closed: closed)
+                completion(self.assemble(infos))
+            }
+        }
+    }
+
+    private func take(tracked: [WindowID], shownSpaces: Set<SpaceID>) -> ([WindowInfo], AXWindow?, Set<WindowID>) {
         var infos: [WindowInfo] = []
         var seen = Set<WindowID>()
         for w in Spaces.visibleWindows() {
-            guard let id = id(of: w) else { continue }
+            guard let id = w.windowID else { continue }
+            ax[id] = w
             seen.insert(id)
-            closedByApp.remove(id)
+            closedByAppQ.remove(id)
             infos.append(info(id, w))
         }
         // Window IDs WindowServer still knows, hidden or off screen included; computed only if needed.
         var aliveCache: Set<WindowID>?
         func alive(_ id: WindowID) -> Bool {
-            if aliveCache == nil {
-                aliveCache = CGWindowInfo.aliveIDs()
-            }
+            if aliveCache == nil { aliveCache = CGWindowInfo.aliveIDs() }
             return aliveCache!.contains(id)
         }
         for id in tracked where !seen.contains(id) {
@@ -92,12 +101,13 @@ final class SystemObserver {
                 infos.append(cached)
                 continue
             }
-            if let w = axWindow(id), w.isStandard {
+            if let w = ax[id], w.isValid, w.isStandard {
                 infos.append(info(id, w))
                 lastReadAt[id] = Date()
                 keptFromCache.remove(id)
                 continue
             }
+            ax[id] = nil
             // Accessibility can fail for a window that still exists: the app is hidden or just unhiding, hung, or
             // the screen is locked. Dropping it would untile it, so keep the last known picture while one of those
             // holds. A window merely kept off screen by its app after the user closed it has no such excuse.
@@ -112,8 +122,8 @@ final class SystemObserver {
                 // Some apps keep a window alive after the user closes it: on no Space (ChatGPT, Calendar), or on a
                 // Space being shown yet not on screen (Codex). A window on another macOS desktop can be unreadable
                 // too, but its Space is not one being shown. Parked windows stay two points on screen.
-                if alive(id), closedByItsApp(id) {
-                    if closedByApp.insert(id).inserted { Log.write("snapshot", "#\(id) \(lastInfo[id]?.bundleID ?? "?") was closed but its app keeps it alive; forgetting it") }
+                if alive(id), closedByItsApp(id, shownSpaces: shownSpaces) {
+                    if closedByAppQ.insert(id).inserted { Log.write("snapshot", "#\(id) \(lastInfo[id]?.bundleID ?? "?") was closed but its app keeps it alive; forgetting it") }
                     continue
                 }
                 if let cached = lastInfo[id] {
@@ -124,30 +134,99 @@ final class SystemObserver {
             }
         }
         for i in infos { lastInfo[i.id] = i }
-        inLastSnapshot = Set(infos.map(\.id))
-        return Snapshot(screens: screens(), windows: infos, focused: AXWindow.focused.flatMap { self.id(of: $0) }, now: Date())
+        let focused = AXWindow.focused()
+        if let focused, let id = focused.windowID { ax[id] = focused }
+        return (infos, focused, closedByAppQ)
     }
 
-    /// Cheap variant for live interactions: only the tracked windows, read straight from their AX handles.
+    private func hasExcuse(_ w: WindowInfo) -> Bool {
+        if let readAt = lastReadAt[w.id], Date().timeIntervalSince(readAt) < 2 { return true }
+        if AXResponsiveness.isUnresponsive(w.pid) { return true }
+        if NSRunningApplication(processIdentifier: w.pid)?.isHidden == true { return true }
+        if let session = CGSessionCopyCurrentDictionary() as? [String: Any], (session["CGSSessionScreenIsLocked"] as? Bool) == true { return true }
+        return false
+    }
+
+    /// A closed window is gone from Accessibility (`ax[id]` was just dropped); a minimized one is still there.
+    private func closedByItsApp(_ id: WindowID, shownSpaces: Set<SpaceID>) -> Bool {
+        let spaces = Spaces.spaces(of: id)
+        if spaces.isEmpty { return true }
+        return spaces.allSatisfy(shownSpaces.contains) && !CGWindowInfo.isOnScreen(id)
+    }
+
+    /// Spaces are the manager's business and main-thread state; the queue leaves them empty.
+    private func info(_ id: WindowID, _ w: AXWindow) -> WindowInfo {
+        WindowInfo(id: id, pid: w.pid, bundleID: w.bundleID, frame: w.frame, spaces: [], title: w.title)
+    }
+
+    private func publish(_ infos: [WindowInfo], handles: [WindowID: AXWindow], focused: AXWindow?, closed: Set<WindowID>) {
+        for i in infos { lastInfoMain[i.id] = i }
+        inLastSnapshot = Set(infos.map(\.id))
+        lastSnapshotWindows = infos
+        closedByApp = closed
+        self.focused = focused
+        axMain = handles
+    }
+
+    private func assemble(_ infos: [WindowInfo]) -> Snapshot {
+        let windows = infos.map { i in
+            var w = i
+            w.spaces = spacesOfWindow(i.id)
+            return w
+        }
+        return Snapshot(screens: screens(), windows: windows, focused: focused.flatMap { $0.windowID }, now: Date())
+    }
+
+    /// Cheap variant for live interactions, no Accessibility at all: frames straight from WindowServer for the
+    /// tracked windows the last snapshot knew.
     func lightSnapshot(tracked: [WindowID]) -> Snapshot {
         let infos = tracked.compactMap { id -> WindowInfo? in
-            guard let w = axWindow(id) else { return nil }
-            return info(id, w)
+            guard var i = lastInfoMain[id], axMain[id] != nil else { return nil }
+            if let f = WindowServerEvents.bounds(of: id) { i.frame = f }
+            i.spaces = spacesOfWindow(id)
+            return i
         }
-        return Snapshot(screens: screens(), windows: infos, focused: AXWindow.focused.flatMap { self.id(of: $0) }, now: Date())
+        return Snapshot(screens: screens(), windows: infos, focused: focused.flatMap { $0.windowID }, now: Date())
     }
 
-    private func info(_ id: WindowID, _ w: AXWindow) -> WindowInfo {
-        WindowInfo(id: id, pid: w.pid, bundleID: w.bundleID, frame: w.frame,
-                   spaces: spacesOfWindow(id), title: w.title)
-    }
-
-    func execute(_ commands: [Command]) {
-        for c in commands {
-            switch c {
-            case let .setFrame(id, f): axWindow(id)?.frame = f
-            case let .raise(id): axWindow(id)?.raise()
+    /// Re-reads the focused window (after a focus or title change) and calls back on the main thread.
+    func refreshFocused(_ completion: @escaping () -> Void) {
+        AX.queue.async {
+            let f = AXWindow.focused()
+            if let f, let id = f.windowID { self.ax[id] = f }
+            DispatchQueue.main.async {
+                self.focused = f
+                if let f, let id = f.windowID { self.axMain[id] = f }
+                completion()
             }
         }
     }
+
+    /// The window under `point`, resolved on the queue; `completion` runs on the main thread.
+    func hitTest(_ point: CGPoint, _ completion: @escaping (AXWindow?) -> Void) {
+        AX.queue.async {
+            let w = AXWindow.at(point: point)
+            if let w, let id = w.windowID { self.ax[id] = w }
+            DispatchQueue.main.async {
+                if let w, let id = w.windowID { self.axMain[id] = w }
+                completion(w)
+            }
+        }
+    }
+
+    // MARK: Commands
+
+    func execute(_ commands: [Command]) {
+        AX.queue.async {
+            for c in commands {
+                switch c {
+                case let .setFrame(id, f): self.ax[id]?.frame = f
+                case let .raise(id): self.ax[id]?.raise()
+                }
+            }
+        }
+    }
+
+    /// Blocks until every command sent so far has been carried out; for quitting.
+    func waitForCommands() { AX.queue.sync {} }
 }

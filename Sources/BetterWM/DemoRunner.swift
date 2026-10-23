@@ -100,7 +100,7 @@ final class DemoRunner {
 
     private func window(of name: String) -> AXWindow? {
         guard let a = app(named: name) else { return nil }
-        return Spaces.visibleWindows().first { $0.pid == a.processIdentifier }
+        return AX.queue.sync { Spaces.visibleWindows() }.first { $0.pid == a.processIdentifier }
     }
 
     private func launch(_ name: String) {
@@ -118,7 +118,7 @@ final class DemoRunner {
     /// Glides the cursor to the chosen half of the focused window with the zone highlighted, then drops.
     /// Returns how long the whole gesture takes so the script waits for it.
     private func drag(appName: String, side: String) -> Double {
-        guard let w = window(of: appName), let target = AXWindow.focused.flatMap({ $0 == w ? nil : $0 }) ?? otherWindow(than: w) else { return 0.5 }
+        guard let w = window(of: appName), let target = manager.system.focused.flatMap({ $0 == w ? nil : $0 }) ?? otherWindow(than: w) else { return 0.5 }
         let f = target.frame
         let point: CGPoint
         switch side {
@@ -151,6 +151,6 @@ final class DemoRunner {
     }
 
     private func otherWindow(than w: AXWindow) -> AXWindow? {
-        Spaces.visibleWindows().first { $0 != w && manager.isTiled($0) }
+        AX.queue.sync { Spaces.visibleWindows() }.first { $0 != w && manager.isTiled($0) }
     }
 }

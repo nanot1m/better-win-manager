@@ -18,9 +18,12 @@ enum Log {
 
     static func write(_ category: String, _ message: @autoclosure () -> String) {
         guard enabled else { return }
-        let line = "\(stamp.string(from: Date())) [\(category)] \(message())"
-        print(line)
-        queue.async { append(line + "\n") }
+        let now = Date(), text = message()
+        queue.async {
+            let line = "\(stamp.string(from: now)) [\(category)] \(text)"
+            print(line)
+            append(line + "\n")
+        }
     }
 
     private static func append(_ text: String) {
@@ -54,7 +57,9 @@ enum Log {
     /// Every ordinary on-screen window as BetterWM sees it: whether Accessibility lists it, its role, and why it
     /// would be skipped. Titles are left out. The probe uses a longer timeout than the app does, to tell a slow
     /// app from one that does not answer at all.
-    static func windowInventory() -> String {
+    static func windowInventory() -> String { AX.onQueue ? inventoryNow() : AX.queue.sync { inventoryNow() } }
+
+    private static func inventoryNow() -> String {
         let list = CGWindowInfo.list([.optionOnScreenOnly, .excludeDesktopElements])
         guard !list.isEmpty else { return "(no window list)" }
         var lines: [String] = []

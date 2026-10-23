@@ -133,15 +133,18 @@ final class FocusRing {
         window.orderFrontRegardless()
     }
 
+    /// The focused window as the last snapshot saw it; the ring never asks Accessibility itself.
+    var focusedWindow: () -> AXWindow? = { nil }
+
     func update() {
         guard !suspended, !hiddenForSystemReveal, config.focusRing else {
             current = nil
             window.orderOut(nil)
             return
         }
-        guard let w = AXWindow.focused else {
+        guard let w = focusedWindow() else {
             // Electron apps briefly report no focused window while moving focus inside one; don't blink.
-            if let id = current, let owner = Spaces.visibleWindows().first(where: { $0.windowID == id }),
+            if let id = current, let owner = CGWindowInfo.list(.optionOnScreenOnly).first(where: { $0.id == id }),
                NSWorkspace.shared.frontmostApplication?.processIdentifier == owner.pid { return }
             current = nil
             window.orderOut(nil)

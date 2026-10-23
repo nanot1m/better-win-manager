@@ -67,12 +67,12 @@ final class ActionPopup: NSPanel {
 
     private func refresh() {
         view.enabled = Dictionary(uniqueKeysWithValues: ActionView.actions.map { ($0.dir, manager.canMoveFocused($0.dir)) })
-        view.tiled = AXWindow.focused.map(manager.isTiled) ?? false
+        view.tiled = manager.system.focused.map(manager.isTiled) ?? false
         view.desktopCount = manager.desktopCount
         view.presets = manager.presetCandidates().map { LayoutPreset.presets(for: $0.1.count) } ?? []
         view.currentDesktop = manager.currentDesktop
         view.needsDisplay = true
-        let target = AXWindow.focused?.frame.toCocoa() ?? NSScreen.main?.visibleFrame ?? .zero
+        let target = manager.system.focused?.frame.toCocoa() ?? NSScreen.main?.visibleFrame ?? .zero
         var origin = NSPoint(x: target.midX - frame.width / 2, y: target.midY - frame.height / 2)
         // Keep the whole panel on the screen holding the target, with a small margin.
         let screen = NSScreen.screens.first { $0.frame.contains(NSPoint(x: target.midX, y: target.midY)) } ?? NSScreen.main

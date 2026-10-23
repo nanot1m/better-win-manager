@@ -218,7 +218,7 @@ final class Overview {
             desktops.append(OverviewModel.Desktop(index: d, windows: windows))
         }
         var model = OverviewModel(desktops: desktops, current: desktops.first { $0.index == current })
-        if manager.config.focusRing, let f = AXWindow.focused, let id = f.windowID {
+        if manager.config.focusRing, let f = manager.system.focused, let id = f.windowID {
             let tiled = manager.isTiled(f)
             model.focused = id
             model.ringColor = manager.config.ringColor(floating: !tiled)

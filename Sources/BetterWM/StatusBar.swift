@@ -27,6 +27,7 @@ final class StatusBar {
     var desktopsOn: (NSScreen) -> [Int] = { _ in [] }
     var shownOn: (NSScreen) -> Int? = { _ in nil }
     var activeDesktop: () -> Int? = { nil }
+    var focusedAXWindow: () -> AXWindow? = { nil }
     var desktopApps: () -> [Int: [(pid: pid_t, windows: [WindowID])]] = { [:] }
     var focusedWindow: () -> WindowID? = { nil }
     /// While the user drags a window the bar stays as it is; any work on the main thread stalls the event tap.
@@ -159,7 +160,7 @@ final class StatusBar {
             let fullscreen = Spaces.isFullscreen(Spaces.current(for: w.targetScreen)) || hiddenForSystemReveal
             if fullscreen { w.orderOut(nil) } else if !w.isVisible { w.orderBack(nil) }
         }
-        let focused = AXWindow.focused
+        let focused = focusedAXWindow()
         let app = focused.flatMap { NSRunningApplication(processIdentifier: $0.pid)?.localizedName }
             ?? NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
         let title = focused?.title ?? ""

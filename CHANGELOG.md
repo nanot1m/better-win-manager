@@ -8,6 +8,12 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ### Changed
 - The event tap runs on its own thread. It only decides whether an event passes or is swallowed and hands the work to the main thread, so nothing BetterWM does can stall the cursor any more.
+- All Accessibility traffic runs on one background queue. The main thread reads only what the last snapshot saw, so an app that is slow to answer (not just one that has hung) slows its own layout pass and nothing else: the bar, hotkeys, switcher and overview keep responding.
+
+### Fixed
+- Sleeping, closing the lid or a loose cable takes a display away for a few seconds; its desktops moved to the remaining display at once and were laid out there. A vanished display now gets 10 seconds to come back, during which its desktops are left alone; macOS puts the windows back itself.
+- A snapshot in which Accessibility answered for no window (the lock screen, the first seconds after waking) untiled everything. Such a snapshot is now ignored.
+- Launching while the screen was locked spent the 20-second restore window seeing nothing, then adopted every window onto the active desktop instead of restoring the saved layout. The window now starts with the first snapshot that has windows.
 
 ## [0.18.0] - 2026-10-23
 
