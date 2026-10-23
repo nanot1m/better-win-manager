@@ -71,8 +71,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let menu = self.buildMenu()
             menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.bounds.minY - 4), in: view)
         }
-        bar.desktopCount = { [weak self] in self?.manager.desktopCount ?? 0 }
-        bar.currentDesktop = { [weak self] in self?.manager.currentDesktop }
+        bar.desktopsOn = { [weak self] in self?.manager.desktopList(on: $0) ?? [] }
+        bar.shownOn = { [weak self] in self?.manager.shownDesktop(on: $0) }
+        bar.activeDesktop = { [weak self] in self?.manager.currentDesktop }
         bar.desktopApps = { [weak self] in self?.manager.appsByDesktop() ?? [:] }
         bar.focusedWindow = { [weak self] in self?.manager.focusRing.currentWindowID }
         bar.isInteracting = { [weak self] in self?.manager.interacting ?? false }
@@ -165,6 +166,7 @@ extension AppDelegate {
         menu.addItem(desktops)
         add("Move This Desktop Left", #selector(moveDesktopLeft), action: "desktopMoveLeft")
         add("Move This Desktop Right", #selector(moveDesktopRight), action: "desktopMoveRight")
+        if NSScreen.screens.count > 1 { add("Send This Desktop to Next Screen", #selector(desktopToNextScreen), action: "desktopToNextScreen") }
 
         section("Tiling")
         let pause = menu.addItem(withTitle: manager.enabled ? "Pause Tiling" : "Resume Tiling", action: #selector(togglePause), keyEquivalent: "")
@@ -249,6 +251,7 @@ extension AppDelegate {
             "desktopNext": { [weak self] in self?.manager.switchDesktopOrSpace(next: true) },
             "desktopMoveLeft": { [weak self] in self?.manager.moveCurrentDesktop(left: true) },
             "desktopMoveRight": { [weak self] in self?.manager.moveCurrentDesktop(left: false) },
+            "desktopToNextScreen": { [weak self] in self?.manager.sendDesktopToNextScreen() },
             "sendToNextDesktop": { [weak self] in self?.manager.sendFocusedWindow(toNext: true) },
             "sendToPreviousDesktop": { [weak self] in self?.manager.sendFocusedWindow(toNext: false) },
             "desktopPrevious": { [weak self] in self?.manager.switchDesktopOrSpace(next: false) },
@@ -293,6 +296,7 @@ extension AppDelegate {
     @objc func retile() { resumeForTiling(); manager.retileCurrentScreen() }
     @objc func moveDesktopLeft() { manager.moveCurrentDesktop(left: true) }
     @objc func moveDesktopRight() { manager.moveCurrentDesktop(left: false) }
+    @objc func desktopToNextScreen() { manager.sendDesktopToNextScreen() }
     @objc func toggleStack() { manager.toggleStackedLayout() }
     @objc func equalize() { manager.equalize() }
     @objc func reloadConfig() {

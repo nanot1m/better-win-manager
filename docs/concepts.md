@@ -18,12 +18,16 @@ Windows float when you untile them, when their app is on the ignore list, when t
 
 ## Workspaces
 
-Every macOS desktop (Space) gets its own independent set of workspaces: its own active one, window membership, grids, chip order. Nothing crosses between macOS desktops. Workspaces are created on demand, when you switch to or send a window to one that does not exist yet, and trimmed when they end up empty and inactive. The chips in the bar can be dragged to reorder them; grids, floating windows and saved state follow.
+Workspaces are numbered across all screens, and each lives on one display: every screen shows one of its own at a time, and each screen's bar lists the ones living there. ⌃1…⌃9 always mean the same workspace; switching to one shows it on its screen. ⌃→ and ⌃← move through the workspaces of the current screen. "Send this desktop to the next screen" moves the current workspace, windows and all, to the next display.
+
+A workspace remembers its display: when that display is unplugged its workspaces show on the main display, and they go back when it returns. Which display is main follows System Settings; making another display main does not move any workspace, only where new ones and those of a missing display go. A display that arrives with no workspace of its own gets a new one. macOS should have one desktop per display.
+
+Workspaces are created on demand, on the main display, when you switch to or send a window to one that does not exist yet, and trimmed when they end up empty and not shown. The chips in the bar can be dragged to reorder them; grids, floating windows and saved state follow.
 
 Switching is instant because nothing moves through macOS Spaces. Instead:
 
 - An app whose windows all live on inactive workspaces is **hidden** with the native Hide. Its windows keep their frames.
-- An app with windows on several workspaces of the same desktop has the inactive ones **parked** just off the bottom-right corner of their screen, since Hide is app-wide.
+- An app with windows on several workspaces of the same desktop has the inactive ones **parked** just off a corner of their screen that faces no other display, since Hide is app-wide.
 - Switching unhides and unparks what belongs to the new workspace, and activates its top app so focus does not fall to Finder.
 
 Hidden and parked windows still appear in ⌘Tab; choosing one there switches to its workspace. That is the general rule: focus-follow only reacts to input that can bring an app forward, a click, a ⌘ combination or Return, and each such input allows a single follow. An app activating itself after a build never pulls you anywhere.

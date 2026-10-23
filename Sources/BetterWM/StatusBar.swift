@@ -21,8 +21,10 @@ final class StatusBar {
     var onReorderDesktop: ((Int, Int) -> Void)?
     /// The menu widget was clicked; the app pops its menu at the given view.
     var onMenuRequested: ((NSView) -> Void)?
-    var desktopCount: () -> Int = { 0 }
-    var currentDesktop: () -> Int? = { nil }
+    /// Desktops living on a screen, the one it shows, and the active desktop across all screens.
+    var desktopsOn: (NSScreen) -> [Int] = { _ in [] }
+    var shownOn: (NSScreen) -> Int? = { _ in nil }
+    var activeDesktop: () -> Int? = { nil }
     var desktopApps: () -> [Int: [(pid: pid_t, windows: [WindowID])]] = { [:] }
     var focusedWindow: () -> WindowID? = { nil }
     /// While the user drags a window the bar stays as it is; any work on the main thread stalls the event tap.
@@ -158,9 +160,10 @@ final class StatusBar {
         let app = focused.flatMap { NSRunningApplication(processIdentifier: $0.pid)?.localizedName }
             ?? NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
         let title = focused?.title ?? ""
-        let model = BarView.Model(
-            desktops: desktopCount(),
-            current: currentDesktop(),
+        var model = BarView.Model(
+            desktops: [],
+            current: nil,
+            active: activeDesktop(),
             apps: config.barDesktopApps ? desktopApps() : [:],
             focusedWindow: focusedWindow() ?? focused?.windowID,
             fullscreen: config.barDesktopApps ? fullscreenSpaces() : [],
@@ -182,7 +185,11 @@ final class StatusBar {
             sound: config.barWidgets.contains(.sound) ? sound.symbolName : nil,
             titleFormat: config.barTitleFormat
         )
-        windows.forEach { $0.view.render(model) }
+        for w in windows {
+            model.desktops = desktopsOn(w.targetScreen)
+            model.current = shownOn(w.targetScreen)
+            w.view.render(model)
+        }
     }
 
     /// The bar only makes sense with the system menu bar hidden; offer the setting once.
@@ -335,8 +342,10 @@ private final class ChipView: NSView {
 
 final class BarView: NSView {
     struct Model {
-        var desktops: Int
+        /// This screen's desktops (global indices) and the one it shows; `active` is the one being worked on.
+        var desktops: [Int]
         var current: Int?
+        var active: Int?
         var apps: [Int: [(pid: pid_t, windows: [WindowID])]]
         var focusedWindow: WindowID?
         var fullscreen: [(space: UInt64, pids: [pid_t])]
@@ -592,24 +601,35 @@ final class BarView: NSView {
         cat.roam = freeStart...max(freeStart, freeEnd)
     }
 
+    /// Desktop index of each visible chip, left to right.
+    private var chipDesktops: [Int] = []
+
     func render(_ m: Model) {
-        while chips.count < m.desktops {
+        chipDesktops = m.desktops
+        while chips.count < m.desktops.count {
             let c = ChipView()
             let i = chips.count
-            c.onClick = { [weak self] in self?.onSelectDesktop?(i) }
+            c.onClick = { [weak self] in
+                guard let self, i < self.chipDesktops.count else { return }
+                self.onSelectDesktop?(self.chipDesktops[i])
+            }
             c.onDrop = { [weak self] midX in self?.dropChip(i, at: midX) }
             chips.append(c)
             left.insertArrangedSubview(c, at: chips.count - 1)
         }
         for (i, c) in chips.enumerated() {
-            c.isHidden = i >= m.desktops
-            let current = i == m.current
-            c.number.attributedStringValue = NSAttributedString(string: "\(i + 1)", attributes: [
-                .foregroundColor: current ? activeColor.contrastingText : textColor.withAlphaComponent(0.7),
+            c.isHidden = i >= m.desktops.count
+            guard i < m.desktops.count else { continue }
+            let d = m.desktops[i]
+            // The desktop being worked on gets the accent; the one merely shown on this screen a lighter mark.
+            let current = d == m.current && d == m.active
+            let shownHere = d == m.current
+            c.number.attributedStringValue = NSAttributedString(string: "\(d + 1)", attributes: [
+                .foregroundColor: current ? activeColor.contrastingText : textColor.withAlphaComponent(shownHere ? 1 : 0.7),
                 .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
             ])
-            c.layer?.backgroundColor = current ? activeColor.cgColor : textColor.withAlphaComponent(0.1).cgColor
-            c.setApps(m.apps[i] ?? [], focused: m.focusedWindow, color: focusOutline ?? (current ? activeColor.contrastingText : activeColor))
+            c.layer?.backgroundColor = current ? activeColor.cgColor : textColor.withAlphaComponent(shownHere ? 0.3 : 0.1).cgColor
+            c.setApps(m.apps[d] ?? [], focused: m.focusedWindow, color: focusOutline ?? (current ? activeColor.contrastingText : activeColor))
         }
         fsSpaces = m.fullscreen.map(\.space)
         while fsChips.count < m.fullscreen.count {
@@ -684,8 +704,8 @@ final class BarView: NSView {
     private func notifyCats(_ m: Model) {
         guard !cat.isHidden else { return }
         if let current = m.current, current != lastDesktop {
-            if lastDesktop != nil, chips.indices.contains(current) {
-                cat.react(.desktopSwitched(towardX: chips[current].convert(chips[current].bounds, to: cat).midX))
+            if lastDesktop != nil, let i = m.desktops.firstIndex(of: current), chips.indices.contains(i) {
+                cat.react(.desktopSwitched(towardX: chips[i].convert(chips[i].bounds, to: cat).midX))
             }
             lastDesktop = current
         }
@@ -710,7 +730,8 @@ final class BarView: NSView {
     private func dropChip(_ index: Int, at midX: CGFloat) {
         let others = chips.enumerated().filter { !$0.element.isHidden && $0.offset != index }
         let target = others.filter { $0.element.frame.midX < midX }.count
-        if target != index { onReorderDesktop?(index, target) }
+        guard target != index, index < chipDesktops.count, target < chipDesktops.count else { return }
+        onReorderDesktop?(chipDesktops[index], chipDesktops[target])
     }
 
     @objc private func menuPressed() { onMenuRequested?(menuButton) }

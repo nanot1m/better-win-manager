@@ -37,17 +37,22 @@ public struct SavedLayout: Codable, Equatable {
         }
     }
     /// Bumped when the meaning of stored ids changes; `migrated(currentSpace:)` upgrades older files.
-    public static let schemaVersion = 2
+    public static let schemaVersion = 3
     public var version: Int = SavedLayout.schemaVersion
     public var spaces: [Space] = []
     /// Apps hidden by the window manager at the time of the save; unhidden at launch if a run ended without cleanup.
     public var hiddenPids: [Int32] = []
-    /// Active workspace index per macOS desktop (keyed by the real Space id as a string), restored at launch.
+    /// v2 only: active workspace per macOS desktop (real Space id as a string); read by the migration.
     public var activeWorkspaces: [String: Int] = [:]
+    /// Home display (UUID) of each desktop, keyed by desktop index as a string.
+    public var desktopHomes: [String: DisplayID] = [:]
+    /// The desktop each display (UUID) showed.
+    public var shownOnDisplays: [DisplayID: Int] = [:]
+    public var activeDesktop: Int = 0
 
     public init(spaces: [Space] = []) { self.spaces = spaces }
 
-    enum CodingKeys: String, CodingKey { case version, spaces, hiddenPids, activeWorkspaces }
+    enum CodingKeys: String, CodingKey { case version, spaces, hiddenPids, activeWorkspaces, desktopHomes, shownOnDisplays, activeDesktop }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -55,19 +60,48 @@ public struct SavedLayout: Codable, Equatable {
         spaces = try c.decodeIfPresent([Space].self, forKey: .spaces) ?? []
         hiddenPids = try c.decodeIfPresent([Int32].self, forKey: .hiddenPids) ?? []
         activeWorkspaces = try c.decodeIfPresent([String: Int].self, forKey: .activeWorkspaces) ?? [:]
+        desktopHomes = try c.decodeIfPresent([String: DisplayID].self, forKey: .desktopHomes) ?? [:]
+        shownOnDisplays = try c.decodeIfPresent([DisplayID: Int].self, forKey: .shownOnDisplays) ?? [:]
+        activeDesktop = try c.decodeIfPresent(Int.self, forKey: .activeDesktop) ?? 0
     }
 
-    /// v1 virtual ids (1_000_000 + ws*100 + screen) belonged to one global workspace set. v2 ids are
-    /// per macOS desktop; the old grids are attached to `currentSpace`, the desktop they were last used on.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(version, forKey: .version)
+        try c.encode(spaces, forKey: .spaces)
+        try c.encode(hiddenPids, forKey: .hiddenPids)
+        try c.encode(desktopHomes, forKey: .desktopHomes)
+        try c.encode(shownOnDisplays, forKey: .shownOnDisplays)
+        try c.encode(activeDesktop, forKey: .activeDesktop)
+    }
+
+    /// v1 ids (1_000_000 + ws*100 + screen) and v2 ids (1_000_000_000 + real*10_000 + ws*100 + screen) both become
+    /// v3 desktop ids (1_000_000_000 + ws*100). Grids of the first screen on `currentSpace` (the main display's
+    /// macOS desktop) survive; with none there, those of the macOS desktop with the most grids.
     public func migrated(currentSpace: SpaceID) -> SavedLayout {
-        guard version < 2 else { return self }
+        guard version < 3 else { return self }
         var out = self
         out.version = SavedLayout.schemaVersion
-        out.spaces = spaces.map { sp in
-            guard sp.id >= 1_000_000, sp.id < 1_000_000_000 else { return sp }
-            let rest = sp.id - 1_000_000
-            return Space(id: 1_000_000_000 + currentSpace * 10_000 + rest, columns: sp.columns)
+        func decode(_ id: SpaceID) -> (real: SpaceID, ws: Int, screen: Int)? {
+            if version < 2 {
+                guard id >= 1_000_000, id < 1_000_000_000 else { return nil }
+                let rest = id - 1_000_000
+                return (currentSpace, Int(rest / 100), Int(rest % 100))
+            }
+            guard id >= 1_000_000_000 else { return nil }
+            let rest = id - 1_000_000_000
+            return (rest / 10_000, Int((rest % 10_000) / 100), Int(rest % 100))
         }
+        let decoded = spaces.compactMap { sp in decode(sp.id).map { (sp, $0) } }.filter { $0.1.screen == 0 }
+        let counts = Dictionary(grouping: decoded, by: { $0.1.real }).mapValues(\.count)
+        let real = counts[currentSpace] != nil ? currentSpace : (counts.max { $0.value < $1.value }?.key ?? currentSpace)
+        out.spaces = spaces.filter { decode($0.id) == nil } + decoded.filter { $0.1.real == real }.map { sp, d in
+            var s = sp
+            s.id = VirtualWorkspaces.spaceID(d.ws)
+            return s
+        }
+        out.activeDesktop = activeWorkspaces[String(real)] ?? 0
+        out.activeWorkspaces = [:]
         return out
     }
 

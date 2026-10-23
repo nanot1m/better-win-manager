@@ -318,15 +318,14 @@ struct ReconcilerTests {
 
     func testSavedLayoutV1Migration() {
         let json = """
-        {"spaces":[{"id":1000201,"columns":[{"weight":1,"windows":[{"bundleID":"com.a","title":"t","frame":[[0,0],[10,10]],"heightWeight":1}]}]},
+        {"spaces":[{"id":1000200,"columns":[{"weight":1,"windows":[{"bundleID":"com.a","title":"t","frame":[[0,0],[10,10]],"heightWeight":1}]}]},
                    {"id":7,"columns":[]}]}
         """
         let v1 = try! JSONDecoder().decode(SavedLayout.self, from: Data(json.utf8))
         expect(v1.version == 1, #function, #line)
         let v2 = v1.migrated(currentSpace: 3)
-        expect(v2.version == 2, #function, #line)
-        expect(v2.spaces[0].id == 1_000_000_000 + 3 * 10_000 + 201, #function, #line)
-        expect(v2.spaces[1].id == 7, #function, #line)
+        expect(v2.version == SavedLayout.schemaVersion, #function, #line)
+        expect(v2.spaces.map(\.id).sorted() == [7, VirtualWorkspaces.spaceID(2)], #function, #line)
         let encoded = try! JSONEncoder().encode(v2)
         expect(try! JSONDecoder().decode(SavedLayout.self, from: encoded) == v2, #function, #line)
     }
@@ -458,15 +457,59 @@ struct ReconcilerTests {
             v.apply(windows: Array(frames.keys).sorted(), pid: { pid_t($0) }, hideable: { _ in hideable },
                     isTiled: { _ in false }, frame: { self.frames[$0] },
                     setFrame: { w, f in if !self.ignoresMoves.contains(w) { self.frames[w] = f } },
-                    parkOrigin: { _ in self.corner },
-                    isInCorner: { f in abs(f.minX - self.corner.x) <= 100 && abs(f.minY - self.corner.y) <= 100 },
-                    fit: { $0 }, hide: { self.hidden.insert($0) }, unhide: { self.hidden.remove($0) },
+                    parkOrigin: { _, _ in self.corner },
+                    isInCorner: { _, f in abs(f.minX - self.corner.x) <= 100 && abs(f.minY - self.corner.y) <= 100 },
+                    fit: { $1 }, hide: { self.hidden.insert($0) }, unhide: { self.hidden.remove($0) },
                     countRefusals: countRefusals, now: now)
         }
     }
 
+    func desktops(_ n: Int, displays: [DisplayID] = ["A"]) -> VirtualWorkspaces {
+        let v = VirtualWorkspaces(count: n) { _ in }
+        v.connect(displays)
+        return v
+    }
+
+    func testDesktopsLiveOnDisplays() {
+        let v = desktops(3)
+        expect(v.desktops(on: "A") == [0, 1, 2] && v.shown == [0], #function, #line)
+        // A new display gets a desktop of its own; both are shown.
+        v.connect(["A", "B"])
+        expect(v.count == 4 && v.desktops(on: "B") == [3] && v.shown == [0, 3], #function, #line)
+        v.switchTo(1)
+        expect(v.shown == [1, 3] && v.active == 1, #function, #line)
+        // Sending the active desktop to B shows it there; A falls back to one of its own.
+        v.send(desktop: 1, to: "B")
+        expect(v.display(of: 1) == "B" && v.shownDesktop(on: "B") == 1 && v.shownDesktop(on: "A") == 0, #function, #line)
+        // Unplugging B brings its desktops to A; plugging it back returns them.
+        v.connect(["A"])
+        expect(v.desktops(on: "A") == [0, 1, 2, 3] && v.shown == [0], #function, #line)
+        v.connect(["A", "B"])
+        expect(v.desktops(on: "B") == [1, 3] && v.shownDesktop(on: "B") == 1, #function, #line)
+    }
+
+    func testMainDisplayChangeKeepsDesktops() {
+        let v = desktops(2)
+        v.connect(["A", "B"])
+        v.send(desktop: 1, to: "B")
+        // Desktop 2 came with B; 3 is made on demand while A is main.
+        v.setCount(4)
+        // B becomes main: desktops stay where they live, those made on demand too; only new ones follow main.
+        v.connect(["B", "A"])
+        expect(v.display(of: 0) == "A" && v.display(of: 1) == "B" && v.display(of: 3) == "A" && v.main == "B", #function, #line)
+        v.setCount(5)
+        expect(v.display(of: 4) == "B", #function, #line)
+    }
+
+    func testSendingLastDesktopLeavesANewOne() {
+        let v = desktops(1)
+        v.connect(["A", "B"])
+        v.send(desktop: 0, to: "B")
+        expect(v.desktops(on: "A").count == 1 && v.display(of: 0) == "B", #function, #line)
+    }
+
     func testParkingFollowsActiveWorkspace() {
-        let v = VirtualWorkspaces(realSpace: 1, count: 2) { _ in }
+        let v = desktops(2)
         let screen = FakeScreen()
         let home = CGRect(x: 100, y: 100, width: 400, height: 300)
         screen.frames = [1: home, 2: home]
@@ -481,7 +524,7 @@ struct ReconcilerTests {
     }
 
     func testHideableAppIsHiddenNotParked() {
-        let v = VirtualWorkspaces(realSpace: 1, count: 2) { _ in }
+        let v = desktops(2)
         let screen = FakeScreen()
         screen.frames = [3: CGRect(x: 0, y: 0, width: 300, height: 300)]
         v.move(3, to: 1)
@@ -493,7 +536,7 @@ struct ReconcilerTests {
     }
 
     func testWindowRefusingToParkJoinsActiveWorkspace() {
-        let v = VirtualWorkspaces(realSpace: 1, count: 2) { _ in }
+        let v = desktops(2)
         let screen = FakeScreen()
         screen.frames = [4: CGRect(x: 100, y: 100, width: 300, height: 300)]
         screen.ignoresMoves = [4]
@@ -504,7 +547,7 @@ struct ReconcilerTests {
     }
 
     func testRefusalsDoNotCountWhileSuspended() {
-        let v = VirtualWorkspaces(realSpace: 1, count: 2) { _ in }
+        let v = desktops(2)
         let screen = FakeScreen()
         screen.frames = [5: CGRect(x: 100, y: 100, width: 300, height: 300)]
         screen.ignoresMoves = [5]
@@ -515,14 +558,14 @@ struct ReconcilerTests {
     }
 
     func testMoveWorkspaceRemapsAndTrims() {
-        let v = VirtualWorkspaces(realSpace: 1, count: 3) { _ in }
+        let v = desktops(3)
         v.move(1, to: 0); v.move(2, to: 2)
         let map = v.moveWorkspace(from: 2, to: 0)
         expect(map == [0: 1, 1: 2, 2: 0] && v.workspace(of: 2) == 0 && v.workspace(of: 1) == 1, #function, #line)
         v.forget(2)
         v.trimEmptyTrailing(minimum: 1)
         expect(v.count == 2, #function, #line)
-        expect(VirtualWorkspaces.decode(v.spaceID(workspace: 2, screenIndex: 1))! == (1, 2, 1), #function, #line)
+        expect(VirtualWorkspaces.workspace(of: VirtualWorkspaces.spaceID(2)) == 2, #function, #line)
     }
 }
 
@@ -571,6 +614,9 @@ let tests: [(String, () -> Void)] = [
     ("windowRefusingToParkJoinsActiveWorkspace", t.testWindowRefusingToParkJoinsActiveWorkspace),
     ("refusalsDoNotCountWhileSuspended", t.testRefusalsDoNotCountWhileSuspended),
     ("moveWorkspaceRemapsAndTrims", t.testMoveWorkspaceRemapsAndTrims),
+    ("desktopsLiveOnDisplays", t.testDesktopsLiveOnDisplays),
+    ("mainDisplayChangeKeepsDesktops", t.testMainDisplayChangeKeepsDesktops),
+    ("sendingLastDesktopLeavesANewOne", t.testSendingLastDesktopLeavesANewOne),
 ]
 for (name, run) in tests {
     let before = failures

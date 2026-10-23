@@ -32,10 +32,11 @@ Hotkeys are registered globally with Carbon. A combination macOS already uses, s
 | Action | Default | Does |
 | --- | --- | --- |
 | `desktop1` … `desktop9` | ⌃1 … ⌃9 | Switch; a missing desktop is created |
-| `desktopNext` / `desktopPrevious` (past the last or first desktop: the neighbouring macOS Space, e.g. a fullscreen app; from a fullscreen Space: back) | ⌃→ / ⌃← | Switch relative to the current one |
+| `desktopNext` / `desktopPrevious` (past the last or first desktop: the neighbouring macOS Space, e.g. a fullscreen app; from a fullscreen Space: back) | ⌃→ / ⌃← | Switch to the next or previous desktop on the same screen |
 | `sendToDesktop1` … `sendToDesktop9` | ⌃⌥1 … ⌃⌥9 | Send the focused window; it is tiled there if it was tiled here |
 | `sendToNextDesktop` / `sendToPreviousDesktop` | unbound | Send relative to the current desktop |
 | `desktopMoveLeft` / `desktopMoveRight` | unbound | Reorder the current desktop among its neighbours |
+| `desktopToNextScreen` | unbound | Move the current desktop, windows and all, to the next screen, where it stays shown |
 
 Dragging a chip in the status bar also reorders desktops, and ⌥ + scroll wheel switches them.
 

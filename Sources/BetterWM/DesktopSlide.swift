@@ -14,7 +14,10 @@ final class DesktopSlide {
     private var animator: Timer?
     private var offset: CGFloat = 0
     private var width: CGFloat = 1
-    private var hasPrevious = false, hasNext = false
+    /// The desktops either side of the current one on its screen.
+    private var previous: Int?, next: Int?
+    private var hasPrevious: Bool { previous != nil }
+    private var hasNext: Bool { next != nil }
     private var current = 0
     var isActive: Bool { panel.isVisible }
     /// Screen image taken when the fingers touched the pad, so a swipe that follows starts without a capture.
@@ -53,15 +56,15 @@ final class DesktopSlide {
 
     func began() {
         animator?.invalidate()
-        guard !panel.isVisible, let screen = NSScreen.screens.first, let current = manager.currentDesktop else { return }
+        guard !panel.isVisible, let screen = manager.activeScreen, let current = manager.currentDesktop else { return }
         let t0 = Date()
         defer { Log.write("gesture", "slide ready in \(Int(Date().timeIntervalSince(t0) * 1000)) ms") }
         self.current = current
         let areaAX = area(of: screen)
         let inset = manager.system.topInset(screen)
         width = areaAX.width
-        hasPrevious = current > 0
-        hasNext = current + 1 < manager.desktopCount
+        previous = manager.neighbourDesktop(next: false)
+        next = manager.neighbourDesktop(next: true)
         func slide(_ d: Int) -> [SlideView.Item] {
             let items = manager.previewItems(desktop: d)
             let top = manager.lastFocusedWindow(onDesktop: d) ?? items.first?.id
@@ -79,7 +82,7 @@ final class DesktopSlide {
         let backdrop = Overview.captureBackdrop(areaAX, topInset: 0)
         let frame = NSRect(x: screen.frame.minX, y: screen.frame.minY, width: screen.frame.width, height: screen.frame.height - inset)
         panel.setFrame(frame, display: false)
-        view.configure(backdrop: backdrop, outgoing: outgoing, previous: hasPrevious ? slide(current - 1) : nil, next: hasNext ? slide(current + 1) : nil,
+        view.configure(backdrop: backdrop, outgoing: outgoing, previous: previous.map(slide), next: next.map(slide),
                        scale: screen.backingScaleFactor)
         offset = 0
         view.offset = 0
@@ -87,7 +90,7 @@ final class DesktopSlide {
         // No layout passes while the slide is up: a snapshot mid-scrub stalls the main thread for tens of ms.
         manager.interacting = true
         // Parked neighbours are on screen and can be refreshed; hidden ones keep the capture taken before hiding.
-        let neighbours = (hasPrevious ? manager.previewItems(desktop: current - 1) : []) + (hasNext ? manager.previewItems(desktop: current + 1) : [])
+        let neighbours = [previous, next].compactMap { $0 }.flatMap { manager.previewItems(desktop: $0) }
         Thumbnails.refresh(neighbours.filter { !(NSRunningApplication(processIdentifier: $0.pid)?.isHidden ?? false) }.map(\.id)) { [weak self] id, img in
             self?.view.setThumbnail(img, for: id)
         }
@@ -117,8 +120,7 @@ final class DesktopSlide {
             animate(to: 0) { [weak self] in self?.manager.switchDesktopOrSpace(next: false) }
             return
         }
-        guard target != 0 else { animate(to: 0) {}; return }
-        let destination = current + target
+        guard target != 0, let destination = target > 0 ? next : previous else { animate(to: 0) {}; return }
         // The finishing slide is a Core Animation transaction, animated by the render server, so the real switch
         // (some 40 ms of Accessibility moves on the main thread) can run right away without stalling a frame.
         animator?.invalidate()

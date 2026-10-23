@@ -15,44 +15,31 @@ final class WindowManager {
     /// Last input that could have activated another app; consumed by one focus-follow so apps fighting over
     /// focus (Unity after a compile versus the app the user was in) cannot ping-pong the desktop.
     var lastFocusInput = Date.distantPast
-    /// One workspace set per macOS desktop (real Space), created on first use.
-    private var virtualSets: [SpaceID: VirtualWorkspaces] = [:]
+    /// Numbered desktops across all displays, each living on one.
+    private let desktops = VirtualWorkspaces(count: 1) { Log.write("park", $0) }
 
-    /// The set for the desktop currently shown on the main screen.
-    private var virtualWS: VirtualWorkspaces {
-        let screen = NSScreen.screens.first ?? NSScreen.main ?? NSScreen()
-        return virtualSet(for: screen)
+    static func displayID(_ screen: NSScreen) -> DisplayID {
+        guard let num = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID,
+              let uuid = CGDisplayCreateUUIDFromDisplayID(num)?.takeRetainedValue() else { return screen.localizedName }
+        return CFUUIDCreateString(nil, uuid) as String
+    }
+    private func screen(of display: DisplayID) -> NSScreen? { NSScreen.screens.first { Self.displayID($0) == display } }
+    private func screen(containing p: CGPoint) -> NSScreen? { NSScreen.screens.first { $0.frame.toCocoa().contains(p) } }
+    /// The desktop shown on the display at `p`, the active one if no display is there.
+    private func desktopShown(at p: CGPoint) -> Int {
+        screen(containing: p).flatMap { desktops.shownDesktop(on: Self.displayID($0)) } ?? desktops.active
+    }
+    /// The screen of a desktop's display, the main one if it has none.
+    private func screen(ofDesktop ws: Int) -> NSScreen? { desktops.display(of: ws).flatMap(screen(of:)) ?? NSScreen.screens.first }
+
+    /// Keeps the model's displays in step with the connected ones; System Settings decides which is main.
+    private func syncDisplays() {
+        let ids = NSScreen.screens.map(Self.displayID)
+        guard ids != desktops.displays else { return }
+        desktops.connect(ids)
+        Log.write("screen", "displays \(ids.map { $0.prefix(8) }); desktops \(ids.map { d in desktops.desktops(on: d).map { $0 + 1 } })")
     }
 
-    private func virtualSet(for screen: NSScreen) -> VirtualWorkspaces { virtualSet(realSpace: Spaces.current(for: screen)) }
-
-    private func virtualSet(realSpace: SpaceID) -> VirtualWorkspaces {
-        if let v = virtualSets[realSpace] { return v }
-        let v = VirtualWorkspaces(realSpace: realSpace, count: 1) { Log.write("park", $0) }
-        // Come back to the workspace that was active when the last run ended.
-        if config.restoreLayouts, let active = saved.activeWorkspaces[String(realSpace)], active > 0 {
-            if active >= v.count { v.setCount(active + 1) }
-            v.switchTo(active)
-            Log.write("restore", "desktop \(realSpace) resumes on workspace \(active + 1)")
-        }
-        virtualSets[realSpace] = v
-        return v
-    }
-
-    /// The set a window belongs to: that of the macOS desktop it is on.
-    private func virtualSet(ofWindow id: WindowID) -> VirtualWorkspaces {
-        // A parked window that macOS moved to another display's Space (it connected beside the parking corner)
-        // still belongs to the set that parked it.
-        if let parker = virtualSets.values.first(where: { $0.isParked(id) }) { return parker }
-        guard let real = Spaces.spaces(of: id).first else { return virtualWS }
-        // A window gone fullscreen is away from its desktop, not on a new one: it keeps its workspace and slot.
-        guard Spaces.isDesktop(real) else { return virtualSets.values.first { $0.realSpace != real && $0.isKnown(id) } ?? virtualWS }
-        return virtualSet(realSpace: real)
-    }
-
-    /// Fullscreen, split view, or a fullscreen Space being torn down: macOS owns its frame until it is back.
-    private func isAway(_ id: WindowID) -> Bool { Spaces.spaces(of: id).first.map { !Spaces.isDesktop($0) } ?? false }
-    private func markAway(_ snap: inout Snapshot) { snap.away = Set(snap.windows.map(\.id).filter(isAway)) }
     /// Visible window IDs front to back from the last full tick; avoids re-enumerating on every gesture frame.
     private var zOrder: [WindowID] = []
     /// Front-to-back order of visible windows as of the last full tick.
@@ -97,6 +84,10 @@ final class WindowManager {
         }
     }
 
+    /// Fullscreen, split view, or a fullscreen Space being torn down: macOS owns its frame until it is back.
+    private func isAway(_ id: WindowID) -> Bool { Spaces.spaces(of: id).first.map { !Spaces.isDesktop($0) } ?? false }
+    private func markAway(_ snap: inout Snapshot) { snap.away = Set(snap.windows.map(\.id).filter(isAway)) }
+
     private func configureWorkspaces() {
         tick()
     }
@@ -104,28 +95,22 @@ final class WindowManager {
     /// The observer reports model Spaces: the virtual workspace a screen shows and the one a window belongs to.
     private func installSpaceModel() {
         system.spaceOf = { [unowned self] screen in
-            let v = self.virtualSet(for: screen)
-            return v.spaceID(workspace: v.active, screenIndex: NSScreen.screens.firstIndex(of: screen) ?? 0)
+            VirtualWorkspaces.spaceID(self.desktops.shownDesktop(on: Self.displayID(screen)) ?? self.desktops.active)
         }
-        system.spacesOfWindow = { [unowned self] id in
-            let v = self.virtualSet(ofWindow: id)
-            let screenIndex = self.system.axWindow(id).flatMap { w in NSScreen.screens.firstIndex { $0.visibleFrame.toCocoa().contains(w.frame.center) } } ?? 0
-            return [v.spaceID(workspace: v.workspace(of: id), screenIndex: screenIndex)]
-        }
+        system.spacesOfWindow = { [unowned self] id in [VirtualWorkspaces.spaceID(self.desktops.workspace(of: id))] }
     }
 
     /// Quitting must leave every window reachable: unpark all of them and write the layout one last time.
     func prepareForQuit() {
         saveWork?.cancel()
         saveNow()
-        for v in virtualSets.values {
-            // Parked tiled windows have no remembered frame; their grid slot is where they go.
-            for id in v.parkedWindows where state.isTiled(id) {
-                if let f = targetFrame(of: id) { system.execute([.setFrame(id, f)]) }
-            }
-            v.unparkAll(setFrame: { self.system.execute([.setFrame($0, $1)]) },
-                        unhide: { NSRunningApplication(processIdentifier: $0)?.unhide() })
+        // Parked tiled windows have no remembered frame; their grid slot is where they go.
+        for id in desktops.parkedWindows where state.isTiled(id) {
+            if let f = targetFrame(of: id) { system.execute([.setFrame(id, f)]) }
         }
+        desktops.unparkAll(setFrame: { self.system.execute([.setFrame($0, $1)]) },
+                           unhide: { NSRunningApplication(processIdentifier: $0)?.unhide() },
+                           fit: { self.fit($1, toDesktopOf: $0) })
     }
 
     // MARK: Desktops
@@ -133,18 +118,16 @@ final class WindowManager {
     /// Every standard window with the desktop it lives on, front-to-back within each desktop, current desktop first.
     func windowsByDesktop() -> [(desktop: Int, windows: [AXWindow])] {
         var byDesktop: [Int: [AXWindow]] = [:]
-        let v = virtualWS
-        // Only this macOS desktop's set: windows on other desktops belong to their own sets.
         var listed = Set<WindowID>()
         for w in Spaces.visibleWindows() {
-            guard let id = id(w), virtualSet(ofWindow: id) === v else { continue }
+            guard let id = id(w) else { continue }
             listed.insert(id)
-            byDesktop[v.workspace(of: id), default: []].append(w)
+            byDesktop[desktops.workspace(of: id), default: []].append(w)
         }
         // Windows of hidden apps are not on screen but still belong to their workspace.
-        for id in v.knownWindows where !listed.contains(id) && v.isParked(id) {
+        for id in desktops.knownWindows where !listed.contains(id) && desktops.isParked(id) {
             guard let w = system.axWindow(id), w.isValid, w.isStandard else { continue }
-            byDesktop[v.workspace(of: id), default: []].append(w)
+            byDesktop[desktops.workspace(of: id), default: []].append(w)
         }
         let current = currentDesktop ?? 0
         // Reading order: left to right by column, top to bottom within it.
@@ -164,16 +147,10 @@ final class WindowManager {
     /// Windows per desktop in display order: the grid's columns left to right, top to bottom, then floating
     /// windows. One entry per window, for the status bar chips.
     func appsByDesktop() -> [Int: [(pid: pid_t, windows: [WindowID])]] {
-        let v = virtualWS
         var out: [Int: [(pid: pid_t, windows: [WindowID])]] = [:]
         for (desktop, apps) in currentAppsByDesktop() {
             let all = apps.flatMap { app in app.windows.map { (pid: app.pid, id: $0) } }
-            let gridOrder = state.grids
-                .compactMap { key, grid -> (Int, [WindowID])? in
-                    guard let d = VirtualWorkspaces.decode(key), d.real == v.realSpace, d.workspace == desktop else { return nil }
-                    return (d.screenIndex, grid.columns.flatMap(\.windows))
-                }
-                .sorted { $0.0 < $1.0 }.flatMap(\.1)
+            let gridOrder = state.grid(for: VirtualWorkspaces.spaceID(desktop)).windows
             var ordered = gridOrder.compactMap { id in all.first { $0.id == id } }
             let floating = all.filter { !gridOrder.contains($0.id) }
             var order = chipOrder[desktop]?.filter { fid in floating.contains { $0.id == fid } } ?? []
@@ -194,14 +171,13 @@ final class WindowManager {
             if let i = out[desktop]?.firstIndex(where: { $0.pid == pid }) { out[desktop]![i].windows.append(id) }
             else { out[desktop, default: []].append((pid, [id])) }
         }
-        let v = virtualWS
         for info in CGWindowInfo.list([.optionOnScreenOnly, .excludeDesktopElements]) where info.isOrdinaryOtherApp {
-            guard virtualSet(ofWindow: info.id) === v, v.isKnown(info.id) else { continue }
-            add(info.pid, info.id, to: v.workspace(of: info.id))
+            guard desktops.isKnown(info.id) else { continue }
+            add(info.pid, info.id, to: desktops.workspace(of: info.id))
         }
-        for id in v.knownWindows where v.isParked(id) && system.inLastSnapshot.contains(id) {
+        for id in desktops.knownWindows where desktops.isParked(id) && system.inLastSnapshot.contains(id) {
             guard let pid = system.pid(of: id) else { continue }
-            add(pid, id, to: v.workspace(of: id))
+            add(pid, id, to: desktops.workspace(of: id))
         }
         return out
     }
@@ -209,10 +185,8 @@ final class WindowManager {
     /// Where a window sits on its own desktop: its grid slot if tiled, its remembered frame if parked, else as is.
     func layoutFrame(of w: AXWindow) -> CGRect? {
         guard let id = id(w) else { return nil }
-        if let space = state.space(containing: id), let screen = system.screens().first {
-            return reconciler.geometry(state.grid(for: space), screen).frame(of: id)
-        }
-        return virtualWS.parkedFrame(of: id)
+        if state.isTiled(id) { return targetFrame(of: id) }
+        return desktops.parkedFrame(of: id)
     }
 
     /// Brings `w` to front, switching to its desktop first when needed.
@@ -225,11 +199,14 @@ final class WindowManager {
         }
     }
 
-    var desktopCount: Int { virtualWS.count }
-    var currentDesktop: Int? { virtualWS.active }
+    var desktopCount: Int { desktops.count }
+    var currentDesktop: Int? { desktops.active }
+    /// Desktops living on `screen`, and the one it shows; for the bar on that screen.
+    func desktopList(on screen: NSScreen) -> [Int] { desktops.desktops(on: Self.displayID(screen)) }
+    func shownDesktop(on screen: NSScreen) -> Int? { desktops.shownDesktop(on: Self.displayID(screen)) }
 
     func switchDesktop(_ index: Int) {
-        let v = virtualWS
+        let v = desktops
         guard index >= 0 else { return }
         // Asking for the desktop you are already on cycles focus through its windows instead.
         if index == v.active {
@@ -241,8 +218,8 @@ final class WindowManager {
         if index >= v.count { v.setCount(index + 1) }
         // Hide the ring during the switch so it doesn't linger on the parked window.
         focusRing.suspended = true
-        Log.write("desktop", "switch to workspace \(index + 1) (real space \(v.realSpace))")
-        rememberFocus(in: v)
+        Log.write("desktop", "switch to workspace \(index + 1) on display \(v.display(of: index)?.prefix(8) ?? "?")")
+        rememberFocus()
         v.switchTo(index)
         ignoreOwnFocusChanges()
         lastFocusedID = AXWindow.focused.flatMap(id)
@@ -258,16 +235,16 @@ final class WindowManager {
 
     /// Reorders workspaces: everything keyed by workspace follows.
     func moveDesktop(from: Int, to: Int) {
-        let v = virtualWS
-        let map = v.moveWorkspace(from: from, to: to)
+        let map = desktops.moveWorkspace(from: from, to: to)
         guard !map.isEmpty else { return }
         func remap(_ id: SpaceID) -> SpaceID {
-            guard let d = VirtualWorkspaces.decode(id), d.real == v.realSpace, let ws = map[d.workspace] else { return id }
-            return v.spaceID(workspace: ws, screenIndex: d.screenIndex)
+            guard let ws = VirtualWorkspaces.workspace(of: id), let to = map[ws] else { return id }
+            return VirtualWorkspaces.spaceID(to)
         }
         state.grids = Dictionary(uniqueKeysWithValues: state.grids.map { (remap($0.key), $0.value) })
         state.seen = Dictionary(uniqueKeysWithValues: state.seen.map { (remap($0.key), $0.value) })
         state.retileRequested = Set(state.retileRequested.map(remap))
+        lastFocusedByWorkspace = Dictionary(uniqueKeysWithValues: lastFocusedByWorkspace.map { (remap($0.key), $0.value) })
         for i in lastSaved.spaces.indices { lastSaved.spaces[i].id = remap(lastSaved.spaces[i].id) }
         chipOrder = Dictionary(uniqueKeysWithValues: chipOrder.compactMap { k, order in map[k].map { ($0, order) } })
         Log.write("desktop", "move workspace \(from + 1) to position \(to + 1)")
@@ -276,11 +253,61 @@ final class WindowManager {
     }
 
     func moveCurrentDesktop(left: Bool) {
-        let v = virtualWS
-        moveDesktop(from: v.active, to: v.active + (left ? -1 : 1))
+        moveDesktop(from: desktops.active, to: desktops.active + (left ? -1 : 1))
     }
 
-    func switchDesktop(next: Bool) { switchDesktop(virtualWS.active + (next ? 1 : -1)) }
+    /// The screen showing the active desktop.
+    var activeScreen: NSScreen? { screen(ofDesktop: desktops.active) }
+
+    /// The desktop next to the active one on its display, if any.
+    func neighbourDesktop(next: Bool) -> Int? {
+        guard let d = desktops.display(of: desktops.active) else { return nil }
+        let here = desktops.desktops(on: d)
+        guard let i = here.firstIndex(of: desktops.active) else { return nil }
+        let j = i + (next ? 1 : -1)
+        return here.indices.contains(j) ? here[j] : nil
+    }
+
+    /// Next or previous desktop on the active desktop's display; past the last one, a new one there.
+    func switchDesktop(next: Bool) {
+        if let n = neighbourDesktop(next: next) { switchDesktop(n); return }
+        guard next, desktops.display(of: desktops.active) == desktops.main else { return }
+        // Only the main display grows on demand; a new desktop lands there anyway.
+        switchDesktop(desktops.count)
+    }
+
+    /// Moves the active desktop, windows and all, to the next display; it stays active there.
+    func sendDesktopToNextScreen() {
+        let ds = desktops.displays
+        let ws = desktops.active
+        guard ds.count > 1, let from = desktops.display(of: ws), let i = ds.firstIndex(of: from) else { return }
+        let to = ds[(i + 1) % ds.count]
+        rememberFocus()
+        let floatingHere = desktops.knownWindows.filter { desktops.workspace(of: $0) == ws && !state.isTiled($0) && !desktops.isParked($0) }
+        desktops.send(desktop: ws, to: to)
+        Log.write("desktop", "send desktop \(ws + 1) to display \(to.prefix(8))")
+        // Tiled windows follow their grid to the new display; floating ones keep their place relative to it.
+        for id in floatingHere { if let f = system.lastFrame(of: id) { system.execute([.setFrame(id, fit(f, toDesktopOf: id))]) } }
+        ignoreOwnFocusChanges()
+        tick()
+        revealRingAndFocusTop()
+        onDesktopChange?()
+    }
+
+    /// `f` moved to the display of `id`'s desktop if it lies on another one, keeping its relative position, and
+    /// fitted to that display's visible area.
+    private func fit(_ f: CGRect, toDesktopOf id: WindowID) -> CGRect {
+        guard let target = screen(ofDesktop: desktops.workspace(of: id)) else { return fitToScreen(f) }
+        let to = target.visibleFrame.toCocoa()
+        guard let source = NSScreen.screens.first(where: { $0.frame.toCocoa().contains(f.center) }), source != target else {
+            return fitToScreen(f, area: to)
+        }
+        let from = source.visibleFrame.toCocoa()
+        let moved = CGRect(x: to.minX + (f.minX - from.minX) / from.width * to.width,
+                           y: to.minY + (f.minY - from.minY) / from.height * to.height,
+                           width: f.width, height: f.height)
+        return fitToScreen(moved, area: to)
+    }
 
     private var fullscreenCache: (at: Date, value: [(space: SpaceID, pids: [pid_t])])?
     /// Fullscreen Spaces on the main display with the apps in them, for the bar; enumerating windows per Space
@@ -315,10 +342,10 @@ final class WindowManager {
     /// There is no public call to switch Spaces, but activating an app whose windows live on the target Space
     /// makes macOS go there.
     func switchDesktopOrSpace(next: Bool) {
-        guard let screen = NSScreen.screens.first else { return }
+        guard let screen = screen(ofDesktop: desktops.active), let d = desktops.display(of: desktops.active) else { return }
         let real = Spaces.current(for: screen)
-        let v = virtualWS
-        let atEdge = next ? v.active >= v.count - 1 : v.active == 0
+        let here = desktops.desktops(on: d)
+        let atEdge = next ? desktops.active == here.last : desktops.active == here.first
         if !Spaces.isFullscreen(real), !atEdge {
             switchDesktop(next: next)
             return
@@ -326,7 +353,7 @@ final class WindowManager {
         let n = Spaces.neighbours(of: real)
         guard let target = next ? n.next : n.previous else { return }
         // On a desktop, prefer a window visible on its active workspace so the switch lands on the right windows.
-        let prefer = virtualSets[target].map { set in set.knownWindows.filter { set.workspace(of: $0) == set.active && !set.isParked($0) } } ?? []
+        let prefer = desktops.knownWindows.filter { desktops.isShown(desktops.workspace(of: $0)) && !desktops.isParked($0) }
         activateSpace(target, prefer: prefer)
     }
 
@@ -342,12 +369,18 @@ final class WindowManager {
     private var adoptedInBackground: [WindowID: Date] = [:]
     private func followFocusedWindowsWorkspace() {
         guard let f = AXWindow.focused, let id = id(f) else { return }
-        let v = virtualSet(ofWindow: id)
+        let v = desktops
         guard id != lastFocusedID else { return }
         lastFocusedID = id
         guard Date() >= ignoreFocusSwitchUntil else { return }
         let ws = v.workspace(of: id)
         guard ws != v.active else { return }
+        // Focus moved to a desktop already on screen (another display): nothing moves, it just becomes active.
+        if v.isShown(ws) {
+            v.switchTo(ws)
+            onDesktopChange?()
+            return
+        }
         // Only follow focus the user caused (⌘Tab, Dock, a click). An app activating itself after a build or
         // a long task must not yank the user to another workspace; its window is parked there, where it belongs.
         guard Date().timeIntervalSince(lastFocusInput) < 2 else {
@@ -361,7 +394,7 @@ final class WindowManager {
         }
         Log.write("desktop", "focus follows \(describe(f)) to workspace \(ws + 1)")
         focusRing.suspended = true
-        rememberFocus(in: v)
+        rememberFocus()
         v.switchTo(ws)
         tick()
         // The window that triggered this is the one to ring; it is already focused.
@@ -384,8 +417,8 @@ final class WindowManager {
     /// Parking, hiding and raising after our own switch move focus around for a moment; none of that is the user.
     private func ignoreOwnFocusChanges() { ignoreFocusSwitchUntil = Date().addingTimeInterval(0.8) }
 
-    private func activateTopApp(in v: VirtualWorkspaces) {
-        let top = zOrder.first { virtualSet(ofWindow: $0) === v && v.workspace(of: $0) == v.active && !v.isParked($0) }
+    private func activateTopApp() {
+        let top = zOrder.first { desktops.workspace(of: $0) == desktops.active && !desktops.isParked($0) }
         if let id = top, let pid = system.pid(of: id), let app = NSRunningApplication(processIdentifier: pid) {
             app.activate()
         } else {
@@ -394,24 +427,17 @@ final class WindowManager {
     }
 
     private func focusTopWindow() {
-        let v = virtualWS
-        if let id = zOrder.first(where: { virtualSet(ofWindow: $0) === v && v.workspace(of: $0) == v.active }) { system.execute([.raise(id)]) }
+        if let id = zOrder.first(where: { desktops.workspace(of: $0) == desktops.active }) { system.execute([.raise(id)]) }
     }
 
-    /// Where a tiled window sits (or will sit) in its grid, in AX coordinates. Works for inactive virtual
-    /// workspaces too, by using the area of the screen the workspace belongs to.
+    /// Where a tiled window sits (or will sit) in its grid, in AX coordinates. Works for desktops not shown
+    /// too, by using the area of the display the desktop lives on.
     private func targetFrame(of id: WindowID) -> CGRect? {
-        guard let space = state.space(containing: id) else { return nil }
+        guard let space = state.space(containing: id), let ws = VirtualWorkspaces.workspace(of: space),
+              let target = screen(ofDesktop: ws), let i = NSScreen.screens.firstIndex(of: target) else { return nil }
         let screens = system.screens()
-        let screen: ScreenInfo
-        if let s = screens.first(where: { $0.space == space }) {
-            screen = s
-        } else if let d = VirtualWorkspaces.decode(space), d.screenIndex < screens.count {
-            screen = ScreenInfo(space: space, area: screens[d.screenIndex].area)
-        } else {
-            return nil
-        }
-        return reconciler.geometry(state.grid(for: space), screen).frame(of: id)
+        guard i < screens.count else { return nil }
+        return reconciler.geometry(state.grid(for: space), ScreenInfo(space: space, area: screens[i].area)).frame(of: id)
     }
 
     /// After a workspace switch: show the ring on the window we are about to raise, in the same pass, then raise it.
@@ -419,14 +445,9 @@ final class WindowManager {
     /// last snapshot: no Accessibility round trips, so it is cheap enough for the first frame of a gesture.
     /// The window that was focused there comes first, then the grid's order, then floating windows.
     func previewItems(desktop d: Int) -> [(id: WindowID, pid: pid_t, frame: CGRect, tiled: Bool)] {
-        let v = virtualWS
+        let v = desktops
         let top = lastFocusedWindow(onDesktop: d)
-        let gridOrder = state.grids
-            .compactMap { key, grid -> (Int, [WindowID])? in
-                guard let s = VirtualWorkspaces.decode(key), s.real == v.realSpace, s.workspace == d else { return nil }
-                return (s.screenIndex, grid.columns.flatMap(\.windows))
-            }
-            .sorted { $0.0 < $1.0 }.flatMap(\.1)
+        let gridOrder = state.grid(for: VirtualWorkspaces.spaceID(d)).windows
         let known = v.knownWindows.filter { v.workspace(of: $0) == d }
         let ordered = ([top].compactMap { $0 } + gridOrder + known).reduce(into: [WindowID]()) { if !$0.contains($1), known.contains($1) { $0.append($1) } }
         return ordered.compactMap { id in
@@ -439,21 +460,20 @@ final class WindowManager {
 
     /// The window that had focus when `desktop` was last left, if it is still around.
     func lastFocusedWindow(onDesktop desktop: Int) -> WindowID? {
-        let v = virtualWS
-        guard let id = lastFocusedByWorkspace[v.spaceID(workspace: desktop, screenIndex: 0)],
-              v.workspace(of: id) == desktop, system.axWindow(id)?.isValid == true else { return nil }
+        guard let id = lastFocusedByWorkspace[VirtualWorkspaces.spaceID(desktop)],
+              desktops.workspace(of: id) == desktop, system.axWindow(id)?.isValid == true else { return nil }
         return id
     }
 
-    private func rememberFocus(in v: VirtualWorkspaces) {
-        guard let f = AXWindow.focused, let id = id(f), virtualSet(ofWindow: id) === v, v.workspace(of: id) == v.active else { return }
-        lastFocusedByWorkspace[v.spaceID(workspace: v.active, screenIndex: 0)] = id
+    private func rememberFocus() {
+        guard let f = AXWindow.focused, let id = id(f), desktops.workspace(of: id) == desktops.active else { return }
+        lastFocusedByWorkspace[VirtualWorkspaces.spaceID(desktops.active)] = id
     }
 
     private func revealRingAndFocusTop() {
-        let v = virtualWS
-        let onActive: (WindowID) -> Bool = { self.virtualSet(ofWindow: $0) === v && v.workspace(of: $0) == v.active }
-        let remembered = lastFocusedByWorkspace[v.spaceID(workspace: v.active, screenIndex: 0)].flatMap { r in system.axWindow(r)?.isValid == true && onActive(r) ? r : nil }
+        let v = desktops
+        let onActive: (WindowID) -> Bool = { v.workspace(of: $0) == v.active }
+        let remembered = lastFocusedByWorkspace[VirtualWorkspaces.spaceID(v.active)].flatMap { r in system.axWindow(r)?.isValid == true && onActive(r) ? r : nil }
         guard let id = remembered ?? zOrder.first(where: onActive) else {
             focusRing.suspended = false
             return
@@ -472,11 +492,10 @@ final class WindowManager {
 
     /// Moves and shrinks a frame so it lies within the visible area of the screen nearest to it; frames
     /// remembered on a monitor that has since been unplugged would otherwise come back off screen or oversized.
-    func fitToScreen(_ f: CGRect) -> CGRect {
+    func fitToScreen(_ f: CGRect, area: CGRect? = nil) -> CGRect {
         let screens = system.screens()
-        guard let screen = screens.first(where: { $0.area.contains(f.center) })
-            ?? screens.min(by: { hypot($0.area.midX - f.midX, $0.area.midY - f.midY) < hypot($1.area.midX - f.midX, $1.area.midY - f.midY) }) else { return f }
-        let a = screen.area
+        guard let a = area ?? (screens.first(where: { $0.area.contains(f.center) })
+            ?? screens.min(by: { hypot($0.area.midX - f.midX, $0.area.midY - f.midY) < hypot($1.area.midX - f.midX, $1.area.midY - f.midY) }))?.area else { return f }
         var r = f
         r.size.width = min(r.width, a.width)
         r.size.height = min(r.height, a.height)
@@ -487,32 +506,33 @@ final class WindowManager {
 
     /// Parks windows of inactive workspaces and restores returning floating ones; tiled ones follow their grid.
     private func applyVirtualParking(_ snap: Snapshot) {
-        var bySet: [SpaceID: [WindowID]] = [:]
-        for w in snap.windows where !snap.away.contains(w.id) { bySet[virtualSet(ofWindow: w.id).realSpace, default: []].append(w.id) }
-        for (real, ids) in bySet {
-            let v = virtualSet(realSpace: real)
-            v.apply(windows: ids,
+        let v = desktops
+        let screenFrames = NSScreen.screens.map { $0.frame.toCocoa() }
+        func corner(_ id: WindowID, _ f: CGRect) -> CGPoint {
+            Parking.origin(for: f, home: screen(ofDesktop: v.workspace(of: id))?.frame.toCocoa(), screens: screenFrames)
+        }
+        v.apply(windows: snap.windows.map(\.id).filter { !snap.away.contains($0) },
                 pid: { snap.window($0)?.pid },
-                // Hiding is app-wide: only when every window the app has anywhere belongs to this set.
                 hideable: { p in
-                    guard self.config.hideApps, let app = NSRunningApplication(processIdentifier: p), app.activationPolicy == .regular else { return false }
-                    return snap.windows.filter { $0.pid == p }.allSatisfy { self.virtualSet(ofWindow: $0.id) === v }
+                    guard self.config.hideApps, let app = NSRunningApplication(processIdentifier: p) else { return false }
+                    return app.activationPolicy == .regular
                 },
                 isTiled: { self.state.isTiled($0) }, frame: { snap.window($0)?.frame },
-                setFrame: { self.system.execute([.setFrame($0, $1)]) }, parkOrigin: { Parking.origin(for: $0, screens: NSScreen.screens.map { $0.frame.toCocoa() }) },
+                setFrame: { self.system.execute([.setFrame($0, $1)]) },
+                parkOrigin: corner,
                 // At the corner that would be chosen now: a display connected beside the old one makes it re-park.
-                isInCorner: { f in
-                    let o = Parking.origin(for: f, screens: NSScreen.screens.map { $0.frame.toCocoa() })
+                isInCorner: { id, f in
+                    let o = corner(id, f)
                     return abs(o.x - f.minX) <= 100 && abs(o.y - f.minY) <= 100
                 },
-                fit: { self.fitToScreen($0) },
+                fit: { self.fit($1, toDesktopOf: $0) },
                 hide: { pid in
                     // A hidden window cannot be captured; the overview shows what it looked like just before.
                     // Only when the overview is in use: captures count as screen recording to macOS.
                     if self.config.overview { Thumbnails.captureNow(snap.windows.filter { $0.pid == pid }.map(\.id)) }
                     // Hiding the frontmost app lets macOS pick the next one (usually Finder, with no window);
                     // hand focus to the destination workspace's top app first, or to ourselves if it is empty.
-                    if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { self.activateTopApp(in: v) }
+                    if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { self.activateTopApp() }
                     NSRunningApplication(processIdentifier: pid)?.hide()
                 },
                 unhide: { [weak self] pid in
@@ -522,7 +542,6 @@ final class WindowManager {
                 },
                 // Moves ignored while macOS is waking or rearranging displays say nothing about the window.
                 countRefusals: snap.now >= claimsSuspendedUntil, now: snap.now)
-        }
     }
 
     var enabled: Bool {
@@ -545,6 +564,8 @@ final class WindowManager {
             let current = spaceScreen.map { Spaces.current(for: $0) } ?? 0
             saved = layout.migrated(currentSpace: current)
             lastSaved = saved
+            desktops.restore(homes: Dictionary(uniqueKeysWithValues: saved.desktopHomes.compactMap { k, v in Int(k).map { ($0, v) } }),
+                             shownOn: saved.shownOnDisplays, active: saved.activeDesktop)
             // A previous run that was killed left its hidden apps hidden; bring them back before parking decides anew.
             for pid in saved.hiddenPids {
                 if let app = NSRunningApplication(processIdentifier: pid), app.isHidden {
@@ -553,6 +574,7 @@ final class WindowManager {
                 }
             }
         }
+        syncDisplays()
         installSpaceModel()
         configureWorkspaces()
         // Sleep, display sleep, the lock screen and fast user switching all leave macOS ignoring window moves for
@@ -572,7 +594,9 @@ final class WindowManager {
             guard let self else { return }
             Log.write("screen", "display configuration changed: \(NSScreen.screens.count) screen(s)")
             self.suspendClaims(until: max(Date().addingTimeInterval(60), self.claimsSuspendedUntil))
+            self.syncDisplays()
             self.tick()
+            self.onDesktopChange?()
         }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
                                                           object: nil, queue: .main) { [weak self] _ in
@@ -644,7 +668,7 @@ final class WindowManager {
     private var tracked: [WindowID] {
         var ids = Set(state.grids.values.flatMap(\.windows))
         ids.formUnion(state.floating)
-        virtualSets.values.forEach { ids.formUnion($0.knownWindows) }
+        ids.formUnion(desktops.knownWindows)
         return Array(ids)
     }
 
@@ -668,7 +692,7 @@ final class WindowManager {
             // Placing windows changes what the next snapshot shows, and apps unhiding during launch add windows
             // between snapshots; every window must pass through assignment before parking can adopt it.
             for _ in 0..<3 where assignNewVirtualWindows(snap) { snap = system.snapshot(tracked: tracked); markAway(&snap) }
-            virtualSets.values.forEach { $0.rememberHomes(snap.windows) }
+            desktops.rememberHomes(snap.windows)
             restoreSavedModes(snap)
             let before = state
             let (next, commands) = reconciler.reconcile(state, snap)
@@ -695,11 +719,11 @@ final class WindowManager {
     /// Workspace membership outlives windows unless told otherwise; a closed window must not keep showing its
     /// app on a desktop chip or count as a sibling, even when its app keeps it alive.
     private func pruneDeadWindows() {
-        guard !virtualSets.isEmpty,
-              case let alive = CGWindowInfo.aliveIDs(), !alive.isEmpty else { return }
+        guard case let alive = CGWindowInfo.aliveIDs(), !alive.isEmpty else { return }
         let closed = system.closedByApp
         system.forgetClosed(closed)
-        for v in virtualSets.values {
+        do {
+            let v = desktops
             for id in v.knownWindows where !alive.contains(id) || closed.contains(id) {
                 v.forget(id)
                 state.forget(id)
@@ -718,7 +742,7 @@ final class WindowManager {
     /// Gives every not-yet-assigned window a workspace: its saved slot if one matches, otherwise the active one.
     /// Returns true if any window was placed from the saved layout, so the snapshot should be rebuilt.
     private func assignNewVirtualWindows(_ snap: Snapshot) -> Bool {
-        var pool = snap.windows.filter { !snap.away.contains($0.id) && !virtualSet(ofWindow: $0.id).isKnown($0.id) }
+        var pool = snap.windows.filter { !snap.away.contains($0.id) && !desktops.isKnown($0.id) }
         guard !pool.isEmpty else { return false }
         if Date() < virtualRestoreDeadline { Log.write("restore", "unassigned: \(pool.map { describe($0.id) })") }
         var placed = false
@@ -728,25 +752,17 @@ final class WindowManager {
         let atLaunch = Date() < virtualRestoreDeadline
         let layout = atLaunch ? saved : lastSaved
         let launchCutoff = Date().addingTimeInterval(-15)
-        // A window of a hidden app is on no Space at all (the previous run left the app hidden); it still belongs
-        // where the layout says.
-        func onDesktop(_ id: WindowID, _ real: SpaceID) -> Bool {
-            let spaces = Spaces.spaces(of: id)
-            return spaces.isEmpty || spaces.first == real
-        }
         func eligible(_ w: WindowInfo) -> Bool {
             atLaunch || (NSRunningApplication(processIdentifier: w.pid)?.launchDate.map { $0 > launchCutoff } ?? false)
         }
         if config.restoreLayouts {
             for savedSpace in layout.spaces {
-                guard let d = VirtualWorkspaces.decode(savedSpace.id) else { continue }
-                let v = virtualSet(realSpace: d.real)
-                if !atLaunch, d.workspace == v.active { continue }
-                let candidates = pool.filter { !reconciler.isIgnored($0) && onDesktop($0.id, d.real) && eligible($0) }
+                guard let ws = VirtualWorkspaces.workspace(of: savedSpace.id) else { continue }
+                if !atLaunch, desktops.isShown(ws) { continue }
+                let candidates = pool.filter { !reconciler.isIgnored($0) && eligible($0) }
                 guard !candidates.isEmpty, let grid = layout.restore(space: savedSpace.id, candidates: candidates, exactTitle: !atLaunch) else { continue }
-                Log.write("restore", "\(grid.windows.map { describe($0) }) back on workspace \(d.workspace + 1)\(atLaunch ? "" : " (app relaunched)")")
-                let ws = d.workspace
-                for id in grid.windows { v.move(id, to: ws) }
+                Log.write("restore", "\(grid.windows.map { describe($0) }) back on workspace \(ws + 1)\(atLaunch ? "" : " (app relaunched)")")
+                for id in grid.windows { desktops.move(id, to: ws) }
                 pool.removeAll { grid.contains($0.id) }
                 // Merge into whatever that workspace already has rather than replacing it.
                 state.mutate(savedSpace.id) { existing in
@@ -760,16 +776,15 @@ final class WindowManager {
         }
         if config.restoreLayouts {
             for savedSpace in layout.spaces where !savedSpace.floating.isEmpty {
-                guard let d = VirtualWorkspaces.decode(savedSpace.id) else { continue }
-                let v = virtualSet(realSpace: d.real)
-                if !atLaunch, d.workspace == v.active { continue }
-                let candidates = pool.filter { onDesktop($0.id, d.real) && eligible($0) }
+                guard let ws = VirtualWorkspaces.workspace(of: savedSpace.id) else { continue }
+                if !atLaunch, desktops.isShown(ws) { continue }
+                let candidates = pool.filter { eligible($0) }
                 for (id, frame) in layout.restoreFloating(space: savedSpace.id, candidates: candidates, exactTitle: !atLaunch) {
-                    v.move(id, to: d.workspace)
+                    desktops.move(id, to: ws)
                     state.floating.insert(id)
-                    system.execute([.setFrame(id, fitToScreen(frame))])
+                    system.execute([.setFrame(id, fit(frame, toDesktopOf: id))])
                     pool.removeAll { $0.id == id }
-                    Log.write("restore", "\(describe(id)) floats on workspace \(d.workspace + 1) at \(frame)")
+                    Log.write("restore", "\(describe(id)) floats on workspace \(ws + 1) at \(frame)")
                     placed = true
                 }
             }
@@ -777,7 +792,7 @@ final class WindowManager {
         // A window left in a parking corner by a previous run (quit without unparking, a crash) and matched by
         // nothing above would be adopted here, unreachable; pull it back onto its screen.
         let screenFrames = NSScreen.screens.map { $0.frame.toCocoa() }
-        for w in pool where !virtualSets.values.contains(where: { $0.isKnown(w.id) }) {
+        for w in pool {
             guard let corner = Parking.screen(parking: w.frame, screens: screenFrames, tolerance: 3),
                   let screen = NSScreen.screens.first(where: { $0.frame.toCocoa() == corner }) else { continue }
             let area = screen.visibleFrame.toCocoa()
@@ -789,7 +804,7 @@ final class WindowManager {
         let frontPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let recentInput = Date().timeIntervalSince(lastUserInput) < 2
         for w in pool {
-            let v = virtualSet(ofWindow: w.id)
+            let v = desktops
             // A window appearing while its app is in the background (Unity recreating its editor window, a
             // background app opening a document) stays with the app's other windows, or where its last window
             // was, instead of landing on the active workspace and dragging the user there later. Only a window
@@ -798,14 +813,16 @@ final class WindowManager {
             let siblingSpaces = v.workspaces(of: siblings)
             let home = siblingSpaces.count == 1 ? siblingSpaces.first : (siblings.isEmpty ? v.homeByPid[w.pid] : nil)
             let deliberate = w.pid == frontPid && recentInput
-            if let ws = home, ws != v.active, !deliberate {
+            // Where it appeared: the desktop that display shows.
+            let local = desktopShown(at: w.frame.center)
+            if let ws = home, ws != local, !deliberate {
                 v.adopt(w.id, into: ws)
                 adoptedInBackground[w.id] = Date()
                 let why = siblings.isEmpty ? "where its last window was" : "with its app's windows"
                 Log.write("adopt", "\(describe(w.id)) joins workspace \(ws + 1) \(why) (\(w.pid == frontPid ? "no recent input" : "app not frontmost"))")
             } else {
-                v.adopt(w.id)
-                Log.write("adopt", "\(describe(w.id)) joins active workspace \(v.active + 1)")
+                v.adopt(w.id, into: local)
+                Log.write("adopt", "\(describe(w.id)) joins workspace \(local + 1), shown where it appeared")
             }
         }
         return placed
@@ -831,7 +848,7 @@ final class WindowManager {
     private func suspendClaims(until date: Date) {
         claimsSuspendedUntil = date
         state.attempts.removeAll()
-        virtualSets.values.forEach { $0.forgetReparkAttempts() }
+        desktops.forgetReparkAttempts()
         Log.write("park", claimsSuspendedUntil == .distantFuture ? "pausing the refusal rule (sleep or lock)" : "refusal rule resumes in \(Int(claimsSuspendedUntil.timeIntervalSinceNow)) s")
     }
 
@@ -860,25 +877,24 @@ final class WindowManager {
         guard config.restoreLayouts, !suppressSaves, var snap = pendingSnapshot else { return }
         // Parked windows sit in the screen corner; save the slot they belong to instead of that position.
         snap.windows = snap.windows.map { w in
-            let v = virtualSet(ofWindow: w.id)
+            let v = desktops
             guard v.isParked(w.id) else { return w }
             var fixed = w
             if let slot = targetFrame(of: w.id) { fixed.frame = slot } else if let real = v.parkedFrame(of: w.id) { fixed.frame = real }
             return fixed
         }
         var layout = SavedLayout.capture(state, snap, floatingSpace: { w in
-            let v = self.virtualSet(ofWindow: w.id)
-            guard v.isKnown(w.id) else { return nil }
-            let screenIndex = NSScreen.screens.firstIndex { $0.visibleFrame.toCocoa().contains(w.frame.center) } ?? 0
-            return v.spaceID(workspace: v.workspace(of: w.id), screenIndex: screenIndex)
+            self.desktops.isKnown(w.id) ? VirtualWorkspaces.spaceID(self.desktops.workspace(of: w.id)) : nil
         })
         // Desktops not active right now keep what was saved for them before.
         let activeSpaces = Set(snap.screens.map(\.space))
         let captured = Set(layout.spaces.map(\.id))
         layout.spaces += lastSaved.spaces.filter { !activeSpaces.contains($0.id) && !captured.contains($0.id) }
         layout.spaces.sort { $0.id < $1.id }
-        layout.hiddenPids = virtualSets.values.flatMap(\.hiddenPids).sorted()
-        layout.activeWorkspaces = Dictionary(uniqueKeysWithValues: virtualSets.map { (String($0.key), $0.value.active) })
+        layout.hiddenPids = desktops.hiddenPids.sorted()
+        layout.desktopHomes = Dictionary(uniqueKeysWithValues: desktops.homes.map { (String($0.key), $0.value) })
+        layout.shownOnDisplays = desktops.shownOn
+        layout.activeDesktop = desktops.active
         guard layout != lastSaved else { return }
         lastSaved = layout
         let enc = JSONEncoder()
@@ -973,7 +989,7 @@ final class WindowManager {
     /// Where each window floated before it was tiled by hand, so toggling tiling off puts it back.
     private var floatingFrames: [WindowID: CGRect] = [:]
     private func rememberFloatingFrame(_ w: AXWindow, _ id: WindowID, frame: CGRect? = nil) {
-        guard !state.isTiled(id), !virtualSet(ofWindow: id).isParked(id) else { return }
+        guard !state.isTiled(id), !desktops.isParked(id) else { return }
         floatingFrames[id] = frame ?? w.frame
     }
     /// After a drag or resize by hand that left the window floating, that is where it now belongs.
@@ -987,7 +1003,7 @@ final class WindowManager {
         guard let id = id(w), let screen = screen(at: p) else { return }
         Log.write("tile", "drop \(describe(w)) into \(zone) on space \(screen.space)")
         rememberFloatingFrame(w, id, frame: original)
-        virtualSet(ofWindow: id).claimForActive(id)
+        desktops.claim(id, for: desktopShown(at: w.frame.center))
         for space in state.grids.keys where space != screen.space { state.grids[space]?.remove(id) }
         state.mutate(screen.space) { $0.apply(zone, to: id) }
         state.seen[screen.space, default: []].insert(id)
@@ -1006,7 +1022,7 @@ final class WindowManager {
         Log.write("tile", "tile \(describe(w))")
         rememberFloatingFrame(w, id)
         // A parked window sits in the screen corner; claim it first so it belongs here and can be placed.
-        virtualSet(ofWindow: id).claimForActive(id)
+        desktops.claim(id, for: desktopShown(at: w.frame.center))
         guard let screen = screen(at: w.frame.center) else { return }
         let geo = reconciler.geometry(state.grid(for: screen.space), screen)
         state.mutate(screen.space) { $0.apply(.newColumn(index: geo.columnIndex(forX: w.frame.midX)), to: id) }
@@ -1175,8 +1191,8 @@ final class WindowManager {
 
     func send(_ w: AXWindow, toDesktop index: Int) {
         guard let id = id(w) else { return }
-        let v = virtualSet(ofWindow: id)
-        guard index >= 0, index < 9, index != v.active else { return }
+        let v = desktops
+        guard index >= 0, index < 9, index != v.workspace(of: id) else { return }
         if index >= v.count { v.setCount(index + 1) }
         let wasTiled = isTiled(w)
         Log.write("desktop", "send \(describe(w)) to workspace \(index + 1) (tiled: \(wasTiled))")
@@ -1186,8 +1202,7 @@ final class WindowManager {
         ignoreOwnFocusChanges()
         if wasTiled {
             // Pre-place it in the target workspace's grid so it is tiled when that workspace shows.
-            let screenIndex = NSScreen.screens.firstIndex { $0.visibleFrame.toCocoa().contains(w.frame.center) } ?? 0
-            let space = v.spaceID(workspace: index, screenIndex: screenIndex)
+            let space = VirtualWorkspaces.spaceID(index)
             state.mutate(space) { $0.apply(.newColumn(index: $0.columns.count), to: id) }
             state.seen[space, default: []].insert(id)
         }

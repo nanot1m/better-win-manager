@@ -4,6 +4,16 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [Unreleased]
+
+### Added
+- Desktops across several displays. Desktops are numbered across all screens and each lives on one display; every screen shows one of its own and its bar lists only those. ⌃1…⌃9 reach any desktop, ⌃→/⌃← move through the current screen's. A display that arrives with no desktop gets a new one.
+- "Send this desktop to the next screen" (`desktopToNextScreen`, also in the menu with two or more screens) moves the current desktop, windows and all; tiled windows follow their grid, floating ones keep their place relative to the screen.
+- Desktops remember their display: unplugging it shows its desktops on the main display, plugging it back returns them, along with what each display was showing. Making another display main in System Settings moves no desktop; only new desktops go to the new main display.
+
+### Changed
+- The saved layout (`state.json`) moves to version 3, keyed by desktop rather than by macOS desktop and screen; older files are migrated on launch.
+
 ## [0.17.5] - 2026-10-23
 
 ### Fixed
