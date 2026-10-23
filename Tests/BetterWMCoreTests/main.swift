@@ -261,6 +261,20 @@ struct ReconcilerTests {
         expect(saved.restore(space: space, candidates: candidates)?.windows == [2], #function, #line)
     }
 
+    func testResizeByDeltaMovesBoundaries() {
+        let r = Reconciler(config: config)
+        var (state, _) = r.reconcile(DesiredState(), snapshot([win(1, area), win(2, area), win(3, area)]))
+        state.mutate(space) { $0.apply(.stack(column: 0, index: 1), to: 3) }
+        let geo = r.geometry(state.grid(for: space), ScreenInfo(space: space, area: area))
+        let before = Dictionary(uniqueKeysWithValues: geo.windowFrames())
+        let grown = GridGeometry(grid: geo.resizing(window: 1, by: 100), area: area, config: config)
+        let after = Dictionary(uniqueKeysWithValues: grown.windowFrames())
+        expect(abs(after[1]!.width - before[1]!.width - 100) < 1 && abs(after[2]!.width - before[2]!.width + 100) < 1, #function, #line)
+        expect(abs(after[1]!.height - before[1]!.height - 100) < 1 && abs(after[3]!.height - before[3]!.height + 100) < 1, #function, #line)
+        let shrunk = GridGeometry(grid: grown.resizing(window: 1, by: -100), area: area, config: config)
+        expect(Dictionary(uniqueKeysWithValues: shrunk.windowFrames())[1]!.approximatelyEquals(before[1]!, tolerance: 1), #function, #line)
+    }
+
     func testEdgeMoveCyclesWidth() {
         var g = Grid()
         g.columns = [Column([1]), Column([2])]
@@ -596,6 +610,7 @@ let tests: [(String, () -> Void)] = [
     ("savedLayoutRoundTripAndMatching", t.testSavedLayoutRoundTripAndMatching),
     ("restoreFallsBackToNearestFrame", t.testRestoreFallsBackToNearestFrame),
     ("edgeMoveCyclesWidth", t.testEdgeMoveCyclesWidth),
+    ("resizeByDeltaMovesBoundaries", t.testResizeByDeltaMovesBoundaries),
     ("configV1Migration", t.testConfigV1Migration),
     ("floatingWindowsSavedAndRestored", t.testFloatingWindowsSavedAndRestored),
     ("stackedModeGeometry", t.testStackedModeGeometry),

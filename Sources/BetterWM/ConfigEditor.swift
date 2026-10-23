@@ -46,6 +46,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var hideAppsSwitch: NSSwitch!
     private var debugLogSwitch: NSSwitch!
     private var stackOffsetField: NSTextField!
+    private var resizeStepField: NSTextField!
     private var stackNarrowField: NSTextField!
     private var switcherThumbsSwitch: NSSwitch!
     private var overviewSwitch: NSSwitch!
@@ -500,7 +501,11 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         }
         stackOffsetField = numberField("48")
         stackNarrowField = numberField("0")
+        resizeStepField = numberField("40")
         return [
+            group("Grow and shrink", [
+                row("Step", "How much the Grow / Shrink actions change the focused window, in every direction it has a neighbour.", [resizeStepField, unit("pt")]),
+            ]),
             group("New windows", [
                 row("Tile new windows automatically", "Off, new windows float until you tile them.", [autoTileSwitch]),
                 row("Where a new window goes", nil, [strategyPopup]),
@@ -813,6 +818,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         on(hideAppsSwitch, config.hideApps)
         on(debugLogSwitch, config.debugLog)
         stackOffsetField.stringValue = String(Int(config.stackOffset))
+        resizeStepField.stringValue = String(Int(config.resizeStep))
         stackNarrowField.stringValue = String(Int(config.stackScreensNarrowerThan))
         on(switcherThumbsSwitch, config.switcherThumbnails)
         on(switcherSwitch, config.switcher)
@@ -893,6 +899,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.hideApps = isOn(hideAppsSwitch)
         config.debugLog = isOn(debugLogSwitch)
         config.stackOffset = number(stackOffsetField, or: defaults.stackOffset)
+        config.resizeStep = max(1, number(resizeStepField, or: defaults.resizeStep))
         config.stackScreensNarrowerThan = number(stackNarrowField, or: defaults.stackScreensNarrowerThan)
         config.switcherThumbnails = isOn(switcherThumbsSwitch)
         config.switcher = isOn(switcherSwitch)

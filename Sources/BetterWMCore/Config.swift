@@ -19,6 +19,7 @@ public struct Config {
             "moveLeft": "ctrl+alt+left", "moveRight": "ctrl+alt+right", "moveUp": "ctrl+alt+up", "moveDown": "ctrl+alt+down",
             "mergeLeft": "ctrl+alt+shift+left", "mergeRight": "ctrl+alt+shift+right",
             "toggleTile": "ctrl+alt+t", "toggleStack": "ctrl+alt+s", "retile": "ctrl+alt+r", "equalize": "ctrl+alt+e",
+            "grow": "ctrl+=", "shrink": "ctrl+-",
             "desktopNext": "ctrl+right", "desktopPrevious": "ctrl+left",
         ]
         for i in 1...9 {
@@ -30,6 +31,8 @@ public struct Config {
     public var tileExistingOnStart: Bool = true
     /// Stacked mode: horizontal shift between cascaded windows, in points.
     public var stackOffset: CGFloat = 48
+    /// How much the grow and shrink actions change a window, in points.
+    public var resizeStep: CGFloat = 40
     /// Screens narrower than this start in stacked mode (0 = never). Handy for a laptop panel next to a big display.
     public var stackScreensNarrowerThan: CGFloat = 0
     /// Remember each desktop's grid and put matching windows back into it on the next launch.
@@ -187,7 +190,8 @@ public struct Config {
         ("focusNext", "Focus next window"), ("focusPrevious", "Focus previous window"),
         ("moveLeft", "Move left"), ("moveRight", "Move right"), ("moveUp", "Move up"), ("moveDown", "Move down"),
         ("mergeLeft", "Merge into left column"), ("mergeRight", "Merge into right column"),
-        ("toggleTile", "Tile / untile focused window"), ("toggleStack", "Toggle stacked layout on this screen"),
+        ("toggleTile", "Tile / untile focused window"), ("grow", "Grow focused window"), ("shrink", "Shrink focused window"),
+        ("toggleStack", "Toggle stacked layout on this screen"),
         ("retile", "Retile current screen"),
         ("equalize", "Equalize sizes"), ("pause", "Pause / resume tiling"), ("refreshRing", "Re-measure window corners for the focus ring"),
         ("desktopNext", "Next desktop"), ("desktopPrevious", "Previous desktop"),
@@ -242,6 +246,8 @@ public struct Config {
         # shift so the ones behind stay visible; screens narrower than the threshold start stacked (0 = never).
         stackOffset = \(num(stackOffset))
         stackScreensNarrowerThan = \(num(stackScreensNarrowerThan))
+        # How much the grow and shrink actions change the focused window, in points.
+        resizeStep = \(num(resizeStep))
 
         # Where an auto-tiled window goes: rightmost, leftmost, position, nextToFocused, stackFocused, autoSplit, spiral.
         #   nextToFocused  new column right after the focused window's column (i3 default)
@@ -385,6 +391,7 @@ public struct Config {
             case "restoreLayouts": cfg.restoreLayouts = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "hideApps": cfg.hideApps = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "stackOffset": cfg.stackOffset = Double(value).map { CGFloat($0) } ?? cfg.stackOffset
+            case "resizeStep": cfg.resizeStep = Double(value).map { CGFloat($0) } ?? cfg.resizeStep
             case "stackScreensNarrowerThan": cfg.stackScreensNarrowerThan = Double(value).map { CGFloat($0) } ?? cfg.stackScreensNarrowerThan
             case "animateLayout": break  // removed: Accessibility-driven frame animation was too laggy
             case "tileExistingOnStart": cfg.tileExistingOnStart = ["true", "yes", "1", "on"].contains(value.lowercased())

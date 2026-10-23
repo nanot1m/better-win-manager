@@ -335,6 +335,27 @@ public struct GridGeometry {
         return g
     }
 
+    /// Grid with window `w` grown (or shrunk, for a negative delta) by `delta` points in every direction it has a
+    /// neighbour: the boundary to the right (else left) moves, and so does the one below (else above) within its column.
+    public func resizing(window w: WindowID, by delta: CGFloat) -> Grid {
+        guard let (ci, wi) = grid.position(of: w) else { return grid }
+        var g = grid
+        let cf = columnFrames()
+        if ci + 1 < cf.count {
+            g = resizing(boundary: ci, toX: cf[ci].maxX + config.gap / 2 + delta)
+        } else if ci > 0 {
+            g = resizing(boundary: ci - 1, toX: cf[ci].minX - config.gap / 2 - delta)
+        }
+        let geo = GridGeometry(grid: g, area: area, config: config)
+        let frames = geo.windowFrames().filter { g.columns[ci].windows.contains($0.0) }.map(\.1)
+        if wi + 1 < frames.count {
+            g = geo.resizing(column: ci, boundary: wi, toY: frames[wi].maxY + config.gap / 2 + delta)
+        } else if wi > 0 {
+            g = geo.resizing(column: ci, boundary: wi - 1, toY: frames[wi].minY - config.gap / 2 - delta)
+        }
+        return g
+    }
+
     /// Grid with the boundary between window i and i+1 in a column moved to global y, keeping the pair's total height.
     public func resizing(column ci: Int, boundary i: Int, toY y: CGFloat) -> Grid {
         var g = grid

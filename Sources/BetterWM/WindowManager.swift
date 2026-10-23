@@ -1080,6 +1080,25 @@ final class WindowManager {
         return state.grid(for: screen.space).mode
     }
 
+    /// Grows or shrinks the focused window by `config.resizeStep`: a tiled one against its neighbours, a floating
+    /// one around its centre, within its screen.
+    func resizeFocused(grow: Bool) {
+        guard let w = AXWindow.focused, let id = id(w) else { return }
+        let delta = grow ? config.resizeStep : -config.resizeStep
+        if let space = state.space(containing: id), let geo = geometry(for: space) {
+            state.grids[space] = geo.resizing(window: id, by: delta)
+            Log.write("layout", "\(grow ? "grow" : "shrink") \(describe(w)) by \(Int(config.resizeStep))")
+            apply()
+            return
+        }
+        let f = w.frame
+        let target = fitToScreen(f.insetBy(dx: -delta, dy: -delta))
+        guard target.width >= 100, target.height >= 80 else { return }
+        w.frame = target
+        rememberFloatingFrame(w, id, frame: target)
+        Log.write("layout", "\(grow ? "grow" : "shrink") floating \(describe(w)) to \(Int(target.width))x\(Int(target.height))")
+    }
+
     func equalize() {
         for k in state.grids.keys { state.grids[k]?.equalize() }
         apply()

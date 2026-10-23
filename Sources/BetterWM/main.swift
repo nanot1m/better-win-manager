@@ -156,6 +156,8 @@ extension AppDelegate {
 
         section("Screen")
         add("Retile Current Screen", #selector(retile), action: "retile")
+        add("Grow Window", #selector(growWindow), action: "grow")
+        add("Shrink Window", #selector(shrinkWindow), action: "shrink")
         add("Equalize Sizes", #selector(equalize), action: "equalize")
         add("Toggle Stacked Layout", #selector(toggleStack), action: "toggleStack")
 
@@ -248,6 +250,8 @@ extension AppDelegate {
             "toggleStack": { [weak self] in self?.manager.toggleStackedLayout() },
             "refreshRing": { [weak self] in self?.manager.focusRing.remeasureCorners() },
             "equalize": { [weak self] in self?.manager.equalize() },
+            "grow": { [weak self] in self?.manager.resizeFocused(grow: true) },
+            "shrink": { [weak self] in self?.manager.resizeFocused(grow: false) },
             "pause": { [weak self] in self?.togglePause() },
             "desktopNext": { [weak self] in self?.manager.switchDesktopOrSpace(next: true) },
             "desktopMoveLeft": { [weak self] in self?.manager.moveCurrentDesktop(left: true) },
@@ -298,6 +302,8 @@ extension AppDelegate {
     @objc func moveDesktopLeft() { manager.moveCurrentDesktop(left: true) }
     @objc func moveDesktopRight() { manager.moveCurrentDesktop(left: false) }
     @objc func desktopToNextScreen() { manager.sendDesktopToNextScreen() }
+    @objc func growWindow() { manager.resizeFocused(grow: true) }
+    @objc func shrinkWindow() { manager.resizeFocused(grow: false) }
 
     /// Right-click menu of a desktop chip; each item carries the desktop as its represented object.
     func showDesktopMenu(_ desktop: Int, from view: NSView) {

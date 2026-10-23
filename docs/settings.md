@@ -25,6 +25,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `hideApps` | true | Hide an app whose windows are all on other desktops; off parks every window in the screen corner instead, keeping them on screen for live previews |
 | `dragModifiers` | alt | Keys held while dragging to tile: `cmd`, `alt`, `ctrl`, `shift` joined with `+` |
 | `stackOffset` | 48 | Horizontal shift between cascaded windows in stacked layout |
+| `resizeStep` | 40 | Points the `grow` / `shrink` actions resize the focused window by |
 | `stackScreensNarrowerThan` | 0 | Screens narrower than this start in stacked layout; 0 never |
 | `ignoreApps` | System Settings, Calculator, Activity Monitor, Installer, Passwords, App Store, 1Password, Karabiner settings and about twenty other utilities | Bundle identifiers never tiled automatically; dragging them into a column still works |
 | `floatSmallWindows` | true | Leave dialog-sized windows floating |
