@@ -151,6 +151,19 @@ extension AppDelegate {
             item.representedObject = dir
         }
         menu.addItem(withTitle: "Move Focused Window", action: nil, keyEquivalent: "").submenu = moveMenu
+        let focusMenu = NSMenu(title: "Focus")
+        focusMenu.delegate = self
+        focusMenu.autoenablesItems = false
+        for (title, dir, action) in [("Focus Left", Direction.left, "focusLeft"),
+                                     ("Focus Right", .right, "focusRight"),
+                                     ("Focus Up", .up, "focusUp"),
+                                     ("Focus Down", .down, "focusDown")] {
+            let item = focusMenu.addItem(withTitle: title, action: #selector(focusDirection(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = dir
+            if let spec = manager.config.hotkeys[action] { HotKey.applyKeyEquivalent(spec, to: item) }
+        }
+        menu.addItem(withTitle: "Focus Direction", action: nil, keyEquivalent: "").submenu = focusMenu
         let sendMenu = NSMenu(title: "SendTo")
         sendMenu.autoenablesItems = false
         sendMenu.delegate = self
@@ -243,6 +256,10 @@ extension AppDelegate {
             "overview": { [weak self] in self?.overview.toggle() },
             "focusNext": { [weak self] in self?.manager.focusNext() },
             "focusPrevious": { [weak self] in self?.manager.focusNext(reverse: true) },
+            "focusLeft": { [weak self] in self?.manager.focusWindow(in: .left) },
+            "focusRight": { [weak self] in self?.manager.focusWindow(in: .right) },
+            "focusUp": { [weak self] in self?.manager.focusWindow(in: .up) },
+            "focusDown": { [weak self] in self?.manager.focusWindow(in: .down) },
             "moveLeft": { [weak self] in self?.manager.moveFocused(.left) },
             "moveRight": { [weak self] in self?.manager.moveFocused(.right) },
             "moveUp": { [weak self] in self?.manager.moveFocused(.up) },
@@ -299,6 +316,13 @@ extension AppDelegate {
     @objc func sendNext() { manager.sendFocusedWindow(toNext: true) }
     @objc func sendPrevious() { manager.sendFocusedWindow(toNext: false) }
     @objc func focusPrevious() { manager.focusNext(reverse: true) }
+    @objc func focusLeft() { manager.focusWindow(in: .left) }
+    @objc func focusRight() { manager.focusWindow(in: .right) }
+    @objc func focusUp() { manager.focusWindow(in: .up) }
+    @objc func focusDown() { manager.focusWindow(in: .down) }
+    @objc func focusDirection(_ sender: NSMenuItem) {
+        if let dir = sender.representedObject as? Direction { manager.focusWindow(in: dir) }
+    }
     @objc func moveFocused(_ sender: NSMenuItem) {
         if let dir = sender.representedObject as? Move { manager.moveFocused(dir) }
     }
@@ -558,6 +582,15 @@ extension AppDelegate: NSMenuDelegate {
             for item in menu.items {
                 guard let dir = item.representedObject as? Move else { continue }
                 item.isEnabled = manager.canMoveFocused(dir)
+                item.keyEquivalent = ""
+                if let spec = actions[dir].flatMap({ manager.config.hotkeys[$0] }) { HotKey.applyKeyEquivalent(spec, to: item) }
+            }
+            return
+        }
+        if menu.title == "Focus" {
+            let actions: [Direction: String] = [.left: "focusLeft", .right: "focusRight", .up: "focusUp", .down: "focusDown"]
+            for item in menu.items {
+                guard let dir = item.representedObject as? Direction else { continue }
                 item.keyEquivalent = ""
                 if let spec = actions[dir].flatMap({ manager.config.hotkeys[$0] }) { HotKey.applyKeyEquivalent(spec, to: item) }
             }

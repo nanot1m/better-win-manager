@@ -73,6 +73,8 @@ public enum DropZone: Equatable {
     case stack(column: Int, index: Int)
 }
 
+public enum Direction: String, CaseIterable, Equatable { case left, right, up, down }
+
 public enum Move: Equatable { case left, right, up, down, mergeLeft, mergeRight }
 
 public enum Handle: Equatable {

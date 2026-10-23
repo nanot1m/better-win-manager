@@ -741,13 +741,56 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     private func hotkeyGroups() -> [NSView] {
-        var rows: [NSView] = []
-        for a in Config.actions {
-            let r = KeyRecorderView()
-            recorders[a.key] = r
-            rows.append(row(a.title, nil, [r]))
+        let actionMap = Dictionary(uniqueKeysWithValues: Config.actions.map { ($0.key, $0.title) })
+        let layout: [(title: String, keys: [String])] = [
+            ("Focus & Navigation", [
+                "focusLeft", "focusRight", "focusUp", "focusDown",
+                "focusNext", "focusPrevious",
+                "switcher", "switcherBack",
+            ]),
+            ("Move & Layout", [
+                "moveLeft", "moveRight", "moveUp", "moveDown",
+                "mergeLeft", "mergeRight",
+                "toggleTile", "grow", "shrink", "toggleStack", "retile", "equalize",
+                "pause", "refreshRing",
+            ]),
+            ("Actions & Overview", [
+                "popup", "overview",
+            ]),
+            ("Desktops", [
+                "desktopNext", "desktopPrevious",
+                "desktopMoveLeft", "desktopMoveRight",
+                "desktopToNextScreen",
+                "sendToNextDesktop", "sendToPreviousDesktop",
+            ]),
+            ("Switch to Desktop", (1...9).map { "desktop\($0)" }),
+            ("Send to Desktop", (1...9).map { "sendToDesktop\($0)" }),
+        ]
+
+        var handled = Set<String>()
+        var groups: [NSView] = []
+        for s in layout {
+            var rows: [NSView] = []
+            for k in s.keys {
+                guard let title = actionMap[k] else { continue }
+                handled.insert(k)
+                let r = KeyRecorderView()
+                recorders[k] = r
+                rows.append(row(title, nil, [r]))
+            }
+            if !rows.isEmpty { groups.append(group(s.title, rows)) }
         }
-        return [group(nil, rows)]
+        let remaining = Config.actions.filter { !handled.contains($0.key) }
+        if !remaining.isEmpty {
+            var rows: [NSView] = []
+            for a in remaining {
+                let r = KeyRecorderView()
+                recorders[a.key] = r
+                rows.append(row(a.title, nil, [r]))
+            }
+            groups.append(group("Other", rows))
+        }
+        return groups
     }
 
     // MARK: Dependent controls

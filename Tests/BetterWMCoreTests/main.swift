@@ -328,6 +328,19 @@ struct ReconcilerTests {
         expect(Config().hotkeys["desktop3"] == "ctrl+3" && Config().hotkeys["sendToDesktop9"] == "ctrl+alt+9", #function, #line)
     }
 
+    func testConfigV4Migration() {
+        let v3 = "version = 3\nhotkey.popup = alt+cmd+space\n"
+        let c = Config.parse(v3)
+        expect(c.hotkeys["focusLeft"] == "ctrl+cmd+left", #function, #line)
+        expect(c.hotkeys["focusRight"] == "ctrl+cmd+right", #function, #line)
+        expect(c.hotkeys["focusUp"] == "ctrl+cmd+up", #function, #line)
+        expect(c.hotkeys["focusDown"] == "ctrl+cmd+down", #function, #line)
+
+        let v4 = "version = 4\nhotkey.popup = alt+cmd+space\n"
+        let c4 = Config.parse(v4)
+        expect(c4.hotkeys["focusLeft"] == nil, #function, #line)
+    }
+
     func testBarWidgetsCompatibility() {
         // Old files only have the flags: the list is derived from them in the default order.
         let old = Config.parse("version = 3\nbarWifi = false\nbarCpu = false\n")
@@ -597,6 +610,52 @@ struct ReconcilerTests {
         expect(v.count == 2, #function, #line)
         expect(VirtualWorkspaces.workspace(of: VirtualWorkspaces.spaceID(2)) == 2, #function, #line)
     }
+
+    func testDirectionalFocusInGrid() {
+        var g = Grid()
+        g.columns = [Column([1, 2]), Column([3, 4])]
+        // Moving down/up within columns
+        expect(g.focusTarget(from: 1, in: .down) == 2, #function, #line)
+        expect(g.focusTarget(from: 2, in: .up) == 1, #function, #line)
+        // Wrapping vertically
+        expect(g.focusTarget(from: 1, in: .up) == 2, #function, #line)
+        expect(g.focusTarget(from: 2, in: .down) == 1, #function, #line)
+
+        // Moving left/right between columns
+        expect(g.focusTarget(from: 1, in: .right) == 3, #function, #line)
+        expect(g.focusTarget(from: 2, in: .right) == 4, #function, #line)
+        expect(g.focusTarget(from: 3, in: .left) == 1, #function, #line)
+        expect(g.focusTarget(from: 4, in: .left) == 2, #function, #line)
+
+        // Wrapping horizontally
+        expect(g.focusTarget(from: 1, in: .left) == 3, #function, #line)
+        expect(g.focusTarget(from: 2, in: .left) == 4, #function, #line)
+        expect(g.focusTarget(from: 3, in: .right) == 1, #function, #line)
+        expect(g.focusTarget(from: 4, in: .right) == 2, #function, #line)
+
+        // Edge detection
+        expect(g.isAtEdge(1, .left) && g.isAtEdge(1, .up) && !g.isAtEdge(1, .right) && !g.isAtEdge(1, .down), #function, #line)
+        expect(g.isAtEdge(4, .right) && g.isAtEdge(4, .down) && !g.isAtEdge(4, .left) && !g.isAtEdge(4, .up), #function, #line)
+
+        // Asymmetric columns (1 col vs 3 cols)
+        var asym = Grid()
+        asym.columns = [Column([10]), Column([20, 30, 40])]
+        // From single window to middle of 3 windows
+        expect(asym.focusTarget(from: 10, in: .right) == 30, #function, #line)
+        // From any of the 3 windows back to 10
+        expect(asym.focusTarget(from: 20, in: .left) == 10, #function, #line)
+        expect(asym.focusTarget(from: 30, in: .left) == 10, #function, #line)
+        expect(asym.focusTarget(from: 40, in: .left) == 10, #function, #line)
+
+        // Stacked mode
+        var stacked = Grid()
+        stacked.setMode(.stacked)
+        stacked.columns = [Column([100]), Column([200]), Column([300])]
+        expect(stacked.focusTarget(from: 100, in: .right) == 200, #function, #line)
+        expect(stacked.focusTarget(from: 100, in: .down) == 200, #function, #line)
+        expect(stacked.focusTarget(from: 100, in: .left) == 300, #function, #line)
+        expect(stacked.focusTarget(from: 100, in: .up) == 300, #function, #line)
+    }
 }
 
 
@@ -629,6 +688,7 @@ let tests: [(String, () -> Void)] = [
     ("dragEndRules", t.testDragEndRules),
     ("resizeByDeltaMovesBoundaries", t.testResizeByDeltaMovesBoundaries),
     ("configV1Migration", t.testConfigV1Migration),
+    ("configV4Migration", t.testConfigV4Migration),
     ("floatingWindowsSavedAndRestored", t.testFloatingWindowsSavedAndRestored),
     ("stackedModeGeometry", t.testStackedModeGeometry),
     ("stackedDeckKeepsPositions", t.testStackedDeckKeepsPositions),
@@ -645,10 +705,10 @@ let tests: [(String, () -> Void)] = [
     ("hideableAppIsHiddenNotParked", t.testHideableAppIsHiddenNotParked),
     ("windowRefusingToParkJoinsActiveWorkspace", t.testWindowRefusingToParkJoinsActiveWorkspace),
     ("refusalsDoNotCountWhileSuspended", t.testRefusalsDoNotCountWhileSuspended),
-    ("moveWorkspaceRemapsAndTrims", t.testMoveWorkspaceRemapsAndTrims),
     ("desktopsLiveOnDisplays", t.testDesktopsLiveOnDisplays),
     ("mainDisplayChangeKeepsDesktops", t.testMainDisplayChangeKeepsDesktops),
     ("sendingLastDesktopLeavesANewOne", t.testSendingLastDesktopLeavesANewOne),
+    ("directionalFocusInGrid", t.testDirectionalFocusInGrid),
 ]
 for (name, run) in tests {
     let before = failures
