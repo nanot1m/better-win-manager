@@ -4,7 +4,7 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
-## [Unreleased]
+## [0.17.5] - 2026-10-23
 
 ### Fixed
 - Connecting a second display beside the laptop sent windows of inactive desktops into a loop: parked past the laptop's bottom-right corner they lay mostly on the new display, macOS moved them to its Space, they were rescued as stranded, and parked again, twice a second, scrambling their desktop assignments. Parking now uses the first corner (bottom-right, bottom-left, top-right, top-left) that does not face another display, and only windows no desktop knows are rescued from a corner. Windows already parked when the display connects stay with their desktop and move to the clear corner.
