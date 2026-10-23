@@ -119,6 +119,20 @@ struct ReconcilerTests {
         expect(!commands.contains { if case .setFrame(2, _) = $0 { return true } else { return false } }, #function, #line)
     }
 
+    func testParkingAvoidsNeighbouringDisplay() {
+        let laptop = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let monitor = CGRect(x: 1512, y: 0, width: 2560, height: 1440)
+        let w = CGRect(x: 100, y: 100, width: 800, height: 600)
+        let alone = Parking.origin(for: w, screens: [laptop])
+        expect(alone == CGPoint(x: 1510, y: 980), #function, #line)
+        let beside = Parking.origin(for: w, screens: [laptop, monitor])
+        expect(beside == CGPoint(x: -798, y: 980), #function, #line)
+        let parked = CGRect(origin: beside, size: w.size)
+        expect(!parked.intersects(monitor) && Parking.screen(parking: parked, screens: [laptop, monitor], tolerance: 3) == laptop, #function, #line)
+        // Parked again from the corner, it stays with the same screen and corner.
+        expect(Parking.origin(for: parked, screens: [laptop, monitor]) == beside, #function, #line)
+    }
+
     func testNoTilingOnFirstVisitWhenDisabled() {
         var c = config
         c.tileExistingOnStart = false
@@ -551,6 +565,7 @@ let tests: [(String, () -> Void)] = [
     ("windowThatMovedHasNotRefused", t.testWindowThatMovedHasNotRefused),
     ("passingThroughLargerFrameTeachesNoMinimum", t.testPassingThroughLargerFrameTeachesNoMinimum),
     ("awayWindowKeepsSlotAndIsLeftAlone", t.testAwayWindowKeepsSlotAndIsLeftAlone),
+    ("parkingAvoidsNeighbouringDisplay", t.testParkingAvoidsNeighbouringDisplay),
     ("parkingFollowsActiveWorkspace", t.testParkingFollowsActiveWorkspace),
     ("hideableAppIsHiddenNotParked", t.testHideableAppIsHiddenNotParked),
     ("windowRefusingToParkJoinsActiveWorkspace", t.testWindowRefusingToParkJoinsActiveWorkspace),

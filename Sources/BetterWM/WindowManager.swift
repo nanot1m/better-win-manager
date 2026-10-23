@@ -496,22 +496,8 @@ final class WindowManager {
                     return snap.windows.filter { $0.pid == p }.allSatisfy { self.virtualSet(ofWindow: $0.id) === v }
                 },
                 isTiled: { self.state.isTiled($0) }, frame: { snap.window($0)?.frame },
-                setFrame: { self.system.execute([.setFrame($0, $1)]) }, parkOrigin: { f in
-                    // Bottom-right corner of the screen the window is on, leaving two points visible. A window
-                    // already parked has its centre off every screen; keep it with the nearest corner.
-                    func corner(_ s: NSScreen) -> CGPoint { let r = s.frame.toCocoa(); return CGPoint(x: r.maxX - 2, y: r.maxY - 2) }
-                    let screen = NSScreen.screens.first { $0.frame.toCocoa().contains(f.center) }
-                        ?? NSScreen.screens.min { hypot(corner($0).x - f.minX, corner($0).y - f.minY) < hypot(corner($1).x - f.minX, corner($1).y - f.minY) }
-                        ?? NSScreen.screens.first ?? NSScreen.main
-                    guard let screen else { return .zero }
-                    return corner(screen)
-                },
-                isInCorner: { f in
-                    NSScreen.screens.contains { s in
-                        let r = s.frame.toCocoa()
-                        return abs(f.minX - (r.maxX - 2)) <= 100 && abs(f.minY - (r.maxY - 2)) <= 100
-                    }
-                },
+                setFrame: { self.system.execute([.setFrame($0, $1)]) }, parkOrigin: { Parking.origin(for: $0, screens: NSScreen.screens.map { $0.frame.toCocoa() }) },
+                isInCorner: { Parking.isParked($0, screens: NSScreen.screens.map { $0.frame.toCocoa() }, tolerance: 100) },
                 fit: { self.fitToScreen($0) },
                 hide: { pid in
                     // A hidden window cannot be captured; the overview shows what it looked like just before.
@@ -783,11 +769,10 @@ final class WindowManager {
         }
         // A window left in a parking corner by a previous run (quit without unparking, a crash) and matched by
         // nothing above would be adopted here, unreachable; pull it back onto its screen.
-        for w in pool {
-            guard let screen = NSScreen.screens.first(where: { $0.frame.toCocoa().contains(w.frame.center) })
-                ?? NSScreen.screens.first(where: { $0.frame.toCocoa().contains(w.frame.origin) }) else { continue }
-            let r = screen.frame.toCocoa()
-            guard w.frame.minX >= r.maxX - 3, w.frame.minY >= r.maxY - 3 else { continue }
+        let screenFrames = NSScreen.screens.map { $0.frame.toCocoa() }
+        for w in pool where !virtualSets.values.contains(where: { $0.isKnown(w.id) }) {
+            guard let corner = Parking.screen(parking: w.frame, screens: screenFrames, tolerance: 3),
+                  let screen = NSScreen.screens.first(where: { $0.frame.toCocoa() == corner }) else { continue }
             let area = screen.visibleFrame.toCocoa()
             let origin = CGPoint(x: max(area.minX, area.midX - w.frame.width / 2), y: max(area.minY, area.midY - w.frame.height / 2))
             system.execute([.setFrame(w.id, CGRect(origin: origin, size: w.frame.size))])
