@@ -9,6 +9,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 ### Added
 - Desktops across several displays. Desktops are numbered across all screens and each lives on one display; every screen shows one of its own and its bar lists only those. ⌃1…⌃9 reach any desktop, ⌃→/⌃← move through the current screen's. A display that arrives with no desktop gets a new one.
 - "Send this desktop to the next screen" (`desktopToNextScreen`, also in the menu with two or more screens) moves the current desktop, windows and all; tiled windows follow their grid, floating ones keep their place relative to the screen.
+- Right-click a desktop chip in the bar for a menu: switch to it, send the focused window there, move it left or right, send it to the next screen.
 - Desktops remember their display: unplugging it shows its desktops on the main display, plugging it back returns them, along with what each display was showing. Making another display main in System Settings moves no desktop; only new desktops go to the new main display.
 
 ### Changed

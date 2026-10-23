@@ -21,6 +21,8 @@ final class StatusBar {
     var onReorderDesktop: ((Int, Int) -> Void)?
     /// The menu widget was clicked; the app pops its menu at the given view.
     var onMenuRequested: ((NSView) -> Void)?
+    /// Right-click on a desktop chip: the desktop and the chip to anchor a menu to.
+    var onDesktopMenu: ((Int, NSView) -> Void)?
     /// Desktops living on a screen, the one it shows, and the active desktop across all screens.
     var desktopsOn: (NSScreen) -> [Int] = { _ in [] }
     var shownOn: (NSScreen) -> Int? = { _ in nil }
@@ -106,6 +108,7 @@ final class StatusBar {
             w.view.onSelectFullscreen = { [weak self] s in self?.onSelectFullscreen?(s) }
             w.view.onReorderDesktop = { [weak self] from, to in self?.onReorderDesktop?(from, to) }
             w.view.onMenuRequested = { [weak self] v in self?.onMenuRequested?(v) }
+            w.view.onDesktopMenu = { [weak self] d, v in self?.onDesktopMenu?(d, v) }
             w.view.onPlayPause = { [weak self] in self?.media.togglePlayPause() }
             w.view.onSoundRequested = { [weak self] v in self?.soundPopover.toggle(relativeTo: v) }
             w.view.onSoundScroll = { [weak self] delta in
@@ -263,6 +266,7 @@ private final class ScrollButton: NSButton {
 /// view accepts it.
 private final class ChipView: NSView {
     var onClick: (() -> Void)?
+    var onContextMenu: (() -> Void)?
     /// Called with the chip's centre x (in the superview) after it was dragged and released.
     var onDrop: ((CGFloat) -> Void)?
     let number = NSTextField(labelWithString: "")
@@ -317,6 +321,8 @@ private final class ChipView: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    override func rightMouseDown(with event: NSEvent) { onContextMenu?() }
+
     /// A click selects the desktop; a drag past a few points slides the chip along and drops it in a new slot.
     override func mouseDown(with event: NSEvent) {
         guard let window else { return }
@@ -370,6 +376,8 @@ final class BarView: NSView {
     var onSelectFullscreen: ((UInt64) -> Void)?
     var onReorderDesktop: ((Int, Int) -> Void)?
     var onMenuRequested: ((NSView) -> Void)?
+    /// Right-click on a desktop chip: the desktop and the chip to anchor a menu to.
+    var onDesktopMenu: ((Int, NSView) -> Void)?
     var onPlayPause: (() -> Void)?
     var onSoundRequested: ((NSView) -> Void)?
     /// Scroll over the sound widget: positive delta turns the volume up.
@@ -614,6 +622,10 @@ final class BarView: NSView {
                 self.onSelectDesktop?(self.chipDesktops[i])
             }
             c.onDrop = { [weak self] midX in self?.dropChip(i, at: midX) }
+            c.onContextMenu = { [weak self, weak c] in
+                guard let self, let c, i < self.chipDesktops.count else { return }
+                self.onDesktopMenu?(self.chipDesktops[i], c)
+            }
             chips.append(c)
             left.insertArrangedSubview(c, at: chips.count - 1)
         }

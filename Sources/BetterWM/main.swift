@@ -66,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onSelectFullscreen = { [weak self] in self?.manager.activateSpace($0) }
         bar.fullscreenSpaces = { [weak self] in self?.manager.fullscreenSpaces() ?? [] }
         bar.onReorderDesktop = { [weak self] from, to in self?.manager.moveDesktop(from: from, to: to) }
+        bar.onDesktopMenu = { [weak self] desktop, view in self?.showDesktopMenu(desktop, from: view) }
         bar.onMenuRequested = { [weak self] view in
             guard let self else { return }
             let menu = self.buildMenu()
@@ -297,6 +298,38 @@ extension AppDelegate {
     @objc func moveDesktopLeft() { manager.moveCurrentDesktop(left: true) }
     @objc func moveDesktopRight() { manager.moveCurrentDesktop(left: false) }
     @objc func desktopToNextScreen() { manager.sendDesktopToNextScreen() }
+
+    /// Right-click menu of a desktop chip; each item carries the desktop as its represented object.
+    func showDesktopMenu(_ desktop: Int, from view: NSView) {
+        let menu = NSMenu()
+        func add(_ title: String, _ sel: Selector, enabled: Bool = true, action: String? = nil) {
+            let item = menu.addItem(withTitle: title, action: sel, keyEquivalent: "")
+            item.target = self
+            item.representedObject = desktop
+            item.isEnabled = enabled
+            if let action, let spec = manager.config.hotkeys[action] { HotKey.applyKeyEquivalent(spec, to: item) }
+        }
+        let n = desktop + 1
+        add("Switch to Desktop \(n)", #selector(menuSwitchDesktop(_:)), enabled: desktop != manager.currentDesktop, action: "desktop\(n)")
+        add("Send Focused Window Here", #selector(menuSendWindowToDesktop(_:)), action: n <= 9 ? "sendToDesktop\(n)" : nil)
+        menu.addItem(.separator())
+        add("Move Left", #selector(menuMoveDesktopLeft(_:)), enabled: manager.neighbourDesktop(of: desktop, next: false) != nil)
+        add("Move Right", #selector(menuMoveDesktopRight(_:)), enabled: manager.neighbourDesktop(of: desktop, next: true) != nil)
+        if NSScreen.screens.count > 1 { add("Send to Next Screen", #selector(menuSendDesktopToNextScreen(_:))) }
+        menu.autoenablesItems = false
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.bounds.minY - 4), in: view)
+    }
+
+    private func desktop(of sender: NSMenuItem) -> Int? { sender.representedObject as? Int }
+    @objc func menuSwitchDesktop(_ s: NSMenuItem) { if let d = desktop(of: s) { manager.switchDesktop(d) } }
+    @objc func menuSendWindowToDesktop(_ s: NSMenuItem) { if let d = desktop(of: s) { manager.sendFocusedWindow(toDesktop: d) } }
+    @objc func menuMoveDesktopLeft(_ s: NSMenuItem) {
+        if let d = desktop(of: s), let to = manager.neighbourDesktop(of: d, next: false) { manager.moveDesktop(from: d, to: to) }
+    }
+    @objc func menuMoveDesktopRight(_ s: NSMenuItem) {
+        if let d = desktop(of: s), let to = manager.neighbourDesktop(of: d, next: true) { manager.moveDesktop(from: d, to: to) }
+    }
+    @objc func menuSendDesktopToNextScreen(_ s: NSMenuItem) { if let d = desktop(of: s) { manager.sendDesktopToNextScreen(d) } }
     @objc func toggleStack() { manager.toggleStackedLayout() }
     @objc func equalize() { manager.equalize() }
     @objc func reloadConfig() {

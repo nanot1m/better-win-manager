@@ -259,11 +259,12 @@ final class WindowManager {
     /// The screen showing the active desktop.
     var activeScreen: NSScreen? { screen(ofDesktop: desktops.active) }
 
-    /// The desktop next to the active one on its display, if any.
-    func neighbourDesktop(next: Bool) -> Int? {
-        guard let d = desktops.display(of: desktops.active) else { return nil }
+    /// The desktop next to `ws` (the active one by default) on its display, if any.
+    func neighbourDesktop(of ws: Int? = nil, next: Bool) -> Int? {
+        let ws = ws ?? desktops.active
+        guard let d = desktops.display(of: ws) else { return nil }
         let here = desktops.desktops(on: d)
-        guard let i = here.firstIndex(of: desktops.active) else { return nil }
+        guard let i = here.firstIndex(of: ws) else { return nil }
         let j = i + (next ? 1 : -1)
         return here.indices.contains(j) ? here[j] : nil
     }
@@ -276,10 +277,10 @@ final class WindowManager {
         switchDesktop(desktops.count)
     }
 
-    /// Moves the active desktop, windows and all, to the next display; it stays active there.
-    func sendDesktopToNextScreen() {
+    /// Moves a desktop (the active one by default), windows and all, to the next display; it becomes active there.
+    func sendDesktopToNextScreen(_ which: Int? = nil) {
         let ds = desktops.displays
-        let ws = desktops.active
+        let ws = which ?? desktops.active
         guard ds.count > 1, let from = desktops.display(of: ws), let i = ds.firstIndex(of: from) else { return }
         let to = ds[(i + 1) % ds.count]
         rememberFocus()
