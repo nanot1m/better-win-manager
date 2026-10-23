@@ -28,7 +28,7 @@ Focus-follow reacts only to clicks, ⌘ combinations and Return. If it still hap
 
 ## An app freezes everything for a moment
 
-A hung app makes Accessibility calls time out. BetterWM gives each call 0.3 s and then skips the app for five seconds (`is not responding` in the log). Its windows keep their last known state meanwhile.
+A hung app (Unity compiling, say) makes Accessibility calls time out. BetterWM gives each call 0.3 s; after the first failure it stops asking the app at all (`is not responding` in the log) and a probe off the main thread, every 2 to 10 seconds, waits for it to answer (`responds again`). Its windows keep their last known state meanwhile, and moves asked of them wait for the next layout pass.
 
 ## After unplugging a monitor
 

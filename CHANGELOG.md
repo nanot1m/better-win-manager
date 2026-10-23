@@ -12,6 +12,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 - Right-click a desktop chip in the bar for a menu: switch to it, send the focused window there, move it left or right, send it to the next screen.
 - Desktops remember their display: unplugging it shows its desktops on the main display, plugging it back returns them, along with what each display was showing. Making another display main in System Settings moves no desktop; only new desktops go to the new main display.
 
+### Fixed
+- An app that stopped answering Accessibility (Unity compiling, any hung app) froze BetterWM with it: every layout pass waited for each of its windows in turn. After one failed call the app is now left alone, its windows keep their last known state, and a probe off the main thread (every 2 to 10 seconds) notices when it answers again. Clicking its windows no longer stalls the cursor either.
+
 ### Changed
 - The saved layout (`state.json`) moves to version 3, keyed by desktop rather than by macOS desktop and screen; older files are migrated on launch.
 
