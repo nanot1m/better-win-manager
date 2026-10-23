@@ -41,6 +41,9 @@ final class WindowManager {
 
     /// The set a window belongs to: that of the macOS desktop it is on.
     private func virtualSet(ofWindow id: WindowID) -> VirtualWorkspaces {
+        // A parked window that macOS moved to another display's Space (it connected beside the parking corner)
+        // still belongs to the set that parked it.
+        if let parker = virtualSets.values.first(where: { $0.isParked(id) }) { return parker }
         guard let real = Spaces.spaces(of: id).first else { return virtualWS }
         // A window gone fullscreen is away from its desktop, not on a new one: it keeps its workspace and slot.
         guard Spaces.isDesktop(real) else { return virtualSets.values.first { $0.realSpace != real && $0.isKnown(id) } ?? virtualWS }
@@ -497,7 +500,11 @@ final class WindowManager {
                 },
                 isTiled: { self.state.isTiled($0) }, frame: { snap.window($0)?.frame },
                 setFrame: { self.system.execute([.setFrame($0, $1)]) }, parkOrigin: { Parking.origin(for: $0, screens: NSScreen.screens.map { $0.frame.toCocoa() }) },
-                isInCorner: { Parking.isParked($0, screens: NSScreen.screens.map { $0.frame.toCocoa() }, tolerance: 100) },
+                // At the corner that would be chosen now: a display connected beside the old one makes it re-park.
+                isInCorner: { f in
+                    let o = Parking.origin(for: f, screens: NSScreen.screens.map { $0.frame.toCocoa() })
+                    return abs(o.x - f.minX) <= 100 && abs(o.y - f.minY) <= 100
+                },
                 fit: { self.fitToScreen($0) },
                 hide: { pid in
                     // A hidden window cannot be captured; the overview shows what it looked like just before.
