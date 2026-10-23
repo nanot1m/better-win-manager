@@ -4,7 +4,7 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
-## [Unreleased]
+## [0.18.0] - 2026-10-23
 
 ### Added
 - Desktops across several displays. Desktops are numbered across all screens and each lives on one display; every screen shows one of its own and its bar lists only those. ⌃1…⌃9 reach any desktop, ⌃→/⌃← move through the current screen's. A display that arrives with no desktop gets a new one.
