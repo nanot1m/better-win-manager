@@ -164,6 +164,96 @@ public struct Grid: Equatable {
         case .down: if wi + 1 < columns[ci].windows.count { columns[ci].windows.swapAt(wi, wi + 1) }
         }
     }
+
+    /// Whether window `w` is at the outer edge of the grid in direction `dir`.
+    public func isAtEdge(_ w: WindowID, _ dir: Direction) -> Bool {
+        guard let (ci, wi) = position(of: w) else { return false }
+        switch dir {
+        case .up: return wi == 0
+        case .down: return wi + 1 == columns[ci].windows.count
+        case .left: return ci == 0
+        case .right: return ci + 1 == columns.count
+        }
+    }
+
+    /// Target window when focusing in direction `dir` from `w`.
+    /// When at an outer edge, wraps around within the grid (i3 default behavior).
+    public func focusTarget(from w: WindowID, in dir: Direction) -> WindowID? {
+        guard !isEmpty else { return nil }
+        if mode == .stacked {
+            let ws = windows
+            guard let i = ws.firstIndex(of: w) else { return ws.first }
+            switch dir {
+            case .right, .down:
+                return ws[(i + 1) % ws.count]
+            case .left, .up:
+                return ws[(i - 1 + ws.count) % ws.count]
+            }
+        }
+        guard let (ci, wi) = position(of: w) else { return windows.first }
+        switch dir {
+        case .up:
+            return wi > 0 ? columns[ci].windows[wi - 1] : columns[ci].windows.last
+        case .down:
+            return wi + 1 < columns[ci].windows.count ? columns[ci].windows[wi + 1] : columns[ci].windows.first
+        case .left:
+            let targetCol = ci > 0 ? ci - 1 : columns.count - 1
+            return bestWindow(in: targetCol, matchingRow: wi, inColumn: ci)
+        case .right:
+            let targetCol = ci + 1 < columns.count ? ci + 1 : 0
+            return bestWindow(in: targetCol, matchingRow: wi, inColumn: ci)
+        }
+    }
+
+    /// Picks the window in `targetCol` that best corresponds to row `srcRow` in `srcCol` by vertical center fraction.
+    private func bestWindow(in targetCol: Int, matchingRow srcRow: Int, inColumn srcCol: Int) -> WindowID? {
+        guard targetCol >= 0, targetCol < columns.count else { return nil }
+        let targetWindows = columns[targetCol].windows
+        guard !targetWindows.isEmpty else { return nil }
+        let srcCount = columns[srcCol].windows.count
+        guard srcCount > 0 else { return targetWindows.first }
+        let srcFrac = (CGFloat(srcRow) + 0.5) / CGFloat(srcCount)
+        return targetWindows.enumerated().min(by: { a, b in
+            let fracA = (CGFloat(a.offset) + 0.5) / CGFloat(targetWindows.count)
+            let fracB = (CGFloat(b.offset) + 0.5) / CGFloat(targetWindows.count)
+            return abs(srcFrac - fracA) < abs(srcFrac - fracB)
+        })?.element
+    }
+
+    /// Window on the entry edge of this grid when focus enters from another screen in direction `dir`.
+    public func entryWindow(from dir: Direction, relativeTo point: CGPoint, in area: CGRect) -> WindowID? {
+        guard !isEmpty else { return nil }
+        if mode == .stacked {
+            return dir == .left || dir == .up ? windows.last : windows.first
+        }
+        switch dir {
+        case .left:
+            let col = columns.count - 1
+            return closestWindow(in: col, toY: point.y, area: area)
+        case .right:
+            return closestWindow(in: 0, toY: point.y, area: area)
+        case .up:
+            let col = columnIndex(forX: point.x, in: area)
+            return columns[col].windows.last
+        case .down:
+            let col = columnIndex(forX: point.x, in: area)
+            return columns[col].windows.first
+        }
+    }
+
+    private func columnIndex(forX x: CGFloat, in area: CGRect) -> Int {
+        let fracX = (x - area.minX) / max(1, area.width)
+        return min(columns.count - 1, max(0, Int(fracX * CGFloat(columns.count))))
+    }
+
+    private func closestWindow(in col: Int, toY y: CGFloat, area: CGRect) -> WindowID? {
+        guard col >= 0, col < columns.count else { return nil }
+        let wins = columns[col].windows
+        guard !wins.isEmpty else { return nil }
+        let fracY = (y - area.minY) / max(1, area.height)
+        let row = min(wins.count - 1, max(0, Int(fracY * CGFloat(wins.count))))
+        return wins[row]
+    }
 }
 
 /// Pure geometry for a grid inside a screen area with the given gaps.

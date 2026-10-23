@@ -83,7 +83,7 @@ final class SwipeGesture {
             guard let p = CFArrayGetValueAtIndex(list, i) else { continue }
             let dev = MTDevice(mutating: p)
             register(dev, SwipeGesture.callback)
-            start(dev, 0)
+            _ = start(dev, 0)
             devices.append(dev)
         }
         Log.write("gesture", "listening on \(devices.count) multitouch device(s); touch record \(MemoryLayout<Touch>.stride) bytes")

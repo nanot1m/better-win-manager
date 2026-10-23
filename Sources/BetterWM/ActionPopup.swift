@@ -111,8 +111,28 @@ final class ActionPopup: NSPanel {
     private func handle(_ e: NSEvent) -> Bool {
         let shift = e.modifierFlags.contains(.shift)
         let option = e.modifierFlags.contains(.option)
+        let cmd = e.modifierFlags.contains(.command)
         let key = e.charactersIgnoringModifiers?.lowercased() ?? ""
         let code = e.keyCode
+
+        if cmd {
+            let focusDir: Direction? = switch (code, key) {
+            case (123, _), (_, "h"): .left
+            case (124, _), (_, "l"): .right
+            case (126, _), (_, "k"): .up
+            case (125, _), (_, "j"): .down
+            default: nil
+            }
+            if let focusDir {
+                let symbol = switch focusDir { case .left: "⌘←"; case .right: "⌘→"; case .up: "⌘↑"; case .down: "⌘↓" }
+                onAction?(symbol, "Focus " + focusDir.rawValue)
+                manager.focusWindow(in: focusDir)
+                refresh()
+                regainKey()
+                return true
+            }
+        }
+
         var dir: Move?
         func pressed(_ k: String) -> String { (shift ? "⇧" : "") + k }
         switch (code, key) {

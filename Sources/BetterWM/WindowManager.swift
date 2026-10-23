@@ -1248,6 +1248,142 @@ final class WindowManager {
         }
     }
 
+    /// Focuses the window adjacent to the currently focused window in `dir` (i3-style directional focus).
+    /// If tiled, navigates the grid's columns and rows, crossing to a neighbouring display at the outer edge,
+    /// or wrapping within the grid. If floating, searches geometrically among visible windows.
+    func focusWindow(in dir: Direction) {
+        guard let current = currentDesktop else { return }
+        let focused = system.focused
+        let focusedID = focused.flatMap(id)
+
+        // 1. Tiled window navigation:
+        if let curID = focusedID, let space = state.space(containing: curID) {
+            let grid = state.grid(for: space)
+            let screens = system.screens()
+            let curScreen = screens.first { $0.space == space }
+
+            // If at an outer edge, check if there is an adjacent screen in that direction
+            if let curScreen, grid.isAtEdge(curID, dir) {
+                let curFrame = targetFrame(of: curID) ?? focused?.frame ?? curScreen.area
+                if let neighbor = adjacentScreen(to: curScreen, in: dir, allScreens: screens) {
+                    let neighborGrid = state.grid(for: neighbor.space)
+                    if !neighborGrid.isEmpty {
+                        if let targetID = neighborGrid.entryWindow(from: dir, relativeTo: curFrame.center, in: neighbor.area) {
+                            focusWindow(id: targetID)
+                            Log.write("focus", "focus \(dir) -> \(targetID) on adjacent space \(neighbor.space)")
+                            return
+                        }
+                    } else {
+                        let neighborWindows = windowsByDesktop().first(where: { $0.desktop == current })?.windows
+                            .filter { neighbor.area.contains($0.frame.center) } ?? []
+                        if let first = neighborWindows.first {
+                            first.raise()
+                            if let fid = id(first) { focusRing.show(windowID: fid, frame: first.frame) }
+                            Log.write("focus", "focus \(dir) -> \(describe(first)) on adjacent screen")
+                            return
+                        }
+                    }
+                }
+            }
+
+            // In-grid navigation (wraps within the grid when at outer edge without adjacent screen)
+            if let targetID = grid.focusTarget(from: curID, in: dir) {
+                focusWindow(id: targetID)
+                Log.write("focus", "focus \(dir) -> \(targetID) in grid")
+                return
+            }
+        }
+
+        // 2. Floating windows / untiled: geometric navigation
+        let desktopWindows = windowsByDesktop().first(where: { $0.desktop == current })?.windows ?? []
+        guard !desktopWindows.isEmpty else { return }
+
+        guard let curWin = focused, let curID = focusedID, desktopWindows.contains(curWin) else {
+            if let lastID = lastFocusedWindow(onDesktop: current), let w = system.axWindow(lastID), w.isValid {
+                focusWindow(id: lastID)
+            } else if let first = desktopWindows.first {
+                first.raise()
+                if let fid = id(first) { focusRing.show(windowID: fid, frame: first.frame) }
+            }
+            return
+        }
+
+        let curFrame = targetFrame(of: curID) ?? curWin.frame
+        let others = desktopWindows.filter { id($0) != curID }
+        guard !others.isEmpty else { return }
+
+        if let target = geometricTarget(from: curFrame, among: others, in: dir) {
+            target.raise()
+            if let tid = id(target) {
+                let frame = targetFrame(of: tid) ?? target.frame
+                focusRing.show(windowID: tid, frame: frame)
+            }
+            Log.write("focus", "focus \(dir) -> \(describe(target)) geometrically")
+        }
+    }
+
+    private func focusWindow(id: WindowID) {
+        guard let w = system.axWindow(id), w.isValid else { return }
+        let frame = targetFrame(of: id) ?? w.frame
+        focusRing.show(windowID: id, frame: frame)
+        w.raise()
+    }
+
+    private func adjacentScreen(to current: ScreenInfo, in dir: Direction, allScreens: [ScreenInfo]) -> ScreenInfo? {
+        let candidates = allScreens.filter { $0.space != current.space }
+        switch dir {
+        case .left:
+            return candidates
+                .filter { $0.area.maxX <= current.area.minX + 10 && $0.area.maxY > current.area.minY && $0.area.minY < current.area.maxY }
+                .max(by: { $0.area.maxX < $1.area.maxX })
+        case .right:
+            return candidates
+                .filter { $0.area.minX >= current.area.maxX - 10 && $0.area.maxY > current.area.minY && $0.area.minY < current.area.maxY }
+                .min(by: { $0.area.minX < $1.area.minX })
+        case .up:
+            return candidates
+                .filter { $0.area.maxY <= current.area.minY + 10 && $0.area.maxX > current.area.minX && $0.area.minX < current.area.maxX }
+                .max(by: { $0.area.maxY < $1.area.maxY })
+        case .down:
+            return candidates
+                .filter { $0.area.minY >= current.area.maxY - 10 && $0.area.maxX > current.area.minX && $0.area.minX < current.area.maxX }
+                .min(by: { $0.area.minY < $1.area.minY })
+        }
+    }
+
+    private func geometricTarget(from cur: CGRect, among candidates: [AXWindow], in dir: Direction) -> AXWindow? {
+        func inDirection(_ f: CGRect) -> Bool {
+            switch dir {
+            case .left: return f.midX < cur.midX - 5
+            case .right: return f.midX > cur.midX + 5
+            case .up: return f.midY < cur.midY - 5
+            case .down: return f.midY > cur.midY + 5
+            }
+        }
+        func distanceScore(_ f: CGRect) -> CGFloat {
+            let dx = abs(f.midX - cur.midX)
+            let dy = abs(f.midY - cur.midY)
+            switch dir {
+            case .left, .right:
+                return dx + dy * 2.5
+            case .up, .down:
+                return dy + dx * 2.5
+            }
+        }
+
+        let inDir = candidates.filter { inDirection($0.frame) }
+        if let best = inDir.min(by: { distanceScore($0.frame) < distanceScore($1.frame) }) {
+            return best
+        }
+        // Wrapping if no window is strictly in that direction:
+        switch dir {
+        case .left: return candidates.max(by: { $0.frame.midX < $1.frame.midX })
+        case .right: return candidates.min(by: { $0.frame.midX < $1.frame.midX })
+        case .up: return candidates.max(by: { $0.frame.midY < $1.frame.midY })
+        case .down: return candidates.min(by: { $0.frame.midY < $1.frame.midY })
+        }
+    }
+
     // MARK: Presets
 
     /// Windows the presets would arrange on the screen holding the focused window, in reading order.
