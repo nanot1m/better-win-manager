@@ -1002,7 +1002,8 @@ private final class GroupBox: NSView {
 
 final class KeyRecorderView: NSView {
     /// The recorder currently waiting for keys; the global event tap feeds it so even system-reserved combos record.
-    static weak var active: KeyRecorderView?
+    static weak var active: KeyRecorderView? { didSet { onActiveChange?() } }
+    static var onActiveChange: (() -> Void)?
 
     var spec: String? { didSet { needsDisplay = true } }
     private var recording = false {

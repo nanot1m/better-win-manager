@@ -1,9 +1,14 @@
 import BetterWMCore
 import Cocoa
 
+/// The event tap, on a thread of its own. Every click, drag, key press and scroll passes through the tap before
+/// the app under the cursor sees it, so the tap callback must never wait: it decides pass-or-swallow from a few
+/// flags the main thread keeps current, and posts a copy of the event to the main thread for the real work.
+/// A stall on the main thread (an app slow to answer Accessibility) then costs a late drop zone, not a frozen cursor.
 final class DragController {
     private let manager: WindowManager
     private var tap: CFMachPort?
+    private var tapThread: Thread?
     private var dragged: AXWindow?
     private var draggedID: WindowID?
     private var dragStart: CGPoint = .zero
@@ -18,9 +23,40 @@ final class DragController {
     var onOverviewKey: (() -> Void)?
     /// While true, scroll and gesture events are swallowed (a swipe is in progress or the overview is open).
     var swallowScrolling: () -> Bool = { false }
-    /// A scroll sequence that started while swallowing stays swallowed through its momentum, which outlives the fingers.
+
+    /// What the tap thread needs to decide; written on the main thread, read under the lock on the tap thread.
+    private struct TapState {
+        var swallowScroll = false
+        var dragging = false
+        var dragFlags: CGEventFlags = []
+        var overviewKey = false
+        var recording = false
+    }
+    private var tapState = TapState()
+    private var lock = os_unfair_lock()
+    /// Tap-thread state: a scroll sequence that started while swallowing stays swallowed through its momentum,
+    /// which outlives the fingers.
     private var swallowingSequence = false
+
     init(manager: WindowManager) { self.manager = manager }
+
+    /// Call whenever something the tap decides on changed: the overview or slide opened or closed, fingers landed
+    /// or lifted, a hotkey recorder took focus, the config changed. Also called after every event handled here.
+    func refreshState() {
+        let s = TapState(swallowScroll: swallowScrolling(), dragging: dragged != nil,
+                         dragFlags: HotKey.eventFlags(manager.config.dragModifiers),
+                         overviewKey: manager.config.overview && manager.config.overviewKey,
+                         recording: KeyRecorderView.active != nil)
+        os_unfair_lock_lock(&lock)
+        tapState = s
+        os_unfair_lock_unlock(&lock)
+    }
+
+    private var state: TapState {
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
+        return tapState
+    }
 
     func start() -> Bool {
         let mask: CGEventMask = (1 << CGEventType.leftMouseDown.rawValue)
@@ -35,23 +71,73 @@ final class DragController {
             eventsOfInterest: mask,
             callback: { _, type, event, refcon in
                 let me = Unmanaged<DragController>.fromOpaque(refcon!).takeUnretainedValue()
-                return me.handle(type: type, event: event)
+                return me.decide(type: type, event: event)
             },
             userInfo: selfPtr
         ) else { return false }
         self.tap = tap
-        let src = CFMachPortCreateRunLoopSource(nil, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), src, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
+        refreshState()
+        let thread = Thread {
+            let src = CFMachPortCreateRunLoopSource(nil, tap, 0)
+            CFRunLoopAddSource(CFRunLoopGetCurrent(), src, .commonModes)
+            CGEvent.tapEnable(tap: tap, enable: true)
+            CFRunLoopRun()
+        }
+        thread.name = "betterwm.eventtap"
+        thread.qualityOfService = .userInteractive
+        thread.start()
+        tapThread = thread
         return true
     }
 
-    private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+    // MARK: Tap thread
+
+    private func decide(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return Unmanaged.passUnretained(event)
         }
-        if type.rawValue >= 29 && type.rawValue <= 31 { return swallowScrolling() ? nil : Unmanaged.passUnretained(event) }
+        let s = state
+        if type.rawValue >= 29 && type.rawValue <= 31 { return s.swallowScroll ? nil : Unmanaged.passUnretained(event) }
+        switch type {
+        case .scrollWheel:
+            let phase = event.getIntegerValueField(.scrollWheelEventScrollPhase)
+            let momentum = event.getIntegerValueField(.scrollWheelEventMomentumPhase)
+            // Phases: 1 began, 2 changed, 4 ended, 8 cancelled. A plain mouse wheel has no phases and is judged on its own.
+            if phase == 1 { swallowingSequence = s.swallowScroll }
+            else if s.swallowScroll { swallowingSequence = true }
+            let inSequence = phase != 0 || momentum != 0
+            if inSequence ? swallowingSequence : s.swallowScroll {
+                if momentum == 4 || momentum == 8 { swallowingSequence = false }
+                return nil
+            }
+            // Modifier + scroll switches desktops; the switch itself happens on the main thread.
+            guard event.flags.contains(s.dragFlags), !s.dragging else { return Unmanaged.passUnretained(event) }
+            forward(type, event)
+            return nil
+        case .keyDown:
+            let code = event.getIntegerValueField(.keyboardEventKeycode)
+            forward(type, event)
+            return (code == 160 && s.overviewKey) || s.recording ? nil : Unmanaged.passUnretained(event)
+        case .leftMouseDown, .leftMouseDragged, .leftMouseUp:
+            forward(type, event)
+            return Unmanaged.passUnretained(event)
+        default:
+            return Unmanaged.passUnretained(event)
+        }
+    }
+
+    private func forward(_ type: CGEventType, _ event: CGEvent) {
+        guard let copy = event.copy() else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.handle(type: type, event: copy)
+            self?.refreshState()
+        }
+    }
+
+    // MARK: Main thread
+
+    private func handle(type: CGEventType, event: CGEvent) {
         let p = event.location
         let alt = event.flags.contains(HotKey.eventFlags(manager.config.dragModifiers))
         if type == .keyDown || type == .leftMouseDown {
@@ -63,27 +149,12 @@ final class DragController {
         }
         switch type {
         case .keyDown:
-            if manager.config.overview, manager.config.overviewKey, event.getIntegerValueField(.keyboardEventKeycode) == 160 {
-                DispatchQueue.main.async { self.onOverviewKey?() }
-                return nil
-            }
-            // Feed an active hotkey recorder before macOS gets a chance to treat the press as a system shortcut.
-            guard let recorder = KeyRecorderView.active else { return Unmanaged.passUnretained(event) }
-            let consumed = recorder.record(keyCode: event.getIntegerValueField(.keyboardEventKeycode), flags: event.flags)
-            return consumed ? nil : Unmanaged.passUnretained(event)
+            let code = event.getIntegerValueField(.keyboardEventKeycode)
+            if manager.config.overview, manager.config.overviewKey, code == 160 { onOverviewKey?(); return }
+            // The tap swallowed the press for the recorder; a key it cannot record is simply lost.
+            _ = KeyRecorderView.active?.record(keyCode: code, flags: event.flags)
         case .scrollWheel:
-            let phase = event.getIntegerValueField(.scrollWheelEventScrollPhase)
-            let momentum = event.getIntegerValueField(.scrollWheelEventMomentumPhase)
-            // Phases: 1 began, 2 changed, 4 ended, 8 cancelled. A sequence that began while swallowing stays
-            // swallowed through its momentum; a plain mouse wheel has no phases and is judged on its own.
-            if phase == 1 { swallowingSequence = swallowScrolling() }
-            else if swallowScrolling() { swallowingSequence = true }
-            let inSequence = phase != 0 || momentum != 0
-            if inSequence ? swallowingSequence : swallowScrolling() {
-                if momentum == 4 || momentum == 8 { swallowingSequence = false }
-                return nil
-            }
-            guard alt, dragged == nil else { return Unmanaged.passUnretained(event) }
+            guard alt, dragged == nil else { return }
             let dy = event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1)
             let dx = event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2)
             let delta = abs(dx) > abs(dy) ? dx : dy
@@ -92,17 +163,14 @@ final class DragController {
                 lastScrollSwitch = Date()
                 manager.switchDesktop(next: delta < 0)
             }
-            return nil
         case .leftMouseDown:
             dragStart = p
-            guard manager.enabled, let w = AXWindow.at(point: p) else { return Unmanaged.passUnretained(event) }
+            guard manager.enabled, let w = AXWindow.at(point: p) else { return }
             dragged = w
             draggedID = manager.id(w)
-            dragStart = p
             originalFrame = w.frame
             currentZone = nil
             windowMoved = false
-            return Unmanaged.passUnretained(event)
         case .leftMouseDragged:
             if dragged == nil, alt, manager.enabled, let w = AXWindow.focused {
                 // Hit-testing failed on mouse-down; the window being dragged is the frontmost app's focused one.
@@ -112,9 +180,9 @@ final class DragController {
                 originalFrame = w.frame
                 windowMoved = false
             }
-            guard let w = dragged else { return Unmanaged.passUnretained(event) }
+            guard let w = dragged else { return }
             // Clicks often carry a pixel of motion; only real movement suspends reconciling and the focus ring.
-            if !manager.interacting, hypot(p.x - dragStart.x, p.y - dragStart.y) < 4 { return Unmanaged.passUnretained(event) }
+            if !manager.interacting, hypot(p.x - dragStart.x, p.y - dragStart.y) < 4 { return }
             manager.interacting = true
             if alt, !windowMoved, Date().timeIntervalSince(lastMoveCheck) > 0.1 {
                 lastMoveCheck = Date()
@@ -127,7 +195,6 @@ final class DragController {
                 currentZone = nil
                 manager.overlay.hide()
             }
-            return Unmanaged.passUnretained(event)
         case .leftMouseUp:
             let w = dragged
             dragged = nil
@@ -156,9 +223,8 @@ final class DragController {
             }
             // Let the app complete its own move or resize before we inspect frames.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: finish)
-            return Unmanaged.passUnretained(event)
         default:
-            return Unmanaged.passUnretained(event)
+            break
         }
     }
 }

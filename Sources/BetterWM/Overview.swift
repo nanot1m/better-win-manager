@@ -112,9 +112,13 @@ final class Overview {
         })
     }
 
+    /// Fires when `isOpen` flips; the event tap swallows scrolling while the overview is open.
+    var onOpenChange: (() -> Void)?
     private func set(progress p: CGFloat) {
+        let was = isOpen
         progress = p
         view.progress = p
+        if isOpen != was { onOpenChange?() }
     }
 
     // MARK: Presentation
@@ -165,8 +169,10 @@ final class Overview {
         liveTimer = nil
         for m in monitors { NSEvent.removeMonitor(m) }
         monitors.removeAll()
+        let was = isOpen
         panel.orderOut(nil)
         set(progress: 0)
+        if was { onOpenChange?() }
         manager.focusRing.suspended = false
     }
 

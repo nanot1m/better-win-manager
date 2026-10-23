@@ -21,6 +21,8 @@ final class SwipeGesture {
     var onHorizontalEnded: ((CGFloat) -> Void)?
     /// Enough fingers just touched the pad; a swipe may follow, so expensive preparation can start now.
     var onTouchBegan: (() -> Void)?
+    /// Fires on the main thread when `fingersDown` changes.
+    var onFingersChange: (() -> Void)?
     private let fullTravelX: Float = 0.5
     private var lastX: Float = 0, velocityX: Float = 0
 
@@ -103,7 +105,7 @@ final class SwipeGesture {
             let y = down.reduce(Float(0)) { $0 + $1.normalized.pos.y } / Float(down.count)
             let x = down.reduce(Float(0)) { $0 + $1.normalized.pos.x } / Float(down.count)
             if startY == nil {
-                DispatchQueue.main.async { self.fingersDown = true; self.onTouchBegan?() }
+                DispatchQueue.main.async { self.fingersDown = true; self.onFingersChange?(); self.onTouchBegan?() }
                 startY = y
                 startX = x
                 lastY = y
@@ -145,7 +147,7 @@ final class SwipeGesture {
             }
         } else if startY != nil {
             let wasActive = active, v = CGFloat(velocity), vx = CGFloat(velocityX), wasAxis = axis
-            DispatchQueue.main.async { self.fingersDown = false }
+            DispatchQueue.main.async { self.fingersDown = false; self.onFingersChange?() }
             startY = nil
             active = false
             axis = .undecided

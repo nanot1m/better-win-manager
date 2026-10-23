@@ -101,6 +101,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         drag.onOverviewKey = { [weak self] in self?.overview.toggle() }
         drag.swallowScrolling = { [weak self] in (self?.overview.isOpen ?? false) || (self?.slide.isActive ?? false) || (self?.swipe?.fingersDown ?? false) }
+        overview.onOpenChange = { [weak self] in self?.drag.refreshState() }
+        slide.onActiveChange = { [weak self] in self?.drag.refreshState() }
+        KeyRecorderView.onActiveChange = { [weak self] in self?.drag.refreshState() }
         applyGestureSetting(config)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = StatusIcon.make(paused: false)
@@ -360,6 +363,7 @@ extension AppDelegate {
         g.onChanged = vertical ? { [weak self] in self?.overview.gestureChanged($0) } : nil
         g.onEnded = vertical ? { [weak self] in self?.overview.gestureEnded(velocity: $0) } : nil
         // With the overview open the swipe scrubs the overview itself; otherwise it slides the desktops.
+        g.onFingersChange = { [weak self] in self?.drag.refreshState() }
         g.onTouchBegan = horizontal ? { [weak self] in
             guard let self, !self.overview.isOpen else { return }
             self.slide.prewarm()
@@ -512,6 +516,7 @@ extension AppDelegate {
         configWindow.show(config: manager.config) { [weak self] cfg in
             guard let self else { return }
             self.manager.config = cfg
+            self.drag.refreshState()
             self.bar.apply(cfg)
             self.manager.relayout()
             self.registerHotKeys(cfg)

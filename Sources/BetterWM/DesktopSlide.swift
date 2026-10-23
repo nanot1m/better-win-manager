@@ -20,6 +20,8 @@ final class DesktopSlide {
     private var hasNext: Bool { next != nil }
     private var current = 0
     var isActive: Bool { panel.isVisible }
+    /// Fires when the slide appears or goes; the event tap swallows scrolling meanwhile.
+    var onActiveChange: (() -> Void)?
     /// Screen image taken when the fingers touched the pad, so a swipe that follows starts without a capture.
     private var prewarmed: (at: Date, area: CGRect, image: CGImage)?
     private let captureQueue = DispatchQueue(label: "betterwm.slide", qos: .userInteractive)
@@ -87,6 +89,7 @@ final class DesktopSlide {
         offset = 0
         view.offset = 0
         panel.orderFrontRegardless()
+        onActiveChange?()
         // No layout passes while the slide is up: a snapshot mid-scrub stalls the main thread for tens of ms.
         manager.interacting = true
         // Parked neighbours are on screen and can be refreshed; hidden ones keep the capture taken before hiding.
@@ -156,6 +159,7 @@ final class DesktopSlide {
 
     private func dismiss() {
         panel.orderOut(nil)
+        onActiveChange?()
         if manager.interacting { manager.interacting = false; manager.tick() }
     }
 }
