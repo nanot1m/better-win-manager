@@ -13,6 +13,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 - Desktops remember their display: unplugging it shows its desktops on the main display, plugging it back returns them, along with what each display was showing. Making another display main in System Settings moves no desktop; only new desktops go to the new main display.
 
 ### Fixed
+- The ⌥Tab switcher listed windows from its own scan, which could miss one or order them differently from the bar; it now lists exactly what the bar's chips show, in the same order.
 - An app that stopped answering Accessibility (Unity compiling, any hung app) froze BetterWM with it: every layout pass waited for each of its windows in turn. After one failed call the app is now left alone, its windows keep their last known state, and a probe off the main thread (every 2 to 10 seconds) notices when it answers again. Clicking its windows no longer stalls the cursor either.
 
 ### Changed

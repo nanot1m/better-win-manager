@@ -115,28 +115,14 @@ final class WindowManager {
 
     // MARK: Desktops
 
-    /// Every standard window with the desktop it lives on, front-to-back within each desktop, current desktop first.
+    /// Every window with the desktop it lives on, in the order the bar's chips show them (grid order, then
+    /// floating windows in their chip order), current desktop first. The switcher and the overview read this,
+    /// so what they list is exactly what the bar lists.
     func windowsByDesktop() -> [(desktop: Int, windows: [AXWindow])] {
-        var byDesktop: [Int: [AXWindow]] = [:]
-        var listed = Set<WindowID>()
-        for w in Spaces.visibleWindows() {
-            guard let id = id(w) else { continue }
-            listed.insert(id)
-            byDesktop[desktops.workspace(of: id), default: []].append(w)
-        }
-        // Windows of hidden apps are not on screen but still belong to their workspace.
-        for id in desktops.knownWindows where !listed.contains(id) && desktops.isParked(id) {
-            guard let w = system.axWindow(id), w.isValid, w.isStandard else { continue }
-            byDesktop[desktops.workspace(of: id), default: []].append(w)
-        }
+        let apps = appsByDesktop()
         let current = currentDesktop ?? 0
-        // Reading order: left to right by column, top to bottom within it.
-        func sortKey(_ w: AXWindow) -> (CGFloat, CGFloat) {
-            let f = layoutFrame(of: w) ?? w.frame
-            return ((f.minX / 40).rounded(), f.minY)
-        }
-        return byDesktop.keys.sorted { a, b in a == current ? true : b == current ? false : a < b }.map { d in
-            (d, byDesktop[d]!.sorted { sortKey($0) < sortKey($1) })
+        return apps.keys.sorted { a, b in a == current ? true : b == current ? false : a < b }.map { d in
+            (d, (apps[d] ?? []).flatMap(\.windows).compactMap { system.axWindow($0) })
         }
     }
 
