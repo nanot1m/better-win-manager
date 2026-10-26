@@ -7,7 +7,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 ## [Unreleased]
 
 ### Added
-- Drag a window towards the top of the screen and the overview's desktop strip slides in, following the cursor: it begins to appear 240 points from the top edge and is fully in at 80. Drop the window on a desktop to send it there, or on + for a new one. Same desktops, visuals and motion as the F3 overview; works for plain drags and ⌥-drags alike. `dragToDesktops` in the config, or Settings › Tiling, turns it off.
+- Drag a window towards the top of the screen and the overview's desktop strip slides in, following the cursor: it starts to appear one strip height below where the strip will sit and is fully in once the cursor reaches the strip's bottom edge. Drop the window on a desktop to send it there, or on + for a new one. Same desktops, visuals and motion as the F3 overview (whose desktop strip is now a little smaller); works for plain drags and ⌥-drags alike. `dragToDesktops` in the config, or Settings › Tiling, turns it off.
 
 ## [0.20.0] - 2026-10-26
 

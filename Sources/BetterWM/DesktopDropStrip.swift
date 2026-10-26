@@ -17,9 +17,14 @@ final class DesktopDropStrip {
     private(set) var target: Int?
     var isVisible: Bool { panel.isVisible }
 
-    /// Distance from the top edge at which the strip starts to appear, and at which it is fully in.
-    private static let farEdge: CGFloat = 240
-    private static let nearEdge: CGFloat = 80
+    /// The strip is fully in once the cursor reaches where its bottom edge (labels included) will be, and starts
+    /// to appear one strip height further down, so the cursor seems to pull it in.
+    private func edges(for s: NSScreen) -> (near: CGFloat, far: CGFloat) {
+        let bounds = CGRect(origin: .zero, size: s.frame.size)
+        let strip = DesktopStripLayer.stripFrame(in: bounds, topInset: manager.system.topInset(s))
+        let near = strip.maxY + 24 - manager.system.topInset(s)
+        return (near, near + strip.height)
+    }
 
     init(manager: WindowManager) {
         self.manager = manager
@@ -35,7 +40,8 @@ final class DesktopDropStrip {
             ?? NSScreen.screens.first(where: { $0.frame.toCocoa().contains(p) }) else { hide(); return }
         let top = s.frame.toCocoa().minY + manager.system.topInset(s)
         let distance = p.y - top
-        let wanted = min(1, max(0, (Self.farEdge - distance) / (Self.farEdge - Self.nearEdge)))
+        let (near, far) = edges(for: s)
+        let wanted = min(1, max(0, (far - distance) / (far - near)))
         guard wanted > 0 else { hide(); return }
         if screen != s || !panel.isVisible { show(on: s, excluding: id) }
         set(progress: wanted)

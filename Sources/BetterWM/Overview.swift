@@ -709,7 +709,7 @@ final class DesktopStripLayer: CALayer {
     private var desktops: [OverviewModel.Desktop] = []
 
     static func stripFrame(in bounds: CGRect, topInset: CGFloat) -> CGRect {
-        CGRect(x: 0, y: topInset + 20, width: bounds.width, height: bounds.height * 0.12)
+        CGRect(x: 0, y: topInset + 20, width: bounds.width, height: bounds.height * 0.09)
     }
 
     static func previewFrame(at i: Int, count: Int, in bounds: CGRect, topInset: CGFloat) -> CGRect {
