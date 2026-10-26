@@ -12,6 +12,7 @@ BetterWM is a column-based tiling window manager for macOS with virtual workspac
 | [Cats](cats.md) | Sprite sheets, behaviour, petting, the notch portals |
 | [Troubleshooting](troubleshooting.md) | Permissions, Gatekeeper, system shortcuts, hung apps, reading the log, bug reports |
 | [Internals](internals.md) | Architecture, the reconciler, snapshots, SkyLight use, performance rules, releasing |
+| [Architecture diagrams](architecture.md) | Modules, threads and queues, a layout pass, desktops on displays, input and persistence, as diagrams |
 
 Files BetterWM writes, all under `~/.config/betterwm/`:
 

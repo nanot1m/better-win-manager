@@ -14,7 +14,7 @@ Column-based tiling window manager for macOS. Tile windows by ⌥-dragging them 
 
 ## Documentation
 
-The [docs](docs/README.md) folder covers everything in depth: [getting started](docs/getting-started.md), [concepts](docs/concepts.md), [actions and hotkeys](docs/actions.md), the [settings reference](docs/settings.md), the [status bar](docs/status-bar.md), [cats](docs/cats.md), [troubleshooting](docs/troubleshooting.md) and [internals](docs/internals.md).
+The [docs](docs/README.md) folder covers everything in depth: [getting started](docs/getting-started.md), [concepts](docs/concepts.md), [actions and hotkeys](docs/actions.md), the [settings reference](docs/settings.md), the [status bar](docs/status-bar.md), [cats](docs/cats.md), [troubleshooting](docs/troubleshooting.md), [internals](docs/internals.md) and [architecture diagrams](docs/architecture.md).
 
 ## Install
 
