@@ -4,7 +4,7 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
-## [Unreleased]
+## [0.21.0] - 2026-10-26
 
 ### Added
 - Drag a window onto a desktop chip in the status bar to send it to that desktop; the chip lights up while the window is over it. Works for plain drags and ⌥-drags alike.
