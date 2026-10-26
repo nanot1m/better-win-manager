@@ -81,6 +81,18 @@ final class StatusBar {
 
     func focusChanged() { refresh() }
 
+    /// The desktop chip under a point in AX coordinates, on any bar.
+    func desktop(at pointAX: CGPoint) -> Int? {
+        let cocoa = CGRect(origin: pointAX, size: .zero).toCocoa().origin
+        for w in windows where w.isVisible && w.frame.contains(cocoa) {
+            return w.view.chipDesktop(at: w.view.convert(w.convertPoint(fromScreen: cocoa), from: nil))
+        }
+        return nil
+    }
+
+    /// Lights up one desktop's chip (on every bar showing it) while a dragged window is over it.
+    func highlightDrop(_ desktop: Int?) { windows.forEach { $0.view.setDropTarget(desktop) } }
+
     /// Show Desktop / Mission Control: step aside, come back when it ends.
     var hiddenForSystemReveal = false {
         didSet {
@@ -117,7 +129,7 @@ final class StatusBar {
                 self.sound.setOutputVolume(self.sound.state.outputVolume + Float(delta) * 0.03)
             }
             windows.append(w)
-            w.orderBack(nil)
+            w.orderFrontRegardless()
         }
         refresh()
         onLayoutChange?()
@@ -158,7 +170,7 @@ final class StatusBar {
         // A fullscreen app owns the whole screen; stay out of its way.
         for w in windows {
             let fullscreen = Spaces.isFullscreen(Spaces.current(for: w.targetScreen)) || hiddenForSystemReveal
-            if fullscreen { w.orderOut(nil) } else if !w.isVisible { w.orderBack(nil) }
+            if fullscreen { w.orderOut(nil) } else if !w.isVisible { w.orderFrontRegardless() }
         }
         let focused = focusedAXWindow()
         let app = focused.flatMap { NSRunningApplication(processIdentifier: $0.pid)?.localizedName }
@@ -230,8 +242,9 @@ final class BarWindow: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
-        // Behind all app windows: tiled ones start below the bar anyway, floating ones may cover it.
-        level = .normal
+        // Above app windows, like the menu bar it replaces: a floating or dragged window never covers it, and it is
+        // a drop target. Fullscreen Spaces hide it altogether.
+        level = .floating
         acceptsMouseMovedEvents = true
         animationBehavior = .none
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
@@ -241,7 +254,7 @@ final class BarWindow: NSPanel {
     override var canBecomeKey: Bool { false }
 
     // Clicking a desktop chip must not pull the bar in front of the windows.
-    override func mouseDown(with event: NSEvent) { super.mouseDown(with: event); orderBack(nil) }
+    override func mouseDown(with event: NSEvent) { super.mouseDown(with: event) }
 
     // AppKit pushes windows below the menu-bar level out of the menu bar area; the bar must be allowed to sit there.
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
@@ -268,6 +281,16 @@ private final class ScrollButton: NSButton {
 private final class ChipView: NSView {
     var onClick: (() -> Void)?
     var onContextMenu: (() -> Void)?
+
+    /// A dragged window is over this chip: a ring in the accent colour, and the chip grows a little.
+    func setDropTarget(_ on: Bool, color: NSColor) {
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.12)
+        layer?.borderWidth = on ? 2 : 0
+        layer?.borderColor = color.cgColor
+        layer?.transform = on ? CATransform3DMakeScale(1.12, 1.12, 1) : CATransform3DIdentity
+        CATransaction.commit()
+    }
     /// Called with the chip's centre x (in the superview) after it was dragged and released.
     var onDrop: ((CGFloat) -> Void)?
     let number = NSTextField(labelWithString: "")
@@ -343,7 +366,7 @@ private final class ChipView: NSView {
         layer?.zPosition = 0
         alphaValue = 1
         if dragging { onDrop?(frame.midX + dx) } else { onClick?() }
-        (window as? NSPanel)?.orderBack(nil)
+        (window as? NSPanel)?.orderFrontRegardless()
     }
 }
 
@@ -612,6 +635,21 @@ final class BarView: NSView {
 
     /// Desktop index of each visible chip, left to right.
     private var chipDesktops: [Int] = []
+    private var dropTarget: Int?
+
+    func chipDesktop(at point: NSPoint) -> Int? {
+        for (i, c) in chips.enumerated() where !c.isHidden && i < chipDesktops.count {
+            if c.frame.insetBy(dx: -4, dy: -6).contains(convert(point, to: c.superview)) { return chipDesktops[i] }
+        }
+        return nil
+    }
+
+    func setDropTarget(_ desktop: Int?) {
+        dropTarget = desktop
+        for (i, c) in chips.enumerated() where i < chipDesktops.count {
+            c.setDropTarget(chipDesktops[i] == desktop, color: activeColor)
+        }
+    }
 
     func render(_ m: Model) {
         chipDesktops = m.desktops

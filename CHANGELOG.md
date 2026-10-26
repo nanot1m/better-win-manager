@@ -7,7 +7,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 ## [Unreleased]
 
 ### Added
-- Drag a window towards the top of the screen and the overview's desktop strip slides in, following the cursor: it starts to appear one strip height below where the strip will sit and is fully in once the cursor reaches the strip's bottom edge. Drop the window on a desktop to send it there, or on + for a new one. Same desktops, visuals and motion as the F3 overview (whose desktop strip is now a little smaller); works for plain drags and ⌥-drags alike. `dragToDesktops` in the config, or Settings › Tiling, turns it off.
+- Drag a window onto a desktop chip in the status bar to send it to that desktop; the chip lights up while the window is over it. Works for plain drags and ⌥-drags alike.
+
+### Changed
+- The overview's desktop strip is a little smaller, and its labels have a shadow.
+- The status bar sits above app windows, like the menu bar it replaces; a floating or dragged window no longer covers it.
 
 ## [0.20.0] - 2026-10-26
 

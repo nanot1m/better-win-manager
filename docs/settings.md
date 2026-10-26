@@ -24,7 +24,6 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `restoreLayouts` | true | Save grids, floating windows and the active workspace to `state.json` and restore them on launch |
 | `hideApps` | true | Hide an app whose windows are all on other desktops; off parks every window in the screen corner instead, keeping them on screen for live previews |
 | `dragModifiers` | alt | Keys held while dragging to tile: `cmd`, `alt`, `ctrl`, `shift` joined with `+` |
-| `dragToDesktops` | true | Dragging a window to the top edge of the screen shows that screen's desktops; drop it on one to send it there, or on + for a new desktop |
 | `stackOffset` | 48 | Horizontal shift between cascaded windows in stacked layout |
 | `resizeStep` | 40 | Points the `grow` / `shrink` actions resize the focused window by |
 | `stackScreensNarrowerThan` | 0 | Screens narrower than this start in stacked layout; 0 never |

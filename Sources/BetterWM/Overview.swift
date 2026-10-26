@@ -194,7 +194,7 @@ final class Overview {
         startLive(model)
     }
 
-    /// Every desktop with its windows as the strip shows them; shared with the drag-to-desktop strip.
+    /// Every desktop with its windows as the strip shows them.
     static func model(manager: WindowManager, screen: NSScreen) -> OverviewModel {
         let current = manager.currentDesktop ?? 0
         var desktops: [OverviewModel.Desktop] = []
@@ -701,9 +701,8 @@ private final class WindowLayer: CALayer {
     func setHovered(_ on: Bool) { highlight.opacity = on ? 1 : 0 }
 }
 
-/// The strip of desktops along the top: one miniature per desktop and a trailing "+". Shared by the overview
-/// and the drag-to-desktop strip, so both look and move the same. Coordinates are those of a flipped view
-/// covering the screen; `progress` 0 is slid out above the screen, 1 is in place.
+/// The strip of desktops along the top: one miniature per desktop and a trailing "+". Coordinates are those of
+/// a flipped view covering the screen; `progress` 0 is slid out above the screen, 1 is in place.
 final class DesktopStripLayer: CALayer {
     private var previews: [PreviewLayer] = []
     private var desktops: [OverviewModel.Desktop] = []
@@ -748,7 +747,6 @@ final class DesktopStripLayer: CALayer {
     }
 
     func index(at point: CGPoint) -> Int? { previews.firstIndex { $0.frame.insetBy(dx: -9, dy: -9).contains(point) } }
-    func frame(ofPreview i: Int) -> CGRect? { previews.indices.contains(i) ? previews[i].frame : nil }
     /// The desktop a preview stands for; the trailing "+" is the next new one.
     func desktop(forPreview i: Int) -> Int { i < desktops.count ? desktops[i].index : desktops.count }
     func setTarget(_ index: Int?) { for (i, p) in previews.enumerated() { p.setTarget(i == index) } }

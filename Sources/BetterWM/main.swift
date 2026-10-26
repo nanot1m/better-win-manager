@@ -101,6 +101,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
         }
         drag.onOverviewKey = { [weak self] in self?.overview.toggle() }
+        drag.chipDesktop = { [weak self] p in self?.bar.desktop(at: p) }
+        drag.highlightChip = { [weak self] d in self?.bar.highlightDrop(d) }
         drag.swallowScrolling = { [weak self] in (self?.overview.isOpen ?? false) || (self?.slide.isActive ?? false) || (self?.swipe?.fingersDown ?? false) }
         overview.onOpenChange = { [weak self] in self?.drag.refreshState() }
         slide.onActiveChange = { [weak self] in self?.drag.refreshState() }

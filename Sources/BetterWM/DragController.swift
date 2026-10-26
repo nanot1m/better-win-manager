@@ -15,7 +15,7 @@ final class DragController {
     private var pressedAt: Date?
     /// The hit test for the current press is still on the AX queue; until it answers, no window is assumed.
     private var hitTestPending = false
-    private var stripArmed = false
+    private var dropArmed = false
     private var originalFrame: CGRect = .zero
     private var currentZone: (DropZone, CGRect)?
     /// A drag inside the window (⌥-drag of a canvas item, text selection) never moves the window; only a drag that
@@ -42,7 +42,10 @@ final class DragController {
     /// which outlives the fingers.
     private var swallowingSequence = false
 
-    private(set) lazy var strip = DesktopDropStrip(manager: manager)
+    /// The bar's desktop chip under a point (AX coordinates), and the chip to light up while a window is over it.
+    var chipDesktop: (CGPoint) -> Int? = { _ in nil }
+    var highlightChip: (Int?) -> Void = { _ in }
+    private var chipTarget: Int?
 
     init(manager: WindowManager) { self.manager = manager }
 
@@ -176,7 +179,7 @@ final class DragController {
             }
         case .leftMouseDown:
             dragStart = p
-            stripArmed = false
+            dropArmed = false
             guard manager.enabled else { return }
             let press = Date()
             pressedAt = press
@@ -210,11 +213,12 @@ final class DragController {
                 let f = liveFrame(w)
                 windowMoved = hypot(f.minX - originalFrame.minX, f.minY - originalFrame.minY) >= 4
             }
-            // The strip is for a window being carried somewhere, not for a click near the top edge: it needs the
-            // same travel that makes a drag count as a hand move, once per press.
-            if !stripArmed, hypot(p.x - dragStart.x, p.y - dragStart.y) >= DragRules.handTravel { stripArmed = true }
-            if stripArmed { strip.update(cursor: p, dragging: draggedID) }
-            if strip.isVisible {
+            // A chip is a drop target for a window being carried, not for a click that strays onto the bar: it needs
+            // the same travel that makes a drag count as a hand move, once per press.
+            if !dropArmed, hypot(p.x - dragStart.x, p.y - dragStart.y) >= DragRules.handTravel { dropArmed = true }
+            let over = dropArmed ? chipDesktop(p) : nil
+            if over != chipTarget { chipTarget = over; highlightChip(over) }
+            if chipTarget != nil {
                 currentZone = nil
                 manager.overlay.hide()
             } else if alt, windowMoved {
@@ -235,9 +239,9 @@ final class DragController {
             let id = draggedID
             let moved = manager.interacting
             let travel = hypot(p.x - dragStart.x, p.y - dragStart.y)
-            let sendTo = strip.target
-            strip.hide()
-            stripArmed = false
+            let sendTo = chipTarget
+            if chipTarget != nil { chipTarget = nil; highlightChip(nil) }
+            dropArmed = false
             let finish = { [manager, weak self] in
                 manager.interacting = false
                 guard let w else { return }

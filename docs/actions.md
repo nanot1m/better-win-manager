@@ -40,7 +40,7 @@ Hotkeys are registered globally with Carbon. A combination macOS already uses, s
 | `desktopMoveLeft` / `desktopMoveRight` | unbound | Reorder the current desktop among its neighbours |
 | `desktopToNextScreen` | unbound | Move the current desktop, windows and all, to the next screen, where it stays shown |
 
-Dragging a chip in the status bar also reorders desktops, and ⌥ + scroll wheel switches them. Dragging a window to the top edge of the screen shows its desktops; drop the window on one to send it there (`dragToDesktops`).
+Dragging a chip in the status bar also reorders desktops, and ⌥ + scroll wheel switches them. Dragging a window onto a desktop chip in the status bar sends it to that desktop.
 
 ## The Window Actions popup
 
