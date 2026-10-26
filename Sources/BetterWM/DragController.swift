@@ -15,6 +15,7 @@ final class DragController {
     private var pressedAt: Date?
     /// The hit test for the current press is still on the AX queue; until it answers, no window is assumed.
     private var hitTestPending = false
+    private var stripArmed = false
     private var originalFrame: CGRect = .zero
     private var currentZone: (DropZone, CGRect)?
     /// A drag inside the window (⌥-drag of a canvas item, text selection) never moves the window; only a drag that
@@ -175,6 +176,7 @@ final class DragController {
             }
         case .leftMouseDown:
             dragStart = p
+            stripArmed = false
             guard manager.enabled else { return }
             let press = Date()
             pressedAt = press
@@ -208,7 +210,10 @@ final class DragController {
                 let f = liveFrame(w)
                 windowMoved = hypot(f.minX - originalFrame.minX, f.minY - originalFrame.minY) >= 4
             }
-            strip.update(cursor: p, dragging: draggedID)
+            // The strip is for a window being carried somewhere, not for a click near the top edge: it needs the
+            // same travel that makes a drag count as a hand move, once per press.
+            if !stripArmed, hypot(p.x - dragStart.x, p.y - dragStart.y) >= DragRules.handTravel { stripArmed = true }
+            if stripArmed { strip.update(cursor: p, dragging: draggedID) }
             if strip.isVisible {
                 currentZone = nil
                 manager.overlay.hide()
@@ -232,6 +237,7 @@ final class DragController {
             let travel = hypot(p.x - dragStart.x, p.y - dragStart.y)
             let sendTo = strip.target
             strip.hide()
+            stripArmed = false
             let finish = { [manager, weak self] in
                 manager.interacting = false
                 guard let w else { return }
