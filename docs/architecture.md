@@ -174,5 +174,5 @@ flowchart LR
     Config["config.conf<br/>Config.parse / serialize<br/>schema 3, migrated"] --> WM
     State["state.json<br/>SavedLayout schema 3<br/>grids by desktop, floating frames,<br/>desktop homes, shown per display"] <--> WM["WindowManager"]
     Cats["cats.json<br/>cat memory"] <--> BarCat
-    Log["log.txt (2 MB, rotated)"] <-- Log.write --- All["every component"]
+    All["every component"] -- "Log.write" --> Log["log.txt (2 MB, rotated)"]
 ```
