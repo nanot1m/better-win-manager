@@ -125,7 +125,7 @@ final class Overview {
 
     private func present() {
         guard let screen = NSScreen.screens.first else { return }
-        let model = buildModel(screen: screen)
+        let model = Overview.model(manager: manager, screen: screen)
         panel.setFrame(screen.frame, display: false)
         // The screen as it is right now becomes the backdrop: the real windows are covered from the first frame
         // and the previews lift off a still image, as in Mission Control. A blurred copy fades in with progress.
@@ -188,13 +188,14 @@ final class Overview {
     /// Rebuilds the model in place (after a switch or a move) so the open overview reflects it.
     private func refresh() {
         guard let screen = NSScreen.screens.first else { return }
-        let model = buildModel(screen: screen)
+        let model = Overview.model(manager: manager, screen: screen)
         view.configure(model: model, screenAX: screen.frame.toCocoa(), topInset: manager.system.topInset(screen))
         view.progress = progress
         startLive(model)
     }
 
-    private func buildModel(screen: NSScreen) -> OverviewModel {
+    /// Every desktop with its windows as the strip shows them; shared with the drag-to-desktop strip.
+    static func model(manager: WindowManager, screen: NSScreen) -> OverviewModel {
         let current = manager.currentDesktop ?? 0
         var desktops: [OverviewModel.Desktop] = []
         let byDesktop = Dictionary(uniqueKeysWithValues: manager.windowsByDesktop().map { ($0.desktop, $0.windows) })
@@ -377,7 +378,7 @@ final class OverviewView: NSView {
     private let blurred = CALayer()
     private let backdrop = CALayer()
     private var windowLayers: [WindowID: WindowLayer] = [:]
-    private var previewLayers: [PreviewLayer] = []
+    private let strip = DesktopStripLayer()
     private var slots: [WindowID: CGRect] = [:]
     private let titleLayer = CATextLayer()
     private var hovered: WindowID?
@@ -401,6 +402,7 @@ final class OverviewView: NSView {
         backdrop.backgroundColor = NSColor.black.cgColor
         backdrop.opacity = 0
         layer?.addSublayer(backdrop)
+        layer?.addSublayer(strip)
         titleLayer.fontSize = 13
         titleLayer.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         titleLayer.foregroundColor = NSColor.white.cgColor
@@ -418,19 +420,10 @@ final class OverviewView: NSView {
         self.screenAX = screenAX
         self.topInset = topInset
         for l in windowLayers.values { l.removeFromSuperlayer() }
-        for l in previewLayers { l.removeFromSuperlayer() }
         windowLayers.removeAll()
-        previewLayers.removeAll()
         hovered = nil
         let scale = window?.backingScaleFactor ?? 2
-        for d in model.desktops {
-            let p = PreviewLayer(desktop: d, screenSize: screenAX.size, isCurrent: d.index == model.current?.index, scale: scale)
-            previewLayers.append(p)
-            layer?.addSublayer(p)
-        }
-        let plus = PreviewLayer(desktop: nil, screenSize: screenAX.size, isCurrent: false, scale: scale)
-        previewLayers.append(plus)
-        layer?.addSublayer(plus)
+        strip.configure(desktops: model.desktops, current: model.current?.index, screenSize: screenAX.size, scale: scale)
         for w in model.current?.windows.reversed() ?? [] {
             let l = WindowLayer(item: w, scale: scale)
             if w.id == model.focused { l.setRing(color: model.ringColor, width: model.ringWidth) }
@@ -452,26 +445,14 @@ final class OverviewView: NSView {
 
     func setThumbnail(_ image: NSImage, for id: WindowID) {
         windowLayers[id]?.setThumbnail(image)
-        for p in previewLayers { p.setThumbnail(image, for: id) }
+        strip.setThumbnail(image, for: id)
     }
 
     // MARK: Geometry
 
     private func local(_ ax: CGRect) -> CGRect { CGRect(x: ax.minX - screenAX.minX, y: ax.minY - screenAX.minY, width: ax.width, height: ax.height) }
 
-    private var stripFrame: CGRect {
-        let h = bounds.height * 0.12
-        return CGRect(x: 0, y: topInset + 20, width: bounds.width, height: h)
-    }
-
-    private func previewFrame(at i: Int, count: Int) -> CGRect {
-        guard bounds.height > 0 else { return .zero }
-        let strip = stripFrame
-        let ph = strip.height, pw = ph * bounds.width / max(1, bounds.height), gap: CGFloat = 18
-        let total = CGFloat(count) * pw + CGFloat(count - 1) * gap
-        let x0 = (bounds.width - total) / 2
-        return CGRect(x: x0 + CGFloat(i) * (pw + gap), y: strip.minY, width: pw, height: ph)
-    }
+    private var stripFrame: CGRect { DesktopStripLayer.stripFrame(in: bounds, topInset: topInset) }
 
     /// Spread-out slots, Exposé style: one cell per window in reading order, each window scaled to fit its cell,
     /// so every window is fully visible whatever the layout.
@@ -554,13 +535,8 @@ final class OverviewView: NSView {
         backdrop.frame = bounds
         blurred.opacity = Float(p)
         backdrop.opacity = Float(p * 0.35)
-        let count = previewLayers.count
-        for (i, l) in previewLayers.enumerated() {
-            var f = previewFrame(at: i, count: count)
-            f.origin.y = f.minY - (1 - p) * (f.maxY + 20)
-            l.frame = f
-            l.opacity = Float(p)
-        }
+        strip.frame = bounds
+        strip.layout(in: bounds, topInset: topInset, progress: p)
         for w in model.current?.windows ?? [] {
             guard let l = windowLayers[w.id], let slot = slots[w.id] else { continue }
             if let d = dragging, d.item.id == w.id { continue }
@@ -585,11 +561,9 @@ final class OverviewView: NSView {
         return nil
     }
 
-    private func previewIndex(at point: CGPoint) -> Int? {
-        previewLayers.firstIndex { $0.frame.insetBy(dx: -9, dy: -9).contains(point) }
-    }
+    private func previewIndex(at point: CGPoint) -> Int? { strip.index(at: point) }
 
-    private func desktop(forPreview i: Int) -> Int { i < model.desktops.count ? model.desktops[i].index : model.desktops.count }
+    private func desktop(forPreview i: Int) -> Int { strip.desktop(forPreview: i) }
 
     override func mouseMoved(with event: NSEvent) {
         guard progress >= 1 else { return }
@@ -630,7 +604,7 @@ final class OverviewView: NSView {
         let k: CGFloat = over ? 0.35 : 1
         l.frame = CGRect(x: point.x - d.origin.width * k / 2, y: point.y - d.origin.height * k / 2, width: d.origin.width * k, height: d.origin.height * k)
         l.zPosition = 10
-        for (i, p) in previewLayers.enumerated() { p.setTarget(previewIndex(at: point) == i) }
+        strip.setTarget(previewIndex(at: point))
         titleLayer.opacity = 0
         CATransaction.commit()
     }
@@ -640,7 +614,7 @@ final class OverviewView: NSView {
         defer { dragging = nil }
         if let d = dragging {
             if d.moved {
-                for p in previewLayers { p.setTarget(false) }
+                strip.setTarget(nil)
                 if let i = previewIndex(at: point) {
                     onDropWindow?(d.item, desktop(forPreview: i))
                 } else if let l = windowLayers[d.item.id] {
@@ -727,6 +701,60 @@ private final class WindowLayer: CALayer {
     func setHovered(_ on: Bool) { highlight.opacity = on ? 1 : 0 }
 }
 
+/// The strip of desktops along the top: one miniature per desktop and a trailing "+". Shared by the overview
+/// and the drag-to-desktop strip, so both look and move the same. Coordinates are those of a flipped view
+/// covering the screen; `progress` 0 is slid out above the screen, 1 is in place.
+final class DesktopStripLayer: CALayer {
+    private var previews: [PreviewLayer] = []
+    private var desktops: [OverviewModel.Desktop] = []
+
+    static func stripFrame(in bounds: CGRect, topInset: CGFloat) -> CGRect {
+        CGRect(x: 0, y: topInset + 20, width: bounds.width, height: bounds.height * 0.12)
+    }
+
+    static func previewFrame(at i: Int, count: Int, in bounds: CGRect, topInset: CGFloat) -> CGRect {
+        guard bounds.height > 0 else { return .zero }
+        let strip = stripFrame(in: bounds, topInset: topInset)
+        let ph = strip.height, pw = ph * bounds.width / max(1, bounds.height), gap: CGFloat = 18
+        let total = CGFloat(count) * pw + CGFloat(count - 1) * gap
+        let x0 = (bounds.width - total) / 2
+        return CGRect(x: x0 + CGFloat(i) * (pw + gap), y: strip.minY, width: pw, height: ph)
+    }
+
+    func configure(desktops: [OverviewModel.Desktop], current: Int?, screenSize: CGSize, scale: CGFloat) {
+        previews.forEach { $0.removeFromSuperlayer() }
+        previews = []
+        self.desktops = desktops
+        for d in desktops {
+            let p = PreviewLayer(desktop: d, screenSize: screenSize, isCurrent: d.index == current, scale: scale)
+            previews.append(p)
+            addSublayer(p)
+        }
+        let plus = PreviewLayer(desktop: nil, screenSize: screenSize, isCurrent: false, scale: scale)
+        previews.append(plus)
+        addSublayer(plus)
+    }
+
+    func layout(in bounds: CGRect, topInset: CGFloat, progress p: CGFloat) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (i, l) in previews.enumerated() {
+            var f = Self.previewFrame(at: i, count: previews.count, in: bounds, topInset: topInset)
+            f.origin.y = f.minY - (1 - p) * (f.maxY + 20)
+            l.frame = f
+            l.opacity = Float(p)
+        }
+        CATransaction.commit()
+    }
+
+    func index(at point: CGPoint) -> Int? { previews.firstIndex { $0.frame.insetBy(dx: -9, dy: -9).contains(point) } }
+    func frame(ofPreview i: Int) -> CGRect? { previews.indices.contains(i) ? previews[i].frame : nil }
+    /// The desktop a preview stands for; the trailing "+" is the next new one.
+    func desktop(forPreview i: Int) -> Int { i < desktops.count ? desktops[i].index : desktops.count }
+    func setTarget(_ index: Int?) { for (i, p) in previews.enumerated() { p.setTarget(i == index) } }
+    func setThumbnail(_ image: NSImage, for id: WindowID) { for p in previews { p.setThumbnail(image, for: id) } }
+}
+
 /// A desktop in the strip: the screen in miniature with its windows at their layout positions. `desktop == nil`
 /// is the trailing "new desktop" target.
 private final class PreviewLayer: CALayer {
@@ -774,6 +802,11 @@ private final class PreviewLayer: CALayer {
         label.foregroundColor = NSColor.white.withAlphaComponent(isNew ? 0.6 : 0.9).cgColor
         label.alignmentMode = .center
         label.contentsScale = scale
+        // Readable over a light wallpaper too: the drag strip has no darkened backdrop behind it.
+        label.shadowColor = NSColor.black.cgColor
+        label.shadowOpacity = 0.7
+        label.shadowRadius = 2
+        label.shadowOffset = CGSize(width: 0, height: 1)
         addSublayer(label)
     }
     override init(layer: Any) {
