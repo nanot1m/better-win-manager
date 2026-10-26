@@ -218,6 +218,7 @@ final class WindowManager {
     }
 
     var desktopCount: Int { desktops.count }
+    func desktop(of id: WindowID) -> Int { desktops.workspace(of: id) }
     var currentDesktop: Int? { desktops.active }
     /// Desktops living on `screen`, and the one it shows; for the bar on that screen.
     func desktopList(on screen: NSScreen) -> [Int] { desktops.desktops(on: Self.displayID(screen)) }

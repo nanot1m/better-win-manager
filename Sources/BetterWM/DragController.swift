@@ -245,7 +245,15 @@ final class DragController {
             let finish = { [manager, weak self] in
                 manager.interacting = false
                 guard let w else { return }
-                if let sendTo { manager.send(w, toDesktop: sendTo); return }
+                if let sendTo {
+                    // Dropped on its own desktop's chip: nothing to send, the window just goes back where it was.
+                    if let id, manager.desktop(of: id) == sendTo {
+                        if manager.isTiled(w) { manager.apply() } else { w.frame = original }
+                    } else {
+                        manager.send(w, toDesktop: sendTo)
+                    }
+                    return
+                }
                 if let zone { manager.drop(w, into: zone, at: p, from: original); return }
                 let now = self?.liveFrame(w) ?? w.frame
                 let outcome = DragRules.outcome(moved: moved, travel: travel, before: original, after: now, alt: alt)
