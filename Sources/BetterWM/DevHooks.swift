@@ -90,6 +90,16 @@ extension AppDelegate {
             let path = CommandLine.arguments[i + 1]
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [switcher] in switcher?.snapshot(to: path) }
         }
+        if let i = CommandLine.arguments.firstIndex(of: "--snapshot-strip"), i + 1 < CommandLine.arguments.count {
+            let path = CommandLine.arguments[i + 1]
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [drag] in
+                drag?.strip.preview()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    drag?.strip.snapshot(to: path)
+                    print("strip snapshot written")
+                }
+            }
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--snapshot-hud"), i + 1 < CommandLine.arguments.count {
             let path = CommandLine.arguments[i + 1]
             hud.enabled = true

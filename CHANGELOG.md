@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [Unreleased]
+
+### Added
+- Drag a window to the top edge of the screen and a strip of that screen's desktops appears, with a + tile for a new one; drop the window on a desktop to send it there. Works for plain drags and ⌥-drags alike. `dragToDesktops` in the config, or Settings › Tiling, turns it off.
+
 ## [0.20.0] - 2026-10-26
 
 ### Added

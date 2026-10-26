@@ -41,6 +41,8 @@ final class DragController {
     /// which outlives the fingers.
     private var swallowingSequence = false
 
+    private(set) lazy var strip = DesktopDropStrip(manager: manager)
+
     init(manager: WindowManager) { self.manager = manager }
 
     /// Call whenever something the tap decides on changed: the overview or slide opened or closed, fingers landed
@@ -206,7 +208,11 @@ final class DragController {
                 let f = liveFrame(w)
                 windowMoved = hypot(f.minX - originalFrame.minX, f.minY - originalFrame.minY) >= 4
             }
-            if alt, windowMoved {
+            strip.update(cursor: p, dragging: draggedID)
+            if strip.isVisible {
+                currentZone = nil
+                manager.overlay.hide()
+            } else if alt, windowMoved {
                 currentZone = manager.zone(at: p, draggingID: draggedID)
                 manager.overlay.show(zone: currentZone?.1)
             } else {
@@ -224,9 +230,12 @@ final class DragController {
             let id = draggedID
             let moved = manager.interacting
             let travel = hypot(p.x - dragStart.x, p.y - dragStart.y)
+            let sendTo = strip.target
+            strip.hide()
             let finish = { [manager, weak self] in
                 manager.interacting = false
                 guard let w else { return }
+                if let sendTo { manager.send(w, toDesktop: sendTo); return }
                 if let zone { manager.drop(w, into: zone, at: p, from: original); return }
                 let now = self?.liveFrame(w) ?? w.frame
                 let outcome = DragRules.outcome(moved: moved, travel: travel, before: original, after: now, alt: alt)

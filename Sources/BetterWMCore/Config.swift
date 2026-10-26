@@ -8,6 +8,8 @@ public struct Config {
     public var outerGap: CGFloat = 16
     public var handleWidth: CGFloat = 16
     public var dragModifiers: String = "alt"
+    /// Dragging a window to the top of the screen shows the desktops; dropping it on one sends it there.
+    public var dragToDesktops: Bool = true
     public var hotkeys: [String: String] = Config.defaultHotkeys
 
     /// ⌃-arrows and ⌃-digits collide with Mission Control's shortcuts; disable those in System Settings ›
@@ -325,6 +327,8 @@ public struct Config {
 
         # Modifiers held while dragging a window to tile it (cmd, alt, ctrl, shift joined with +).
         dragModifiers = \(dragModifiers)
+        # Drag a window to the top of the screen to show its desktops and drop it on one.
+        dragToDesktops = \(dragToDesktops)
 
         # Global hotkeys: hotkey.<action> = <modifiers>+<key>. Comment a line to unbind.
         # Keys: letters, digits, space, return, tab, escape, left, right, up, down, punctuation.
@@ -379,6 +383,7 @@ public struct Config {
             case "outerGap": cfg.outerGap = Double(value).map { CGFloat($0) } ?? cfg.outerGap
             case "handleWidth": cfg.handleWidth = Double(value).map { CGFloat($0) } ?? cfg.handleWidth
             case "dragModifiers": cfg.dragModifiers = value
+            case "dragToDesktops": cfg.dragToDesktops = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "workspaces": break  // native Spaces mode was removed in 0.12; the key is accepted and ignored
             case "virtualWorkspaces": break  // workspaces are created on demand since 0.12.1; accepted and ignored
             case "switcher": cfg.switcher = ["true", "yes", "1", "on"].contains(value.lowercased())
