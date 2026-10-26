@@ -9,6 +9,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 ### Added
 - Drag a window onto a desktop chip in the status bar to send it to that desktop; the chip lights up while the window is over it. Works for plain drags and ⌥-drags alike.
 
+### Fixed
+- The focus ring sat too low around a window dragged up under the bar: AppKit keeps a borderless window below the menu bar area and pushed the ring down. The ring, the drop-zone overlay and the gap handles now go exactly where they are placed.
+
 ### Changed
 - The overview's desktop strip is a little smaller, and its labels have a shadow.
 - The status bar sits above app windows, like the menu bar it replaces; a floating or dragged window no longer covers it.

@@ -3,7 +3,7 @@ import Cocoa
 import QuartzCore
 
 final class FocusRing {
-    private let window: NSWindow
+    private let window: UnconstrainedWindow
     private let layer = CALayer()
     private var config: Config
     private var timer: Timer?
@@ -42,7 +42,7 @@ final class FocusRing {
 
     init(config: Config) {
         self.config = config
-        window = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: false)
+        window = UnconstrainedWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: false)
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = false

@@ -1,7 +1,13 @@
 import BetterWMCore
 import Cocoa
 
-final class ZoneOverlay: NSWindow {
+/// A borderless window placed wherever we say. AppKit otherwise keeps a window's top below the menu bar area,
+/// which shifts an overlay drawn around a window that reaches the top of the screen.
+class UnconstrainedWindow: NSWindow {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+}
+
+final class ZoneOverlay: UnconstrainedWindow {
     private let view = ZoneView()
 
     init(screen: NSScreen) {
@@ -44,7 +50,7 @@ private final class ZoneView: NSView {
     }
 }
 
-final class HandleWindow: NSWindow {
+final class HandleWindow: UnconstrainedWindow {
     var onDrag: ((CGPoint) -> Void)?
     var onDragEnd: (() -> Void)?
     var isVertical: Bool {
