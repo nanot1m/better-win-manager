@@ -316,10 +316,6 @@ extension AppDelegate {
     @objc func sendNext() { manager.sendFocusedWindow(toNext: true) }
     @objc func sendPrevious() { manager.sendFocusedWindow(toNext: false) }
     @objc func focusPrevious() { manager.focusNext(reverse: true) }
-    @objc func focusLeft() { manager.focusWindow(in: .left) }
-    @objc func focusRight() { manager.focusWindow(in: .right) }
-    @objc func focusUp() { manager.focusWindow(in: .up) }
-    @objc func focusDown() { manager.focusWindow(in: .down) }
     @objc func focusDirection(_ sender: NSMenuItem) {
         if let dir = sender.representedObject as? Direction { manager.focusWindow(in: dir) }
     }

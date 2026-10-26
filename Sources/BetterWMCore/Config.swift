@@ -2,7 +2,7 @@ import Foundation
 
 public struct Config {
     /// Bumped whenever a key is renamed or its meaning changes; `parse` migrates older files.
-    public static let schemaVersion = 4
+    public static let schemaVersion = 3
     public init() {}
     public var gap: CGFloat = 16
     public var outerGap: CGFloat = 16
@@ -16,7 +16,6 @@ public struct Config {
         var h: [String: String] = [
             "popup": "alt+cmd+space", "switcher": "alt+tab", "switcherBack": "alt+shift+tab",
             "focusNext": "ctrl+]", "focusPrevious": "ctrl+[",
-            "focusLeft": "ctrl+cmd+left", "focusRight": "ctrl+cmd+right", "focusUp": "ctrl+cmd+up", "focusDown": "ctrl+cmd+down",
             "moveLeft": "ctrl+alt+left", "moveRight": "ctrl+alt+right", "moveUp": "ctrl+alt+up", "moveDown": "ctrl+alt+down",
             "mergeLeft": "ctrl+alt+shift+left", "mergeRight": "ctrl+alt+shift+right",
             "toggleTile": "ctrl+alt+t", "toggleStack": "ctrl+alt+s", "retile": "ctrl+alt+r", "equalize": "ctrl+alt+e",
@@ -469,16 +468,6 @@ public struct Config {
         if version < 3 {
             // v3 added the menu widget; files that already pinned an explicit widget order get it appended.
             if !cfg.barWidgets.contains(.menu) { cfg.barWidgets.append(.menu) }
-        }
-        if version < 4 {
-            // v4 added directional focus (i3-style); give older configs with custom hotkeys the default bindings if unbound.
-            if hadHotkeys {
-                for key in ["focusLeft", "focusRight", "focusUp", "focusDown"] {
-                    if cfg.hotkeys[key] == nil, let def = Config.defaultHotkeys[key] {
-                        cfg.hotkeys[key] = def
-                    }
-                }
-            }
         }
         return cfg
     }

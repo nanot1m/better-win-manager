@@ -1256,13 +1256,11 @@ final class WindowManager {
         let focused = system.focused
         let focusedID = focused.flatMap(id)
 
-        // 1. Tiled window navigation:
         if let curID = focusedID, let space = state.space(containing: curID) {
             let grid = state.grid(for: space)
             let screens = system.screens()
             let curScreen = screens.first { $0.space == space }
 
-            // If at an outer edge, check if there is an adjacent screen in that direction
             if let curScreen, grid.isAtEdge(curID, dir) {
                 let curFrame = targetFrame(of: curID) ?? focused?.frame ?? curScreen.area
                 if let neighbor = adjacentScreen(to: curScreen, in: dir, allScreens: screens) {
@@ -1273,9 +1271,9 @@ final class WindowManager {
                             Log.write("focus", "focus \(dir) -> \(targetID) on adjacent space \(neighbor.space)")
                             return
                         }
-                    } else {
-                        let neighborWindows = windowsByDesktop().first(where: { $0.desktop == current })?.windows
-                            .filter { neighbor.area.contains($0.frame.center) } ?? []
+                    } else if let neighborDesktop = VirtualWorkspaces.workspace(of: neighbor.space) {
+                        // No grid over there: the first window of the desktop that screen shows, in chip order.
+                        let neighborWindows = windowsByDesktop().first(where: { $0.desktop == neighborDesktop })?.windows ?? []
                         if let first = neighborWindows.first {
                             first.raise()
                             if let fid = id(first) { focusRing.show(windowID: fid, frame: first.frame) }
@@ -1286,7 +1284,6 @@ final class WindowManager {
                 }
             }
 
-            // In-grid navigation (wraps within the grid when at outer edge without adjacent screen)
             if let targetID = grid.focusTarget(from: curID, in: dir) {
                 focusWindow(id: targetID)
                 Log.write("focus", "focus \(dir) -> \(targetID) in grid")
@@ -1294,7 +1291,7 @@ final class WindowManager {
             }
         }
 
-        // 2. Floating windows / untiled: geometric navigation
+        // Floating or untiled: the nearest window in that direction, by geometry.
         let desktopWindows = windowsByDesktop().first(where: { $0.desktop == current })?.windows ?? []
         guard !desktopWindows.isEmpty else { return }
 
@@ -1375,7 +1372,6 @@ final class WindowManager {
         if let best = inDir.min(by: { distanceScore($0.frame) < distanceScore($1.frame) }) {
             return best
         }
-        // Wrapping if no window is strictly in that direction:
         switch dir {
         case .left: return candidates.max(by: { $0.frame.midX < $1.frame.midX })
         case .right: return candidates.min(by: { $0.frame.midX < $1.frame.midX })

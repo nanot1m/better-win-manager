@@ -243,7 +243,12 @@ public struct Grid: Equatable {
 
     private func columnIndex(forX x: CGFloat, in area: CGRect) -> Int {
         let fracX = (x - area.minX) / max(1, area.width)
-        return min(columns.count - 1, max(0, Int(fracX * CGFloat(columns.count))))
+        var edge: CGFloat = 0
+        for ci in columns.indices {
+            edge += fraction(ofColumn: ci)
+            if fracX < edge { return ci }
+        }
+        return columns.count - 1
     }
 
     private func closestWindow(in col: Int, toY y: CGFloat, area: CGRect) -> WindowID? {

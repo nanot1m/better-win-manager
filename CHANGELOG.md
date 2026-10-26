@@ -4,6 +4,12 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [Unreleased]
+
+### Added
+- Directional focus, i3-style: `focusLeft` / `focusRight` / `focusUp` / `focusDown` move focus to the neighbouring column or the window above or below, cross to the neighbouring display at the screen edge, or wrap around; a floating window picks the nearest window in that direction. Unbound by default; also ⌘ + arrows or h/j/k/l in the actions popup. Thanks to @vteremasov.
+- Settings › Hotkeys is grouped into sections.
+
 ## [0.19.0] - 2026-10-23
 
 ### Changed
