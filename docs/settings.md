@@ -26,7 +26,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `dragModifiers` | alt | Keys held while dragging to tile: `cmd`, `alt`, `ctrl`, `shift` joined with `+` |
 | `stackOffset` | 48 | Horizontal shift between cascaded windows in stacked layout |
 | `stackStyle` | cascade | How a stacked screen looks: `cascade`, `tabsTop` (every window full size under a row of tabs) or `tabsLeft` (tabs down the left edge) |
-| `tabHeight` / `tabWidth` | 30 / 180 | Size of the tab strip for `tabsTop` / `tabsLeft`; the windows get the rest |
+| `tabHeight` / `tabWidth` | 30 / 240 | Thickness of the tab strip (its height on top, its width on the left, where tabs read sideways), and the longest a tab gets; the windows get the rest |
 | `tabTitleFormat` | `{app} — {title}` | Tab label; `{app}` and `{title}` are replaced |
 | `resizeStep` | 40 | Points the `grow` / `shrink` actions resize the focused window by |
 | `stackScreensNarrowerThan` | 0 | Screens narrower than this start in stacked layout; 0 never |

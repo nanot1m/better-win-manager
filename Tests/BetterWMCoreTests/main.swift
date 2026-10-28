@@ -306,10 +306,9 @@ struct ReconcilerTests {
         let fronted = Dictionary(uniqueKeysWithValues: GridGeometry(grid: g, area: area, config: c, front: 2).windowFrames())
         expect(fronted[2] == frames[2] && fronted[1]?.origin == CGPoint(x: area.maxX - 2, y: area.maxY - 2) && fronted[1]?.size == frames[1]?.size, #function, #line)
         c.stackStyle = .tabsLeft
-        c.tabWidth = 180
         let left = GridGeometry(grid: g, area: area, config: c)
-        expect(left.windowFrames().first?.1 == CGRect(x: 180, y: 0, width: area.width - 180, height: area.height), #function, #line)
-        expect(left.tabStripFrame() == CGRect(x: 0, y: 0, width: 180, height: area.height), #function, #line)
+        expect(left.windowFrames().first?.1 == CGRect(x: 30, y: 0, width: area.width - 30, height: area.height), #function, #line)
+        expect(left.tabStripFrame() == CGRect(x: 0, y: 0, width: 30, height: area.height), #function, #line)
         // Dropping along the strip picks the deck position; a cascade keeps its strip-less geometry.
         expect(left.zone(at: CGPoint(x: 90, y: area.height - 1), dragging: nil)?.0 == .newColumn(index: 2), #function, #line)
         c.stackStyle = .cascade

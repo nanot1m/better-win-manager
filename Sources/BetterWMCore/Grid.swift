@@ -337,7 +337,7 @@ public struct GridGeometry {
         switch config.stackStyle {
         case .cascade: return nil
         case .tabsTop: return CGRect(x: inner.minX, y: inner.minY, width: inner.width, height: config.tabHeight)
-        case .tabsLeft: return CGRect(x: inner.minX, y: inner.minY, width: config.tabWidth, height: inner.height)
+        case .tabsLeft: return CGRect(x: inner.minX, y: inner.minY, width: config.tabHeight, height: inner.height)
         }
     }
 
@@ -346,7 +346,7 @@ public struct GridGeometry {
         switch config.stackStyle {
         case .cascade: return inner
         case .tabsTop: return CGRect(x: inner.minX, y: inner.minY + config.tabHeight, width: inner.width, height: inner.height - config.tabHeight)
-        case .tabsLeft: return CGRect(x: inner.minX + config.tabWidth, y: inner.minY, width: inner.width - config.tabWidth, height: inner.height)
+        case .tabsLeft: return CGRect(x: inner.minX + config.tabHeight, y: inner.minY, width: inner.width - config.tabHeight, height: inner.height)
         }
     }
 

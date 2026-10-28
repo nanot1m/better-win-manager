@@ -97,7 +97,7 @@ extension AppDelegate {
             var c = manager.config
             c.stackStyle = CommandLine.arguments.contains("--left") ? .tabsLeft : .tabsTop
             let top = TabStripWindow()
-            let frame = c.stackStyle == .tabsLeft ? CGRect(x: 16, y: 300, width: c.tabWidth, height: 300) : CGRect(x: 16, y: 300, width: 1000, height: c.tabHeight)
+            let frame = c.stackStyle == .tabsLeft ? CGRect(x: 16, y: 300, width: c.tabHeight, height: 700) : CGRect(x: 16, y: 300, width: 1000, height: c.tabHeight)
             top.show(frame: frame, items: items, focused: 2, vertical: c.stackStyle == .tabsLeft, config: c)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 top.snapshot(to: path)

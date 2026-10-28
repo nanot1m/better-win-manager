@@ -511,7 +511,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             stackStylePopup.lastItem?.representedObject = st.rawValue
         }
         tabHeightField = numberField("30")
-        tabWidthField = numberField("180")
+        tabWidthField = numberField("240")
         tabTitleField = NSTextField(string: "")
         tabTitleField.widthAnchor.constraint(equalToConstant: 200).isActive = true
         resizeStepField = numberField("40")
@@ -529,7 +529,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             group("Stacked layout", [
                 row("Look", "Cascade shifts each window right; tabs give every window the whole screen behind a row of tabs. Toggle the layout per screen from the menu or with its hotkey.", [stackStylePopup]),
                 row("Cascade offset", "Windows cascade by this much so the ones behind stay visible.", [stackOffsetField, unit("pt")]),
-                row("Tab strip height / width", "Height of the strip for tabs on top; width for tabs on the left.", [tabHeightField, unit("pt"), tabWidthField, unit("pt")]),
+                row("Tab strip thickness / max tab length", "The strip's height on top or width on the left, where tabs read sideways; and the longest a tab gets.", [tabHeightField, unit("pt"), tabWidthField, unit("pt")]),
                 row("Tab title", "{app} and {title} are replaced.", [tabTitleField]),
                 row("Start stacked on narrow screens", "Screens narrower than this begin in stacked layout; 0 never.", [stackNarrowField, unit("pt")]),
             ]),

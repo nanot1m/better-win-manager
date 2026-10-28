@@ -47,6 +47,7 @@ private final class TabStripView: NSView {
     private var items: [TabStripWindow.Item] = []
     private var vertical = false
     private var activeIndex: Int?
+    private var maxLength: CGFloat = 240
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -59,6 +60,7 @@ private final class TabStripView: NSView {
     func configure(items: [TabStripWindow.Item], focused: WindowID?, vertical: Bool, config: Config) {
         self.items = items
         self.vertical = vertical
+        maxLength = config.tabWidth
         while tabs.count < items.count {
             let t = TabView()
             let i = tabs.count
@@ -92,17 +94,16 @@ private final class TabStripView: NSView {
 
     /// Tabs share the strip, with a cap so a lone tab does not span the screen; the active one stands a little taller.
     private func layoutTabs() {
-        let n = CGFloat(max(1, items.count)), pad: CGFloat = 16
+        let n = CGFloat(max(1, items.count)), pad: CGFloat = 16, gap: CGFloat = 4
         if vertical {
-            let gap: CGFloat = 4
-            let h = min(30, (bounds.height - pad * 2 - gap * (n - 1)) / n)
+            // Sideways tabs: as long along the strip as a top tab is wide, as thick as the strip.
+            let h = min(maxLength, (bounds.height - pad * 2 - gap * (n - 1)) / n)
             for (i, t) in tabs.enumerated() where i < items.count {
                 let active = i == activeIndex
-                t.frame = CGRect(x: active ? pad - 4 : pad, y: pad + CGFloat(i) * (h + gap), width: bounds.width - (active ? pad - 4 : pad), height: h)
+                t.frame = CGRect(x: active ? 1 : 5, y: pad + CGFloat(i) * (h + gap), width: bounds.width - (active ? 1 : 5), height: h)
             }
         } else {
-            let gap: CGFloat = 4
-            let w = min(240, (bounds.width - pad * 2 - gap * (n - 1)) / n)
+            let w = min(maxLength, (bounds.width - pad * 2 - gap * (n - 1)) / n)
             for (i, t) in tabs.enumerated() where i < items.count {
                 let active = i == activeIndex
                 t.frame = CGRect(x: pad + CGFloat(i) * (w + gap), y: active ? 1 : 5, width: w, height: bounds.height - (active ? 1 : 5))
@@ -127,13 +128,7 @@ private final class TabView: NSView {
         layer?.mask = shape
         label.lineBreakMode = .byTruncatingTail
         label.alignment = .center
-        label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
-        NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -144,14 +139,29 @@ private final class TabView: NSView {
         self.accent = accent
         self.vertical = vertical
         label.attributedStringValue = title
-        label.alignment = vertical ? .left : .center
+        // A sideways tab reads bottom to top, like a spine.
+        label.frameCenterRotation = vertical ? 90 : 0
         updateShape()
+        layoutLabel()
         paint()
     }
 
     override func layout() {
         super.layout()
         updateShape()
+        layoutLabel()
+    }
+
+    private func layoutLabel() {
+        let inset: CGFloat = 8, h = label.intrinsicContentSize.height
+        if vertical {
+            // The frame is set unrotated (long side along y) and then turned about its centre.
+            label.frameCenterRotation = 0
+            label.frame = CGRect(x: bounds.midX - (bounds.height - inset * 2) / 2, y: bounds.midY - h / 2, width: bounds.height - inset * 2, height: h)
+            label.frameCenterRotation = 90
+        } else {
+            label.frame = CGRect(x: inset, y: bounds.midY - h / 2, width: bounds.width - inset * 2, height: h)
+        }
     }
 
     /// Rounded away from the window (top for a strip on top, left for one on the left), square where it meets it.

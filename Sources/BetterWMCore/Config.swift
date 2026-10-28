@@ -43,8 +43,10 @@ public struct Config {
         }
     }
     public var stackStyle: StackStyle = .cascade
+    /// Thickness of the tab strip (height on top, width on the left; left tabs read sideways).
     public var tabHeight: CGFloat = 30
-    public var tabWidth: CGFloat = 180
+    /// Longest a single tab gets along the strip.
+    public var tabWidth: CGFloat = 240
     /// Tab label; {app} and {title} are replaced.
     public var tabTitleFormat: String = "{app} — {title}"
     /// How much the grow and shrink actions change a window, in points.
@@ -263,8 +265,8 @@ public struct Config {
         # shift so the ones behind stay visible; screens narrower than the threshold start stacked (0 = never).
         stackOffset = \(num(stackOffset))
         stackScreensNarrowerThan = \(num(stackScreensNarrowerThan))
-        # Stacked look: cascade, tabsTop or tabsLeft. Tabs take tabHeight (top) or tabWidth (left) points and
-        # show tabTitleFormat, where {app} and {title} are replaced.
+        # Stacked look: cascade, tabsTop or tabsLeft. The strip is tabHeight points thick (left tabs read sideways),
+        # a tab is at most tabWidth points long, and shows tabTitleFormat, where {app} and {title} are replaced.
         stackStyle = \(stackStyle.rawValue)
         tabHeight = \(num(tabHeight))
         tabWidth = \(num(tabWidth))
