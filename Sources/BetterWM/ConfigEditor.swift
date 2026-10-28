@@ -110,7 +110,14 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     func show(config: Config, onSave: @escaping (Config) -> Void) {
         self.config = config
         self.onSave = onSave
-        if window == nil { window = build() }
+        if window == nil {
+            window = build()
+            // A menu bar app with no window left should not stay active: hand focus back to the app the user
+            // came from, so its focus ring returns at once.
+            NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { _ in
+                DispatchQueue.main.async { if NSApp.windows.allSatisfy({ !$0.isVisible || !$0.styleMask.contains(.titled) }) { NSApp.deactivate() } }
+            }
+        }
         populate()
         window?.center()
         window?.makeKeyAndOrderFront(nil)

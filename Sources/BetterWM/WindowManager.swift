@@ -647,7 +647,9 @@ final class WindowManager {
         // the frontmost app updates, so re-check shortly after activation as well.
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
                                                           object: nil, queue: .main) { [weak self] _ in
-            self?.system.refreshFocused { self?.scheduleFocusFollow() }
+            // The ring follows the active app too: it hides while one of our own windows (Settings) is up and
+            // comes back on the window focus returns to.
+            self?.system.refreshFocused { self?.focusRing.update(); self?.scheduleFocusFollow() }
         }
         // WindowServer reports a new front window before Accessibility does; stacked screens re-fan on it.
         wsEvents.onEvent = { [weak self] event, _ in
