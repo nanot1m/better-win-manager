@@ -1466,6 +1466,14 @@ final class WindowManager {
         focusRing.show(windowID: id, frame: frame)
     }
 
+    /// A tab dragged along the strip: the window takes deck position `to` on its stacked screen.
+    private func reorderDeck(_ id: WindowID, to: Int) {
+        guard let space = state.space(containing: id), let from = state.grid(for: space).position(of: id)?.column else { return }
+        Log.write("layout", "deck: move \(describe(id)) from \(from + 1) to \(to + 1)")
+        state.mutate(space) { $0.moveColumn(from: from, to: to) }
+        apply()
+    }
+
     private var tabStrips: [TabStripWindow] = []
     private func refreshTabStrips() {
         var needed: [(CGRect, [TabStripWindow.Item], TabStripWindow.Side)] = []
@@ -1483,6 +1491,7 @@ final class WindowManager {
         while tabStrips.count < needed.count {
             let s = TabStripWindow()
             s.onSelect = { [weak self] id in self?.bringForwardInTabbedStack(id, raise: true) }
+            s.onReorder = { [weak self] id, to in self?.reorderDeck(id, to: to) }
             tabStrips.append(s)
         }
         let focused = focusRing.currentWindowID ?? system.focused?.windowID

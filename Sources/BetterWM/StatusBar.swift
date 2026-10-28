@@ -292,8 +292,10 @@ private final class ChipView: NSView {
         layer?.transform = on ? CATransform3DMakeScale(1.12, 1.12, 1) : CATransform3DIdentity
         CATransaction.commit()
     }
-    /// Called with the chip's centre x (in the superview) after it was dragged and released.
-    var onDrop: ((CGFloat) -> Void)?
+    /// A drag past a few points: began, moved by `dx` from the press, released.
+    var onDragBegan: (() -> Void)?
+    var onDragMoved: ((CGFloat) -> Void)?
+    var onDragEnded: (() -> Void)?
     let number = NSTextField(labelWithString: "")
     private let stack = NSStackView()
     private var icons: [NSImageView] = []
@@ -348,25 +350,21 @@ private final class ChipView: NSView {
 
     override func rightMouseDown(with event: NSEvent) { onContextMenu?() }
 
-    /// A click selects the desktop; a drag past a few points slides the chip along and drops it in a new slot.
+    /// A click selects the desktop; a drag past a few points slides the chip along, the others making room.
     override func mouseDown(with event: NSEvent) {
         guard let window else { return }
         let start = event.locationInWindow.x
         var dragging = false
-        var dx: CGFloat = 0
         while let e = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
-            dx = e.locationInWindow.x - start
+            let dx = e.locationInWindow.x - start
             if e.type == .leftMouseDragged {
-                if !dragging, abs(dx) > 4 { dragging = true; layer?.zPosition = 10; alphaValue = 0.85 }
-                if dragging { layer?.setAffineTransform(CGAffineTransform(translationX: dx, y: 0)) }
+                if !dragging, abs(dx) > 4 { dragging = true; onDragBegan?() }
+                if dragging { onDragMoved?(dx) }
             } else {
                 break
             }
         }
-        layer?.setAffineTransform(.identity)
-        layer?.zPosition = 0
-        alphaValue = 1
-        if dragging { onDrop?(frame.midX + dx) } else { onClick?() }
+        if dragging { onDragEnded?() } else { onClick?() }
         (window as? NSPanel)?.orderFrontRegardless()
     }
 }
@@ -661,7 +659,9 @@ final class BarView: NSView {
                 guard let self, i < self.chipDesktops.count else { return }
                 self.onSelectDesktop?(self.chipDesktops[i])
             }
-            c.onDrop = { [weak self] midX in self?.dropChip(i, at: midX) }
+            c.onDragBegan = { [weak self] in self?.beginChipDrag(i) }
+            c.onDragMoved = { [weak self] dx in self?.chipDrag?.update(delta: dx) }
+            c.onDragEnded = { [weak self] in self?.endChipDrag() }
             c.onContextMenu = { [weak self, weak c] in
                 guard let self, let c, i < self.chipDesktops.count else { return }
                 self.onDesktopMenu?(self.chipDesktops[i], c)
@@ -778,12 +778,22 @@ final class BarView: NSView {
         }
     }
 
-    /// The dropped chip's new index is the number of other visible chips whose centre lies left of the drop point.
-    private func dropChip(_ index: Int, at midX: CGFloat) {
-        let others = chips.enumerated().filter { !$0.element.isHidden && $0.offset != index }
-        let target = others.filter { $0.element.frame.midX < midX }.count
-        guard target != index, index < chipDesktops.count, target < chipDesktops.count else { return }
-        onReorderDesktop?(chipDesktops[index], chipDesktops[target])
+    private var chipDrag: ReorderDrag?
+    private func beginChipDrag(_ index: Int) {
+        let visible = chips.enumerated().filter { !$0.element.isHidden && $0.offset < chipDesktops.count }
+        guard let i = visible.firstIndex(where: { $0.offset == index }) else { return }
+        chipDrag = ReorderDrag(items: visible.map(\.element), index: i, horizontal: true)
+    }
+
+    private func endChipDrag() {
+        guard let drag = chipDrag else { return }
+        chipDrag = nil
+        let visible = chips.enumerated().filter { !$0.element.isHidden && $0.offset < chipDesktops.count }.map(\.offset)
+        drag.end { [weak self] target in
+            guard let self, let from = visible.firstIndex(where: { self.chips[$0] === drag.grabbed }), target != from,
+                  target < visible.count else { return }
+            self.onReorderDesktop?(self.chipDesktops[visible[from]], self.chipDesktops[visible[target]])
+        }
     }
 
     @objc private func menuPressed() { onMenuRequested?(menuButton) }

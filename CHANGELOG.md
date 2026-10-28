@@ -6,6 +6,12 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Added
+- Tabs in a tabbed stack can be dragged along the strip to reorder the deck.
+
+### Changed
+- Dragging a desktop chip in the bar, or a tab, is animated: the others slide aside to show where it will land and the dragged one glides into place.
+
 ### Fixed
 - Switching windows in a tabbed stack flashed: the incoming window appeared at the screen corner until the layout pass moved it in. It is now moved onto its frame as it comes forward, whether by a tab click, ⌘Tab or the switcher.
 

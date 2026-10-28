@@ -341,6 +341,17 @@ struct ReconcilerTests {
         expect(roundTrip == saved && roundTrip.spaces[0].columns[0].windows[0].id == 1, #function, #line)
     }
 
+    func testMoveColumn() {
+        var g = Grid()
+        g.columns = [Column([1]), Column([2]), Column([3]), Column([4])]
+        g.moveColumn(from: 0, to: 2)
+        expect(g.windows == [2, 3, 1, 4], #function, #line)
+        g.moveColumn(from: 3, to: 0)
+        expect(g.windows == [4, 2, 3, 1], #function, #line)
+        g.moveColumn(from: 1, to: 9)
+        expect(g.windows == [4, 2, 3, 1], #function, #line)
+    }
+
     func testEdgeMoveCyclesWidth() {
         var g = Grid()
         g.columns = [Column([1]), Column([2])]
@@ -723,6 +734,7 @@ let tests: [(String, () -> Void)] = [
     ("restoreFallsBackToNearestFrame", t.testRestoreFallsBackToNearestFrame),
     ("edgeMoveCyclesWidth", t.testEdgeMoveCyclesWidth),
     ("versionComparison", t.testVersionComparison),
+    ("moveColumn", t.testMoveColumn),
     ("restorePrefersSameWindowOverTitle", t.testRestorePrefersSameWindowOverTitle),
     ("tabbedStackFramesAndStrip", t.testTabbedStackFramesAndStrip),
     ("dragEndRules", t.testDragEndRules),

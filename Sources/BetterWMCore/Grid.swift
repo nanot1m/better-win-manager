@@ -147,6 +147,13 @@ public struct Grid: Equatable {
         }
     }
 
+    /// Moves column `from` to position `to`, shifting the ones in between (a stacked deck's tabs, dragged).
+    public mutating func moveColumn(from: Int, to: Int) {
+        guard from != to, columns.indices.contains(from), columns.indices.contains(to) else { return }
+        let c = columns.remove(at: from)
+        columns.insert(c, at: to)
+    }
+
     public mutating func move(_ w: WindowID, _ dir: Move) {
         guard let (ci, wi) = position(of: w) else { return }
         let alone = columns[ci].windows.count == 1

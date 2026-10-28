@@ -17,6 +17,11 @@ final class TabStripWindow {
         get { view.onSelect }
         set { view.onSelect = newValue }
     }
+    /// A tab dragged to a new place in the deck: the window and the deck position it was dropped at.
+    var onReorder: ((WindowID, Int) -> Void)? {
+        get { view.onReorder }
+        set { view.onReorder = newValue }
+    }
     var isVisible: Bool { panel.isVisible }
 
     init() {
@@ -44,6 +49,8 @@ final class TabStripWindow {
 
 private final class TabStripView: NSView {
     var onSelect: ((WindowID) -> Void)?
+    var onReorder: ((WindowID, Int) -> Void)?
+    private var drag: ReorderDrag?
     private var tabs: [TabView] = []
     private var items: [TabStripWindow.Item] = []
     private var side = TabStripWindow.Side.top
@@ -69,6 +76,9 @@ private final class TabStripView: NSView {
                 guard let self, i < self.items.count else { return }
                 self.onSelect?(self.items[i].id)
             }
+            t.onDragBegan = { [weak self] in self?.beginDrag(i) }
+            t.onDragMoved = { [weak self] d in self?.drag?.update(delta: d) }
+            t.onDragEnded = { [weak self] in self?.endDrag() }
             addSubview(t)
             tabs.append(t)
         }
@@ -91,6 +101,25 @@ private final class TabStripView: NSView {
     override func layout() {
         super.layout()
         layoutTabs()
+    }
+
+    /// Tabs in the order they appear along the strip (left tabs run bottom to top, so the deck is reversed there).
+    private var visualOrder: [Int] { side == .left ? Array((0..<items.count).reversed()) : Array(0..<items.count) }
+
+    private func beginDrag(_ index: Int) {
+        let order = visualOrder
+        guard let v = order.firstIndex(of: index) else { return }
+        drag = ReorderDrag(items: order.map { tabs[$0] }, index: v, horizontal: side == .top)
+    }
+
+    private func endDrag() {
+        guard let d = drag else { return }
+        drag = nil
+        let order = visualOrder
+        d.end { [weak self] target in
+            guard let self, let from = order.firstIndex(where: { self.tabs[$0] === d.grabbed }), target != from, target < order.count else { return }
+            self.onReorder?(self.items[order[from]].id, order[target])
+        }
     }
 
     /// Tabs share the strip, with a cap so a lone tab does not span the screen; the active one stands a little taller.
@@ -121,6 +150,10 @@ private final class TabStripView: NSView {
 /// One folder tab: rounded on the side away from the window, square where it meets it.
 private final class TabView: NSView {
     var onClick: (() -> Void)?
+    var onDragBegan: (() -> Void)?
+    var onDragMoved: ((CGFloat) -> Void)?
+    var onDragEnded: (() -> Void)?
+    var horizontal = true
     private let label = NSTextField(labelWithString: "")
     private var active = false
     private var accent = NSColor.controlAccentColor
@@ -144,6 +177,7 @@ private final class TabView: NSView {
         self.active = active
         self.accent = accent
         self.side = side
+        horizontal = side == .top
         label.attributedStringValue = title
         updateShape()
         layoutLabel()
@@ -213,5 +247,22 @@ private final class TabView: NSView {
 
     override func mouseEntered(with event: NSEvent) { hovering = true; paint() }
     override func mouseExited(with event: NSEvent) { hovering = false; paint() }
-    override func mouseDown(with event: NSEvent) { onClick?() }
+
+    /// A click brings the window forward; a drag past a few points moves the tab along the strip.
+    override func mouseDown(with event: NSEvent) {
+        guard let window else { onClick?(); return }
+        let start = event.locationInWindow
+        var dragging = false
+        while let e = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+            // The strip view is flipped while window coordinates are not: a downward drag is a positive shift.
+            let d = horizontal ? e.locationInWindow.x - start.x : start.y - e.locationInWindow.y
+            if e.type == .leftMouseDragged {
+                if !dragging, abs(d) > 4 { dragging = true; onDragBegan?() }
+                if dragging { onDragMoved?(d) }
+            } else {
+                break
+            }
+        }
+        if dragging { onDragEnded?() } else { onClick?() }
+    }
 }
