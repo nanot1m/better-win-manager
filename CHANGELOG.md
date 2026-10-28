@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [Unreleased]
+
+### Changed
+- The release signing step logs its progress: identities, signature summary, the notarization submission id, each status change while Apple works, stapling and the final checksum.
+
 ## [0.25.0] - 2026-10-28
 
 ### Added
