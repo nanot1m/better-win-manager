@@ -4,7 +4,7 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
-## [Unreleased]
+## [0.23.0] - 2026-10-28
 
 ### Added
 - An app icon: the menu bar's tile motif on an orange squircle. `swift Resources/icon/make-icon.swift` regenerates it.
