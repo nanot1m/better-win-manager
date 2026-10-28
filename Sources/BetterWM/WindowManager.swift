@@ -1008,14 +1008,15 @@ final class WindowManager {
     /// Puts the ring where the focused window is about to be, before the app has even applied the move.
     /// On stacked screens the front window by z-order is used: it is known before Accessibility reports focus.
     private func anticipateRing(_ commands: [Command], _ focused: WindowID?) {
+        guard let focused else { return }
+        // A stacked deck re-fans around the focused window; put the ring where it is about to land. Only when
+        // the focused window is in that deck: a floating dialog over a stack keeps its own ring.
         for screen in system.screens() where state.grid(for: screen.space).mode == .stacked {
             let grid = state.grid(for: screen.space)
-            guard let top = zOrder.first(where: grid.contains),
-                  let frame = reconciler.geometry(grid, screen).frame(of: top) else { continue }
-            focusRing.show(windowID: top, frame: frame)
+            guard grid.contains(focused), let frame = reconciler.geometry(grid, screen, front: focused).frame(of: focused) else { continue }
+            focusRing.show(windowID: focused, frame: frame)
             return
         }
-        guard let focused else { return }
         for case let .setFrame(w, f) in commands where w == focused { focusRing.anticipate(windowID: focused, frame: f) }
     }
 
