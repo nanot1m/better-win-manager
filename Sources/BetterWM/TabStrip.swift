@@ -71,12 +71,13 @@ private final class TabStripView: NSView {
         maxLength = config.tabWidth
         while tabs.count < items.count {
             let t = TabView()
-            let i = tabs.count
-            t.onClick = { [weak self] in
-                guard let self, i < self.items.count else { return }
+            // Tabs change places in `tabs` after a drag, so each looks its index up when asked.
+            let indexOf: (TabView) -> Int? = { [weak self] t in self?.tabs.firstIndex { $0 === t } }
+            t.onClick = { [weak self, weak t] in
+                guard let self, let t, let i = indexOf(t), i < self.items.count else { return }
                 self.onSelect?(self.items[i].id)
             }
-            t.onDragBegan = { [weak self] in self?.beginDrag(i) }
+            t.onDragBegan = { [weak self, weak t] in if let t, let i = indexOf(t) { self?.beginDrag(i) } }
             t.onDragMoved = { [weak self] d in self?.drag?.update(delta: d) }
             t.onDragEnded = { [weak self] in self?.endDrag() }
             addSubview(t)
@@ -119,7 +120,13 @@ private final class TabStripView: NSView {
         let order = visualOrder
         d.end { [weak self] target in
             guard let self, let from = order.firstIndex(where: { self.tabs[$0] === d.grabbed }), target != from, target < order.count else { return }
-            self.onReorder?(self.items[order[from]].id, order[target])
+            // The tab view takes its new deck position first, keeping its label; the strip's refresh then finds
+            // every view already showing the right window, so nothing is relabelled and no old-order frame shows.
+            let fromDeck = order[from], toDeck = order[target]
+            let t = self.tabs.remove(at: fromDeck)
+            self.tabs.insert(t, at: toDeck)
+            self.layoutTabs()
+            self.onReorder?(self.items[fromDeck].id, toDeck)
         }
     }
 

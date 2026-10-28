@@ -15,6 +15,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 ### Fixed
 - Hidden windows of a tabbed stack were asked for their off-screen frame every 20 seconds forever: macOS keeps a sliver of a window on screen, so the exact frame was never taken. A window already waiting by the corner is left alone.
 - The active tab was removed and re-added on every refresh, dropping a frame.
+- Dropping a dragged tab or chip showed the old order for a frame before the new one: the views were relabelled in place and the text lagged the moved frames. The dragged view now takes its new place with its content.
 - Switching windows in a tabbed stack flashed: the incoming window appeared at the screen corner until the layout pass moved it in. It is now moved onto its frame as it comes forward, whether by a tab click, ⌘Tab or the switcher.
 
 ## [0.24.1] - 2026-10-28

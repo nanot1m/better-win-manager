@@ -654,16 +654,17 @@ final class BarView: NSView {
         chipDesktops = m.desktops
         while chips.count < m.desktops.count {
             let c = ChipView()
-            let i = chips.count
-            c.onClick = { [weak self] in
-                guard let self, i < self.chipDesktops.count else { return }
+            // Chips change places in `chips` after a drag, so each looks its index up when asked.
+            let indexOf: (ChipView) -> Int? = { [weak self] c in self?.chips.firstIndex { $0 === c } }
+            c.onClick = { [weak self, weak c] in
+                guard let self, let c, let i = indexOf(c), i < self.chipDesktops.count else { return }
                 self.onSelectDesktop?(self.chipDesktops[i])
             }
-            c.onDragBegan = { [weak self] in self?.beginChipDrag(i) }
+            c.onDragBegan = { [weak self, weak c] in if let c, let i = indexOf(c) { self?.beginChipDrag(i) } }
             c.onDragMoved = { [weak self] dx in self?.chipDrag?.update(delta: dx) }
             c.onDragEnded = { [weak self] in self?.endChipDrag() }
             c.onContextMenu = { [weak self, weak c] in
-                guard let self, let c, i < self.chipDesktops.count else { return }
+                guard let self, let c, let i = indexOf(c), i < self.chipDesktops.count else { return }
                 self.onDesktopMenu?(self.chipDesktops[i], c)
             }
             chips.append(c)
@@ -792,7 +793,14 @@ final class BarView: NSView {
         drag.end { [weak self] target in
             guard let self, let from = visible.firstIndex(where: { self.chips[$0] === drag.grabbed }), target != from,
                   target < visible.count else { return }
-            self.onReorderDesktop?(self.chipDesktops[visible[from]], self.chipDesktops[visible[target]])
+            // The chip view moves to its new place first, keeping its content, so the re-render only confirms what
+            // is already on screen; relabelling views in place would show the old order for a frame.
+            let fromIndex = visible[from], toIndex = visible[target]
+            let c = self.chips.remove(at: fromIndex)
+            self.chips.insert(c, at: toIndex)
+            self.left.insertArrangedSubview(c, at: toIndex)
+            self.left.layoutSubtreeIfNeeded()
+            self.onReorderDesktop?(self.chipDesktops[fromIndex], self.chipDesktops[toIndex])
         }
     }
 
