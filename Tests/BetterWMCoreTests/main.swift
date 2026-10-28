@@ -320,6 +320,11 @@ struct ReconcilerTests {
         expect(GridGeometry(grid: g, area: area, config: c).tabStripFrame() == nil, #function, #line)
     }
 
+    func testVersionComparison() {
+        expect(Version.isNewer("0.23.1", than: "0.23.0") && Version.isNewer("1.0", than: "0.99.9") && Version.isNewer("0.23.1", than: "dev"), #function, #line)
+        expect(!Version.isNewer("0.23.0", than: "0.23.0") && !Version.isNewer("0.22.9", than: "0.23") && !Version.isNewer("dev", than: "0.1"), #function, #line)
+    }
+
     func testEdgeMoveCyclesWidth() {
         var g = Grid()
         g.columns = [Column([1]), Column([2])]
@@ -701,6 +706,7 @@ let tests: [(String, () -> Void)] = [
     ("savedLayoutRoundTripAndMatching", t.testSavedLayoutRoundTripAndMatching),
     ("restoreFallsBackToNearestFrame", t.testRestoreFallsBackToNearestFrame),
     ("edgeMoveCyclesWidth", t.testEdgeMoveCyclesWidth),
+    ("versionComparison", t.testVersionComparison),
     ("tabbedStackFramesAndStrip", t.testTabbedStackFramesAndStrip),
     ("dragEndRules", t.testDragEndRules),
     ("resizeByDeltaMovesBoundaries", t.testResizeByDeltaMovesBoundaries),

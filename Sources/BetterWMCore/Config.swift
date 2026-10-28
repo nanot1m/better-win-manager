@@ -61,6 +61,9 @@ public struct Config {
     public var hideApps: Bool = true
     /// Action log at ~/.config/betterwm/log.txt (menu: Open Log File / Copy Diagnostics Report).
     public var debugLog: Bool = true
+    /// Ask GitHub once a day whether a newer release exists; `autoUpdate` installs it without asking.
+    public var checkForUpdates: Bool = true
+    public var autoUpdate: Bool = false
     /// Window switcher (⌥Tab). Off leaves the ⌥Tab hotkeys unregistered.
     public var switcher: Bool = true
     /// Show live window previews, or just app icons.
@@ -244,6 +247,9 @@ public struct Config {
         tileExistingOnStart = \(tileExistingOnStart)
         # Action log (log.txt next to this file) for debugging; Copy Diagnostics Report in the menu bundles it.
         debugLog = \(debugLog)
+        # Look for a newer release on GitHub once a day; autoUpdate installs it and relaunches without asking.
+        checkForUpdates = \(checkForUpdates)
+        autoUpdate = \(autoUpdate)
         # Remember each desktop's grid (state.json next to this file) and restore matching windows on launch.
         restoreLayouts = \(restoreLayouts)
         # Hide an app whose windows are all on other desktops (otherwise park every window in the screen corner).
@@ -414,6 +420,8 @@ public struct Config {
             case "gestureFingers": cfg.gestureFingers = Int(value) == 3 ? 3 : 4
             case "desktopSwipe": cfg.desktopSwipe = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "debugLog": cfg.debugLog = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "checkForUpdates": cfg.checkForUpdates = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "autoUpdate": cfg.autoUpdate = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "restoreLayouts": cfg.restoreLayouts = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "hideApps": cfg.hideApps = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "stackOffset": cfg.stackOffset = Double(value).map { CGFloat($0) } ?? cfg.stackOffset

@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [Unreleased]
+
+### Added
+- Check for Updates… in the menu, a daily check (`checkForUpdates`) that offers a newer release with its notes, and `autoUpdate` to download the signed release, swap it in and relaunch without asking. Dev builds only point at the release page.
+
 ## [0.23.1] - 2026-10-28
 
 ### Changed

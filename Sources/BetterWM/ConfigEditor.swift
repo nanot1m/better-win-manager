@@ -45,6 +45,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var restoreSwitch: NSSwitch!
     private var hideAppsSwitch: NSSwitch!
     private var debugLogSwitch: NSSwitch!
+    private var checkUpdatesSwitch: NSSwitch!
+    private var autoUpdateSwitch: NSSwitch!
     private var stackOffsetField: NSTextField!
     private var stackStylePopup: NSPopUpButton!
     private var tabHeightField: NSTextField!
@@ -445,6 +447,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         restoreSwitch = toggle()
         hideAppsSwitch = toggle()
         debugLogSwitch = toggle()
+        checkUpdatesSwitch = toggle()
+        autoUpdateSwitch = toggle()
         switcherSwitch = toggle(#selector(switcherChanged))
         switcherThumbsSwitch = toggle()
         overviewSwitch = toggle(#selector(overviewChanged))
@@ -478,6 +482,10 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 row("Fingers", "For both swipes below. Turn off the matching macOS gestures in System Settings › Trackpad › More Gestures, or both will react.", [gestureFingersPopup]),
                 row("Swipe up and down", "Opens and closes the desktop overview; the animation follows your fingers.", [overviewGestureSwitch]),
                 row("Swipe left and right", "Slides to the next or previous desktop, following your fingers; past the last or first one, on to the neighbouring macOS Space. Needs the desktop overview, which provides the previews.", [desktopSwipeSwitch]),
+            ]),
+            group("Updates", [
+                row("Check for updates daily", "Asks GitHub for the latest release and offers it. Check for Updates… in the menu asks right away.", [checkUpdatesSwitch]),
+                row("Install updates automatically", "Downloads the signed release, swaps it in and relaunches without asking.", [autoUpdateSwitch]),
             ]),
             group("Diagnostics", [
                 row("Show pressed hotkey on screen", "Flashes the key combination and action at the bottom of the screen; handy for demos.", [overlaySwitch]),
@@ -876,6 +884,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         on(restoreSwitch, config.restoreLayouts)
         on(hideAppsSwitch, config.hideApps)
         on(debugLogSwitch, config.debugLog)
+        on(checkUpdatesSwitch, config.checkForUpdates)
+        on(autoUpdateSwitch, config.autoUpdate)
         stackOffsetField.stringValue = String(Int(config.stackOffset))
         stackStylePopup.selectItem(at: Config.StackStyle.allCases.firstIndex(of: config.stackStyle) ?? 0)
         tabHeightField.stringValue = String(Int(config.tabHeight))
@@ -961,6 +971,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.restoreLayouts = isOn(restoreSwitch)
         config.hideApps = isOn(hideAppsSwitch)
         config.debugLog = isOn(debugLogSwitch)
+        config.checkForUpdates = isOn(checkUpdatesSwitch)
+        config.autoUpdate = isOn(autoUpdateSwitch)
         config.stackOffset = number(stackOffsetField, or: defaults.stackOffset)
         if let raw = stackStylePopup.selectedItem?.representedObject as? String, let st = Config.StackStyle(rawValue: raw) { config.stackStyle = st }
         config.tabHeight = max(16, number(tabHeightField, or: defaults.tabHeight))

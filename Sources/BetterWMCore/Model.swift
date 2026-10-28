@@ -75,6 +75,23 @@ public enum DropZone: Equatable {
 
 public enum Direction: String, CaseIterable, Equatable { case left, right, up, down }
 
+public enum Version {
+    /// Dotted numbers compared piecewise; anything not a number (a dev build) counts as older than everything.
+    public static func isNewer(_ a: String, than b: String) -> Bool {
+        func parts(_ v: String) -> [Int]? {
+            let p = v.split(separator: ".").map { Int($0) }
+            return p.allSatisfy { $0 != nil } ? p.map { $0! } : nil
+        }
+        guard let pa = parts(a) else { return false }
+        guard let pb = parts(b) else { return true }
+        for i in 0..<max(pa.count, pb.count) {
+            let x = i < pa.count ? pa[i] : 0, y = i < pb.count ? pb[i] : 0
+            if x != y { return x > y }
+        }
+        return false
+    }
+}
+
 public enum Move: Equatable { case left, right, up, down, mergeLeft, mergeRight }
 
 public enum Handle: Equatable {

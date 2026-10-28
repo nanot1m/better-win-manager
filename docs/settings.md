@@ -92,6 +92,8 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `overviewGesture` | false | Vertical swipe drives the overview; turn Mission Control's gesture off in System Settings › Trackpad › More Gestures first |
 | `actionOverlay` | false | Flash the pressed hotkey and action name at the bottom of the screen |
 | `debugLog` | true | Write `log.txt` |
+| `checkForUpdates` | true | Ask GitHub once a day whether a newer release exists and offer it; Check for Updates… in the menu asks right away |
+| `autoUpdate` | false | Download the signed release, swap it in and relaunch without asking |
 | `hotkey.<action>` | see [Actions](actions.md) | Global hotkeys |
 
 ## The Settings window

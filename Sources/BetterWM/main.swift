@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var switcherItem: NSMenuItem?
     let configWindow = ConfigWindow()
     let onboarding = OnboardingWindow()
+    var updater: Updater!
 
     func applicationWillTerminate(_ n: Notification) { manager.prepareForQuit() }
 
@@ -55,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         handleSigterm()
         let config = Config.load()
         manager = WindowManager(config: config)
+        updater = Updater(config: config)
         popup = ActionPopup(manager: manager)
         switcher = WindowSwitcher(manager: manager)
         overview = Overview(manager: manager)
@@ -216,6 +218,7 @@ extension AppDelegate {
 
         section("BetterWM")
         add("Settings…", #selector(showSettings))
+        add("Check for Updates…", #selector(checkForUpdates))
         add("Permissions…", #selector(showPermissions))
         add("Open Config File", #selector(openConfig))
         add("Reload Config", #selector(reloadConfig))
@@ -367,6 +370,7 @@ extension AppDelegate {
     @objc func reloadConfig() {
         manager.reloadConfig()
         bar.apply(manager.config)
+        updater.config = manager.config
         registerHotKeys(manager.config)
         applyGestureSetting(manager.config)
         statusItem.menu = buildMenu()
@@ -535,10 +539,12 @@ extension AppDelegate {
     }
 
     @objc func showPermissions() { onboarding.show() }
+    @objc func checkForUpdates() { updater.check(interactive: true) }
     @objc func showSettings() {
         configWindow.show(config: manager.config) { [weak self] cfg in
             guard let self else { return }
             self.manager.config = cfg
+            self.updater.config = cfg
             self.drag.refreshState()
             self.bar.apply(cfg)
             self.manager.relayout()
