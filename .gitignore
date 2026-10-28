@@ -3,3 +3,8 @@
 .swiftpm/
 dist/
 .DS_Store
+
+# Private Apple signing and notarization material
+*.p12
+*.p8
+*.keychain-db

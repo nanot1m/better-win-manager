@@ -169,3 +169,7 @@ See [CHANGELOG.md](CHANGELOG.md); release notes on GitHub are taken from it.
 ## License
 
 MIT.
+
+## Signed releases
+
+See [release setup and required GitHub secrets](docs/RELEASING.md) for automated Developer ID signing, Apple notarization, stapling, and GitHub Releases.
