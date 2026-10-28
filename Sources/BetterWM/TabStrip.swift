@@ -51,6 +51,7 @@ private final class TabStripView: NSView {
     var onSelect: ((WindowID) -> Void)?
     var onReorder: ((WindowID, Int) -> Void)?
     private var drag: ReorderDrag?
+    private var settling: ReorderDrag?
     private var tabs: [TabView] = []
     private var items: [TabStripWindow.Item] = []
     private var side = TabStripWindow.Side.top
@@ -103,6 +104,8 @@ private final class TabStripView: NSView {
     override func layout() {
         super.layout()
         layoutTabs()
+        settling?.settle()
+        settling = nil
     }
 
     /// Tabs in the order they appear along the strip (left tabs run bottom to top, so the deck is reversed there).
@@ -119,13 +122,17 @@ private final class TabStripView: NSView {
         drag = nil
         let order = visualOrder
         d.end { [weak self] target in
-            guard let self, let from = order.firstIndex(where: { self.tabs[$0] === d.grabbed }), target != from, target < order.count else { return }
+            guard let self, let from = order.firstIndex(where: { self.tabs[$0] === d.grabbed }), target != from, target < order.count else {
+                d.settle()
+                return
+            }
             // The tab view takes its new deck position first, keeping its label; the strip's refresh then finds
             // every view already showing the right window, so nothing is relabelled and no old-order frame shows.
             let fromDeck = order[from], toDeck = order[target]
             let t = self.tabs.remove(at: fromDeck)
             self.tabs.insert(t, at: toDeck)
-            self.layoutTabs()
+            self.settling = d
+            self.needsLayout = true
             self.onReorder?(self.items[fromDeck].id, toDeck)
         }
     }

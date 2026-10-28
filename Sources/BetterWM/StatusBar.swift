@@ -600,6 +600,8 @@ final class BarView: NSView {
 
     override func layout() {
         super.layout()
+        settlingChips?.settle()
+        settlingChips = nil
         // Keep content out of the notch: the auxiliary areas are the usable strips either side of it.
         if avoidNotch, let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea {
             // A long title would otherwise run right up to the notch and leave the cats nowhere to stand.
@@ -780,6 +782,7 @@ final class BarView: NSView {
     }
 
     private var chipDrag: ReorderDrag?
+    private var settlingChips: ReorderDrag?
     private func beginChipDrag(_ index: Int) {
         let visible = chips.enumerated().filter { !$0.element.isHidden && $0.offset < chipDesktops.count }
         guard let i = visible.firstIndex(where: { $0.offset == index }) else { return }
@@ -792,14 +795,18 @@ final class BarView: NSView {
         let visible = chips.enumerated().filter { !$0.element.isHidden && $0.offset < chipDesktops.count }.map(\.offset)
         drag.end { [weak self] target in
             guard let self, let from = visible.firstIndex(where: { self.chips[$0] === drag.grabbed }), target != from,
-                  target < visible.count else { return }
+                  target < visible.count else {
+                drag.settle()
+                return
+            }
             // The chip view moves to its new place first, keeping its content, so the re-render only confirms what
             // is already on screen; relabelling views in place would show the old order for a frame.
             let fromIndex = visible[from], toIndex = visible[target]
             let c = self.chips.remove(at: fromIndex)
             self.chips.insert(c, at: toIndex)
             self.left.insertArrangedSubview(c, at: toIndex)
-            self.left.layoutSubtreeIfNeeded()
+            self.settlingChips = drag
+            self.needsLayout = true
             self.onReorderDesktop?(self.chipDesktops[fromIndex], self.chipDesktops[toIndex])
         }
     }

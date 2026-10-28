@@ -51,7 +51,9 @@ final class ReorderDrag {
         CATransaction.flush()
     }
 
-    /// Glides the grabbed view into its slot, then clears every transform and reports the slot it landed in.
+    /// Glides the grabbed view into its slot, then reports the slot it landed in. The owner reorders its views and
+    /// calls `settle()` from its next `layout()`: AppKit applies view frames to layers during the display pass, so
+    /// clearing the transforms any earlier shows the old positions for a frame.
     func end(_ completion: @escaping (Int) -> Void) {
         let final: CGFloat
         if target > index {
@@ -60,18 +62,20 @@ final class ReorderDrag {
             final = (horizontal ? frames[target].minX - frames[index].minX : frames[target].minY - frames[index].minY)
         }
         CATransaction.begin()
-        CATransaction.setCompletionBlock { [self] in
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            for v in items { v.layer?.setAffineTransform(.identity); v.layer?.removeAllAnimations() }
-            items[index].layer?.zPosition = 0
-            items[index].alphaValue = 1
-            CATransaction.commit()
-            completion(target)
-        }
+        CATransaction.setCompletionBlock { [self] in completion(target) }
         animate(items[index], to: final)
         CATransaction.commit()
         CATransaction.flush()
+    }
+
+    /// Clears every transform once the views sit at their new frames.
+    func settle() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for v in items { v.layer?.setAffineTransform(.identity); v.layer?.removeAllAnimations() }
+        items[index].layer?.zPosition = 0
+        items[index].alphaValue = 1
+        CATransaction.commit()
     }
 
     /// AppKit's layer-backed views swallow implicit animations; an explicit one from the presented value does it.
