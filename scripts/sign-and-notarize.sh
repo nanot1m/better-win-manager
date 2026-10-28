@@ -71,7 +71,7 @@ log "Submitted: $submission_id (track it with: xcrun notarytool info $submission
 endgroup
 
 group "Wait for Apple"
-deadline=$(( $(date +%s) + 45 * 60 ))
+deadline=$(( $(date +%s) + 55 * 60 ))
 status="In Progress"
 last=""
 while :; do
@@ -85,7 +85,7 @@ except Exception: print("unknown")' "$secret_dir/info.json")
     Accepted|Invalid|Rejected) break ;;
   esac
   if (( $(date +%s) >= deadline )); then
-    log "Still '$status' after 45 minutes; giving up on this run. Apple may still finish; check the submission before re-running."
+    log "Still '$status' after 55 minutes; giving up on this run. Apple may still finish; check the submission before re-running."
     fail "Notarization timed out (submission $submission_id)"
   fi
   sleep 30
