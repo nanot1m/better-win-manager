@@ -16,6 +16,8 @@ bundle: build
 	rm -rf $(BUNDLE)
 	mkdir -p $(BUNDLE)/Contents/MacOS
 	cp $(BUILD)/$(APP) $(BUNDLE)/Contents/MacOS/
+	mkdir -p $(BUNDLE)/Contents/Resources
+	cp Resources/AppIcon.icns $(BUNDLE)/Contents/Resources/
 	sed 's/VERSION/$(VERSION)/g' Resources/Info.plist > $(BUNDLE)/Contents/Info.plist
 
 # Ad-hoc signature: free, but Gatekeeper still warns on download and the identity changes per build.
@@ -38,6 +40,8 @@ run:
 	rm -rf $(BUNDLE)
 	mkdir -p $(BUNDLE)/Contents/MacOS
 	cp .build/debug/$(APP) $(BUNDLE)/Contents/MacOS/
+	mkdir -p $(BUNDLE)/Contents/Resources
+	cp Resources/AppIcon.icns $(BUNDLE)/Contents/Resources/
 	sed 's/VERSION/dev/g' Resources/Info.plist > $(BUNDLE)/Contents/Info.plist
 	codesign --force --deep --sign - $(BUNDLE)
 	pkill -x $(APP) || true

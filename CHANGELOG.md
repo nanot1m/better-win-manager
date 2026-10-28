@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Added
+- An app icon: the menu bar's tile motif on an orange squircle. `swift Resources/icon/make-icon.swift` regenerates it.
+
 ### Fixed
 - The focus ring flickered between a floating window (an Open dialog, say) and the stack behind it on a stacked screen: every layout pass put the ring on the stack's front window even when the focus was elsewhere.
 
