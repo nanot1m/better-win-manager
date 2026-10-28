@@ -165,6 +165,8 @@ private final class TabView: NSView {
             label.frame = CGRect(x: bounds.midX - (bounds.height - inset * 2) / 2, y: bounds.midY - h / 2, width: bounds.height - inset * 2, height: h)
             label.frameCenterRotation = side == .left ? 90 : -90
         } else {
+            // A tab view outlives a style change; undo a sideways turn from before.
+            label.frameCenterRotation = 0
             label.frame = CGRect(x: inset, y: bounds.midY - h / 2, width: bounds.width - inset * 2, height: h)
         }
     }
