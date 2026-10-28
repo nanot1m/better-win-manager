@@ -4,7 +4,7 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
-## [Unreleased]
+## [0.24.0] - 2026-10-28
 
 ### Added
 - The saved layout remembers each window's id, so a BetterWM relaunch (an update, Reload) puts every window back on its desktop and in its slot exactly, however its title has changed meanwhile. Title matching remains the fallback for windows of apps that restarted.
