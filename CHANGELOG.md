@@ -4,7 +4,7 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
-## [Unreleased]
+## [0.22.0] - 2026-10-28
 
 ### Added
 - Stacked layout can look like tabs instead of a cascade: `stackStyle` is `cascade`, `tabsTop` or `tabsLeft` (Settings › Tiling › Stacked layout). With tabs every window fills the screen behind a row of folder-style tabs; the focused window's tab is in the accent colour, and clicking a tab brings its window forward. Strip size (`tabHeight`, `tabWidth`) and the tab label (`tabTitleFormat`, `{app}` and `{title}`) are settings.
