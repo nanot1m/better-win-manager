@@ -7,7 +7,9 @@
 <meta name="description" content="A column-based tiling window manager for macOS. ⌥-drag windows into place, switch between virtual desktops instantly, and swipe through them like Spaces.">
 <meta property="og:title" content="BetterWM: column tiling for macOS">
 <meta property="og:description" content="⌥-drag windows into columns, instant virtual desktops, a Mission Control style overview and Spaces-like swipes.">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='2' y='4' width='12' height='24' rx='3' fill='%23ff9300'/><rect x='18' y='4' width='12' height='10' rx='3' fill='%23ff9300' opacity='.7'/><rect x='18' y='18' width='12' height='10' rx='3' fill='%23ff9300' opacity='.45'/></svg>">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:image" content="https://nanot1m.github.io/better-win-manager/icon.png">
 <style>
   :root {
     --bg: #0b0c10; --panel: #14161c; --line: #262a33; --text: #e9eaee; --muted: #9aa0ab;
@@ -28,10 +30,8 @@
   nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 56px; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); }
   .brand:hover { text-decoration: none; }
-  .logo { width: 22px; height: 22px; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 3px; }
-  .logo i { background: var(--accent); border-radius: 3px; }
-  .logo i:first-child { grid-row: span 2; }
-  .logo i:nth-child(2) { opacity: .7; } .logo i:nth-child(3) { opacity: .45; }
+  .logo { width: 26px; height: 26px; display: block; }
+  .appicon { width: 112px; height: 112px; display: block; margin: 0 0 20px; filter: drop-shadow(0 10px 24px rgba(0,0,0,.35)); }
   nav ul { display: flex; gap: 24px; list-style: none; margin: 0; padding: 0; font-size: 14px; }
   nav ul a { color: var(--muted); } nav ul a:hover { color: var(--text); text-decoration: none; }
 
@@ -112,7 +112,7 @@
 <body>
 <nav>
   <div class="wrap">
-    <a class="brand" href="#"><span class="logo"><i></i><i></i><i></i></span>BetterWM</a>
+    <a class="brand" href="#"><img class="logo" src="icon.png" alt="">BetterWM</a>
     <ul>
       <li><a href="#features">Features</a></li>
       <li><a href="#keys">Hotkeys</a></li>
@@ -125,6 +125,7 @@
 
 <header class="hero">
   <div class="wrap">
+    <img class="appicon" src="icon.png" alt="BetterWM icon">
     <span class="eyebrow">Free and open source · macOS 13 and later</span>
     <h1>Column tiling<br>that stays <span>out of your way</span></h1>
     <p class="lede">BetterWM arranges windows in columns when you ask it to and leaves them alone when you don't. Hold ⌥ while dragging to drop a window into place, switch desktops instantly, and swipe between them like Spaces.</p>
