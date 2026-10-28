@@ -95,10 +95,8 @@ private final class TabStripView: NSView {
             }
         } else {
             let w = min(240, (bounds.width - pad * 2 - gap * (n - 1)) / n)
-            let total = w * n + gap * (n - 1)
-            let x0 = pad + max(0, (bounds.width - pad * 2 - total) / 2)
             for (i, t) in tabs.enumerated() where i < items.count {
-                t.frame = CGRect(x: x0 + CGFloat(i) * (w + gap), y: 3, width: w, height: bounds.height - 3)
+                t.frame = CGRect(x: pad + CGFloat(i) * (w + gap), y: 4, width: w, height: bounds.height - 4)
             }
         }
     }
@@ -111,11 +109,13 @@ private final class TabView: NSView {
     private var active = false
     private var accent = NSColor.controlAccentColor
     private var hovering = false
+    private var vertical = false
+    private let shape = CAShapeLayer()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.cornerRadius = 7
+        layer?.mask = shape
         label.lineBreakMode = .byTruncatingTail
         label.alignment = .center
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -133,11 +133,41 @@ private final class TabView: NSView {
     func configure(title: NSAttributedString, active: Bool, accent: NSColor, vertical: Bool) {
         self.active = active
         self.accent = accent
+        self.vertical = vertical
         label.attributedStringValue = title
         label.alignment = vertical ? .left : .center
-        // Flipped geometry: minY is the top. Rounded away from the window, square where the tab meets it.
-        layer?.maskedCorners = vertical ? [.layerMinXMinYCorner, .layerMinXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        updateShape()
         paint()
+    }
+
+    override func layout() {
+        super.layout()
+        updateShape()
+    }
+
+    /// Rounded away from the window (top for a strip on top, left for one on the left), square where it meets it.
+    private func updateShape() {
+        let r: CGFloat = 8, b = bounds
+        let path = CGMutablePath()
+        if vertical {
+            path.move(to: CGPoint(x: b.maxX, y: b.minY))
+            path.addLine(to: CGPoint(x: b.minX + r, y: b.minY))
+            path.addArc(tangent1End: CGPoint(x: b.minX, y: b.minY), tangent2End: CGPoint(x: b.minX, y: b.minY + r), radius: r)
+            path.addLine(to: CGPoint(x: b.minX, y: b.maxY - r))
+            path.addArc(tangent1End: CGPoint(x: b.minX, y: b.maxY), tangent2End: CGPoint(x: b.minX + r, y: b.maxY), radius: r)
+            path.addLine(to: CGPoint(x: b.maxX, y: b.maxY))
+        } else {
+            // Flipped geometry: minY is the top edge.
+            path.move(to: CGPoint(x: b.minX, y: b.maxY))
+            path.addLine(to: CGPoint(x: b.minX, y: b.minY + r))
+            path.addArc(tangent1End: CGPoint(x: b.minX, y: b.minY), tangent2End: CGPoint(x: b.minX + r, y: b.minY), radius: r)
+            path.addLine(to: CGPoint(x: b.maxX - r, y: b.minY))
+            path.addArc(tangent1End: CGPoint(x: b.maxX, y: b.minY), tangent2End: CGPoint(x: b.maxX, y: b.minY + r), radius: r)
+            path.addLine(to: CGPoint(x: b.maxX, y: b.maxY))
+        }
+        path.closeSubpath()
+        shape.frame = b
+        shape.path = path
     }
 
     private func paint() {
