@@ -225,9 +225,11 @@ final class AXWindow: Hashable {
         _ = title
     }
 
-    /// Queue only: the frontmost app's focused window, if it is a standard one.
+    /// Queue only: the frontmost app's focused window, if it is a standard one. Never our own: an Accessibility
+    /// request into this process runs AppKit's accessibility code on the asking thread, racing the main thread.
     static func focused() -> AXWindow? {
-        guard let app = NSWorkspace.shared.frontmostApplication, !AXResponsiveness.isUnresponsive(app.processIdentifier) else { return nil }
+        guard let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != getpid(),
+              !AXResponsiveness.isUnresponsive(app.processIdentifier) else { return nil }
         var v: CFTypeRef?
         let err = AXUIElementCopyAttributeValue(AXResponsiveness.application(app.processIdentifier), kAXFocusedWindowAttribute as CFString, &v)
         guard err == .success, let v else { AXResponsiveness.noteFailure(app.processIdentifier, err); return nil }
@@ -250,9 +252,10 @@ final class AXWindow: Hashable {
     }
 
     private static func axHitTest(_ point: CGPoint) -> AXWindow? {
-        // The hit test is answered by the app under the cursor; a hung one has nothing to say.
-        if let top = CGWindowInfo.list(.optionOnScreenOnly).first(where: { $0.isOrdinaryOtherApp && $0.bounds.contains(point) }),
-           AXResponsiveness.isUnresponsive(top.pid) { return nil }
+        // The hit test is answered by the app under the cursor: a hung one has nothing to say, and our own windows
+        // must not be asked from this thread (see `focused`).
+        if let top = CGWindowInfo.list(.optionOnScreenOnly).first(where: { $0.layer == 0 && $0.bounds.contains(point) }),
+           top.pid == getpid() || AXResponsiveness.isUnresponsive(top.pid) { return nil }
         var el: AXUIElement?
         let systemWide = AXUIElementCreateSystemWide()
         AXResponsiveness.tune(systemWide)
