@@ -156,8 +156,14 @@ public struct Reconciler {
     /// Every tiled window on an active screen with its slot and its real frame.
     func slots(_ state: DesiredState, _ snapshot: Snapshot) -> [(window: WindowID, target: CGRect, actual: CGRect)] {
         snapshot.screens.flatMap { screen in
-            geometry(state.grid(for: screen.space), screen, front: front(of: state.grid(for: screen.space), in: snapshot)).windowFrames().compactMap { w, target in
-                snapshot.away.contains(w) ? nil : snapshot.window(w).map { (w, target, $0.frame) }
+            let geo = geometry(state.grid(for: screen.space), screen, front: front(of: state.grid(for: screen.space), in: snapshot))
+            return geo.windowFrames().compactMap { w, target -> (window: WindowID, target: CGRect, actual: CGRect)? in
+                guard !snapshot.away.contains(w), let actual = snapshot.window(w)?.frame else { return nil }
+                // A hidden window of a tabbed stack that already waits by the corner is done: macOS keeps a sliver of
+                // it on screen (it clamps the position), so the exact frame is never taken, and it is covered by the
+                // front window anyway. It gets its real frame when it comes forward.
+                if geo.waitsAside(target), abs(actual.minX - target.minX) <= 100, abs(actual.minY - target.minY) <= 100 { return nil }
+                return (w, target, actual)
             }
         }
     }

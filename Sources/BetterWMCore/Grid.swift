@@ -349,6 +349,11 @@ public struct GridGeometry {
         }
     }
 
+    /// Where a tabbed stack's hidden windows wait; a window there is done moving whatever its size.
+    public func waitsAside(_ frame: CGRect) -> Bool {
+        grid.mode == .stacked && config.stackStyle != .cascade && frame.minX == area.maxX - 2 && frame.minY == area.maxY - 2
+    }
+
     /// Tabs: every window fills what the strip leaves.
     private var tabbedArea: CGRect {
         switch config.stackStyle {

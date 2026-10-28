@@ -305,6 +305,11 @@ struct ReconcilerTests {
         // With a front window the others wait past the corner, two points on screen, at full size.
         let fronted = Dictionary(uniqueKeysWithValues: GridGeometry(grid: g, area: area, config: c, front: 2).windowFrames())
         expect(fronted[2] == frames[2] && fronted[1]?.origin == CGPoint(x: area.maxX - 2, y: area.maxY - 2) && fronted[1]?.size == frames[1]?.size, #function, #line)
+        // One already at the corner, whatever its size, is left alone.
+        var st = DesiredState(); st.grids[space] = g
+        let r = Reconciler(config: c)
+        let waiting = snapshot([win(2, frames[2]!), win(1, CGRect(x: area.maxX - 2, y: area.maxY - 32, width: 500, height: 400))])
+        expect(r.commands(for: st, waiting).isEmpty, #function, #line)
         c.stackStyle = .tabsLeft
         let left = GridGeometry(grid: g, area: area, config: c)
         expect(left.windowFrames().first?.1 == CGRect(x: 30, y: 0, width: area.width - 30, height: area.height), #function, #line)

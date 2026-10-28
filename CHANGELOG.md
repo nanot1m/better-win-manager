@@ -13,6 +13,8 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 - Dragging a desktop chip in the bar, or a tab, is animated: the others slide aside to show where it will land and the dragged one glides into place.
 
 ### Fixed
+- Hidden windows of a tabbed stack were asked for their off-screen frame every 20 seconds forever: macOS keeps a sliver of a window on screen, so the exact frame was never taken. A window already waiting by the corner is left alone.
+- The active tab was removed and re-added on every refresh, dropping a frame.
 - Switching windows in a tabbed stack flashed: the incoming window appeared at the screen corner until the layout pass moved it in. It is now moved onto its frame as it comes forward, whether by a tab click, ⌘Tab or the switcher.
 
 ## [0.24.1] - 2026-10-28
