@@ -180,7 +180,9 @@ final class SystemObserver {
     /// Cheap variant for live interactions, no Accessibility at all: frames straight from WindowServer for the
     /// tracked windows the last snapshot knew.
     func lightSnapshot(tracked: [WindowID]) -> Snapshot {
-        let infos = tracked.compactMap { id -> WindowInfo? in
+        // Front to back like a full snapshot, in the order the last one saw: a tabbed stack reads its front from it.
+        let depth = Dictionary(uniqueKeysWithValues: lastSnapshotWindows.enumerated().map { ($1.id, $0) })
+        let infos = tracked.sorted { (depth[$0] ?? .max, $0) < (depth[$1] ?? .max, $1) }.compactMap { id -> WindowInfo? in
             guard var i = lastInfoMain[id], axMain[id] != nil else { return nil }
             if let f = WindowServerEvents.bounds(of: id) { i.frame = f }
             i.spaces = spacesOfWindow(id)
