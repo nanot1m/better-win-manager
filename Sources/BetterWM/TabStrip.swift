@@ -9,6 +9,7 @@ final class TabStripWindow {
         let app: String
         let title: String
     }
+    enum Side { case top, left, right }
 
     private let panel: NSPanel
     private let view = TabStripView()
@@ -26,9 +27,9 @@ final class TabStripWindow {
     }
 
     /// `frame` in AX coordinates.
-    func show(frame: CGRect, items: [Item], focused: WindowID?, vertical: Bool, config: Config) {
+    func show(frame: CGRect, items: [Item], focused: WindowID?, side: Side, config: Config) {
         panel.setFrame(frame.toCocoa(), display: false)
-        view.configure(items: items, focused: focused, vertical: vertical, config: config)
+        view.configure(items: items, focused: focused, side: side, config: config)
         if !panel.isVisible { panel.orderBack(nil) }
     }
 
@@ -45,7 +46,7 @@ private final class TabStripView: NSView {
     var onSelect: ((WindowID) -> Void)?
     private var tabs: [TabView] = []
     private var items: [TabStripWindow.Item] = []
-    private var vertical = false
+    private var side = TabStripWindow.Side.top
     private var activeIndex: Int?
     private var maxLength: CGFloat = 240
 
@@ -57,9 +58,9 @@ private final class TabStripView: NSView {
     override var isFlipped: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    func configure(items: [TabStripWindow.Item], focused: WindowID?, vertical: Bool, config: Config) {
+    func configure(items: [TabStripWindow.Item], focused: WindowID?, side: TabStripWindow.Side, config: Config) {
         self.items = items
-        self.vertical = vertical
+        self.side = side
         maxLength = config.tabWidth
         while tabs.count < items.count {
             let t = TabView()
@@ -81,7 +82,7 @@ private final class TabStripView: NSView {
             if active { addSubview(t, positioned: .above, relativeTo: nil) }
             t.configure(title: BarView.formatTitle(config.tabTitleFormat, app: item.app, title: item.title,
                                                    color: active ? accent.contrastingText : .white),
-                        active: active, accent: accent, vertical: vertical)
+                        active: active, accent: accent, side: side)
         }
         needsLayout = true
         layoutTabs()
@@ -95,12 +96,17 @@ private final class TabStripView: NSView {
     /// Tabs share the strip, with a cap so a lone tab does not span the screen; the active one stands a little taller.
     private func layoutTabs() {
         let n = CGFloat(max(1, items.count)), pad: CGFloat = 16, gap: CGFloat = 4
-        if vertical {
-            // Sideways tabs: as long along the strip as a top tab is wide, as thick as the strip.
+        if side != .top {
+            // Sideways tabs: as long along the strip as a top tab is wide, as thick as the strip. On the left they
+            // read bottom to top, so the deck runs that way too; on the right, top to bottom.
             let h = min(maxLength, (bounds.height - pad * 2 - gap * (n - 1)) / n)
             for (i, t) in tabs.enumerated() where i < items.count {
                 let active = i == activeIndex
-                t.frame = CGRect(x: active ? 1 : 5, y: pad + CGFloat(i) * (h + gap), width: bounds.width - (active ? 1 : 5), height: h)
+                let slot = side == .left ? CGFloat(items.count - 1 - i) : CGFloat(i)
+                let lift: CGFloat = active ? 1 : 5
+                let y = pad + slot * (h + gap)
+                t.frame = side == .left ? CGRect(x: lift, y: y, width: bounds.width - lift, height: h)
+                                        : CGRect(x: 0, y: y, width: bounds.width - lift, height: h)
             }
         } else {
             let w = min(maxLength, (bounds.width - pad * 2 - gap * (n - 1)) / n)
@@ -119,7 +125,7 @@ private final class TabView: NSView {
     private var active = false
     private var accent = NSColor.controlAccentColor
     private var hovering = false
-    private var vertical = false
+    private var side = TabStripWindow.Side.top
     private let shape = CAShapeLayer()
 
     override init(frame: NSRect) {
@@ -134,13 +140,11 @@ private final class TabView: NSView {
     required init?(coder: NSCoder) { fatalError() }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    func configure(title: NSAttributedString, active: Bool, accent: NSColor, vertical: Bool) {
+    func configure(title: NSAttributedString, active: Bool, accent: NSColor, side: TabStripWindow.Side) {
         self.active = active
         self.accent = accent
-        self.vertical = vertical
+        self.side = side
         label.attributedStringValue = title
-        // A sideways tab reads bottom to top, like a spine.
-        label.frameCenterRotation = vertical ? 90 : 0
         updateShape()
         layoutLabel()
         paint()
@@ -154,28 +158,37 @@ private final class TabView: NSView {
 
     private func layoutLabel() {
         let inset: CGFloat = 8, h = label.intrinsicContentSize.height
-        if vertical {
-            // The frame is set unrotated (long side along y) and then turned about its centre.
+        if side != .top {
+            // The frame is set unrotated (long side along y) and then turned about its centre: a left spine reads
+            // bottom to top, a right one top to bottom.
             label.frameCenterRotation = 0
             label.frame = CGRect(x: bounds.midX - (bounds.height - inset * 2) / 2, y: bounds.midY - h / 2, width: bounds.height - inset * 2, height: h)
-            label.frameCenterRotation = 90
+            label.frameCenterRotation = side == .left ? 90 : -90
         } else {
             label.frame = CGRect(x: inset, y: bounds.midY - h / 2, width: bounds.width - inset * 2, height: h)
         }
     }
 
-    /// Rounded away from the window (top for a strip on top, left for one on the left), square where it meets it.
+    /// Rounded away from the window, square where it meets it.
     private func updateShape() {
         let r: CGFloat = 8, b = bounds
         let path = CGMutablePath()
-        if vertical {
+        switch side {
+        case .right:
+            path.move(to: CGPoint(x: b.minX, y: b.minY))
+            path.addLine(to: CGPoint(x: b.maxX - r, y: b.minY))
+            path.addArc(tangent1End: CGPoint(x: b.maxX, y: b.minY), tangent2End: CGPoint(x: b.maxX, y: b.minY + r), radius: r)
+            path.addLine(to: CGPoint(x: b.maxX, y: b.maxY - r))
+            path.addArc(tangent1End: CGPoint(x: b.maxX, y: b.maxY), tangent2End: CGPoint(x: b.maxX - r, y: b.maxY), radius: r)
+            path.addLine(to: CGPoint(x: b.minX, y: b.maxY))
+        case .left:
             path.move(to: CGPoint(x: b.maxX, y: b.minY))
             path.addLine(to: CGPoint(x: b.minX + r, y: b.minY))
             path.addArc(tangent1End: CGPoint(x: b.minX, y: b.minY), tangent2End: CGPoint(x: b.minX, y: b.minY + r), radius: r)
             path.addLine(to: CGPoint(x: b.minX, y: b.maxY - r))
             path.addArc(tangent1End: CGPoint(x: b.minX, y: b.maxY), tangent2End: CGPoint(x: b.minX + r, y: b.maxY), radius: r)
             path.addLine(to: CGPoint(x: b.maxX, y: b.maxY))
-        } else {
+        case .top:
             // The mask layer is not geometry-flipped with the view: maxY is the top edge.
             path.move(to: CGPoint(x: b.minX, y: b.minY))
             path.addLine(to: CGPoint(x: b.minX, y: b.maxY - r))

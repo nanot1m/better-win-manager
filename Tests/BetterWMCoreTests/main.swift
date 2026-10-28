@@ -309,8 +309,13 @@ struct ReconcilerTests {
         let left = GridGeometry(grid: g, area: area, config: c)
         expect(left.windowFrames().first?.1 == CGRect(x: 30, y: 0, width: area.width - 30, height: area.height), #function, #line)
         expect(left.tabStripFrame() == CGRect(x: 0, y: 0, width: 30, height: area.height), #function, #line)
-        // Dropping along the strip picks the deck position; a cascade keeps its strip-less geometry.
-        expect(left.zone(at: CGPoint(x: 90, y: area.height - 1), dragging: nil)?.0 == .newColumn(index: 2), #function, #line)
+        // Dropping along the strip picks the deck position (left tabs run bottom to top); a cascade has no strip.
+        expect(left.zone(at: CGPoint(x: 90, y: 1), dragging: nil)?.0 == .newColumn(index: 2), #function, #line)
+        c.stackStyle = .tabsRight
+        let right = GridGeometry(grid: g, area: area, config: c)
+        expect(right.tabStripFrame() == CGRect(x: area.width - 30, y: 0, width: 30, height: area.height), #function, #line)
+        expect(right.windowFrames().first?.1 == CGRect(x: 0, y: 0, width: area.width - 30, height: area.height), #function, #line)
+        expect(right.zone(at: CGPoint(x: area.width - 10, y: area.height - 1), dragging: nil)?.0 == .newColumn(index: 2), #function, #line)
         c.stackStyle = .cascade
         expect(GridGeometry(grid: g, area: area, config: c).tabStripFrame() == nil, #function, #line)
     }

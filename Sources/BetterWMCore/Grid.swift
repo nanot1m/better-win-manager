@@ -338,6 +338,7 @@ public struct GridGeometry {
         case .cascade: return nil
         case .tabsTop: return CGRect(x: inner.minX, y: inner.minY, width: inner.width, height: config.tabHeight)
         case .tabsLeft: return CGRect(x: inner.minX, y: inner.minY, width: config.tabHeight, height: inner.height)
+        case .tabsRight: return CGRect(x: inner.maxX - config.tabHeight, y: inner.minY, width: config.tabHeight, height: inner.height)
         }
     }
 
@@ -347,6 +348,7 @@ public struct GridGeometry {
         case .cascade: return inner
         case .tabsTop: return CGRect(x: inner.minX, y: inner.minY + config.tabHeight, width: inner.width, height: inner.height - config.tabHeight)
         case .tabsLeft: return CGRect(x: inner.minX + config.tabHeight, y: inner.minY, width: inner.width - config.tabHeight, height: inner.height)
+        case .tabsRight: return CGRect(x: inner.minX, y: inner.minY, width: inner.width - config.tabHeight, height: inner.height)
         }
     }
 
@@ -438,8 +440,9 @@ public struct GridGeometry {
         guard !others.isEmpty else { return (.newColumn(index: 0), tabbedArea) }
         let n = CGFloat(others.count)
         if config.stackStyle != .cascade {
-            // The deck position follows where along the strip the window is dropped.
-            let along = config.stackStyle == .tabsTop ? (p.x - inner.minX) / max(1, inner.width) : (p.y - inner.minY) / max(1, inner.height)
+            // The deck position follows where along the strip the window is dropped; left tabs run bottom to top.
+            var along = config.stackStyle == .tabsTop ? (p.x - inner.minX) / max(1, inner.width) : (p.y - inner.minY) / max(1, inner.height)
+            if config.stackStyle == .tabsLeft { along = 1 - along }
             return (.newColumn(index: min(others.count, max(0, Int(along * (n + 1))))), tabbedArea)
         }
         let offset = min(config.stackOffset, inner.width / max(1, n + 1) / 2)

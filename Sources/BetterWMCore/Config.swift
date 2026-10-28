@@ -33,12 +33,13 @@ public struct Config {
     public var stackOffset: CGFloat = 48
     /// How a stacked screen looks: a cascade, or every window full size behind a row of tabs.
     public enum StackStyle: String, CaseIterable {
-        case cascade, tabsTop, tabsLeft
+        case cascade, tabsTop, tabsLeft, tabsRight
         public var title: String {
             switch self {
             case .cascade: return "Cascade"
             case .tabsTop: return "Tabs on top"
             case .tabsLeft: return "Tabs on the left"
+            case .tabsRight: return "Tabs on the right"
             }
         }
     }
@@ -265,7 +266,7 @@ public struct Config {
         # shift so the ones behind stay visible; screens narrower than the threshold start stacked (0 = never).
         stackOffset = \(num(stackOffset))
         stackScreensNarrowerThan = \(num(stackScreensNarrowerThan))
-        # Stacked look: cascade, tabsTop or tabsLeft. The strip is tabHeight points thick (left tabs read sideways),
+        # Stacked look: cascade, tabsTop, tabsLeft or tabsRight. The strip is tabHeight points thick (side tabs read sideways),
         # a tab is at most tabWidth points long, and shows tabTitleFormat, where {app} and {title} are replaced.
         stackStyle = \(stackStyle.rawValue)
         tabHeight = \(num(tabHeight))

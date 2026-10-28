@@ -95,10 +95,10 @@ extension AppDelegate {
             let items = [("Safari", "Apple – Start"), ("Code", "WindowManager.swift — better-win-manager"), ("Terminal", "zsh"), ("Mail", "Inbox")]
                 .enumerated().map { TabStripWindow.Item(id: WindowID($0.offset + 1), app: $0.element.0, title: $0.element.1) }
             var c = manager.config
-            c.stackStyle = CommandLine.arguments.contains("--left") ? .tabsLeft : .tabsTop
+            let side: TabStripWindow.Side = CommandLine.arguments.contains("--left") ? .left : CommandLine.arguments.contains("--right") ? .right : .top
             let top = TabStripWindow()
-            let frame = c.stackStyle == .tabsLeft ? CGRect(x: 16, y: 300, width: c.tabHeight, height: 700) : CGRect(x: 16, y: 300, width: 1000, height: c.tabHeight)
-            top.show(frame: frame, items: items, focused: 2, vertical: c.stackStyle == .tabsLeft, config: c)
+            let frame = side == .top ? CGRect(x: 16, y: 300, width: 1000, height: c.tabHeight) : CGRect(x: 16, y: 300, width: c.tabHeight, height: 700)
+            top.show(frame: frame, items: items, focused: 2, side: side, config: c)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 top.snapshot(to: path)
                 top.hide()

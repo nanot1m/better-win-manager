@@ -1446,7 +1446,7 @@ final class WindowManager {
 
     private var tabStrips: [TabStripWindow] = []
     private func refreshTabStrips() {
-        var needed: [(CGRect, [TabStripWindow.Item], Bool)] = []
+        var needed: [(CGRect, [TabStripWindow.Item], TabStripWindow.Side)] = []
         if config.stackStyle != .cascade {
             for (space, geo) in activeGeometries() {
                 guard let frame = geo.tabStripFrame() else { continue }
@@ -1455,7 +1455,7 @@ final class WindowManager {
                     return TabStripWindow.Item(id: id, app: NSRunningApplication(processIdentifier: pid)?.localizedName ?? "",
                                                title: system.axWindow(id)?.title ?? "")
                 }
-                needed.append((frame, items, config.stackStyle == .tabsLeft))
+                needed.append((frame, items, config.stackStyle == .tabsLeft ? .left : config.stackStyle == .tabsRight ? .right : .top))
             }
         }
         while tabStrips.count < needed.count {
@@ -1466,8 +1466,8 @@ final class WindowManager {
         let focused = focusRing.currentWindowID ?? system.focused?.windowID
         for (i, s) in tabStrips.enumerated() {
             guard i < needed.count else { s.hide(); continue }
-            let (frame, items, vertical) = needed[i]
-            s.show(frame: frame, items: items, focused: focused, vertical: vertical, config: config)
+            let (frame, items, side) = needed[i]
+            s.show(frame: frame, items: items, focused: focused, side: side, config: config)
         }
     }
 

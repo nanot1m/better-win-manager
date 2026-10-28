@@ -7,7 +7,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 ## [Unreleased]
 
 ### Changed
-- Tabs on the left read sideways, bottom to top, in a strip as thin as the one on top; `tabHeight` is the strip's thickness in both styles and `tabWidth` (now 240) the longest a tab gets.
+- Tabs on the right (`tabsRight`), reading top to bottom. Tabs on the left read sideways, bottom to top, with the deck running that way too, in a strip as thin as the one on top; `tabHeight` is the strip's thickness in both styles and `tabWidth` (now 240) the longest a tab gets.
 - In a tabbed stack only the front window is on screen; the others wait past the screen corner at full size, so a tab click brings one in without a resize and nothing peeks out from behind.
 
 ## [0.22.0] - 2026-10-28

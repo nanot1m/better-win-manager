@@ -25,7 +25,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `hideApps` | true | Hide an app whose windows are all on other desktops; off parks every window in the screen corner instead, keeping them on screen for live previews |
 | `dragModifiers` | alt | Keys held while dragging to tile: `cmd`, `alt`, `ctrl`, `shift` joined with `+` |
 | `stackOffset` | 48 | Horizontal shift between cascaded windows in stacked layout |
-| `stackStyle` | cascade | How a stacked screen looks: `cascade`, `tabsTop` (every window full size under a row of tabs) or `tabsLeft` (tabs down the left edge) |
+| `stackStyle` | cascade | How a stacked screen looks: `cascade`, `tabsTop` (every window full size under a row of tabs), `tabsLeft` or `tabsRight` (sideways tabs down that edge) |
 | `tabHeight` / `tabWidth` | 30 / 240 | Thickness of the tab strip (its height on top, its width on the left, where tabs read sideways), and the longest a tab gets; the windows get the rest |
 | `tabTitleFormat` | `{app} — {title}` | Tab label; `{app}` and `{title}` are replaced |
 | `resizeStep` | 40 | Points the `grow` / `shrink` actions resize the focused window by |
