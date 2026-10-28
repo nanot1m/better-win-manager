@@ -46,6 +46,7 @@ private final class TabStripView: NSView {
     private var tabs: [TabView] = []
     private var items: [TabStripWindow.Item] = []
     private var vertical = false
+    private var activeIndex: Int?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -69,11 +70,14 @@ private final class TabStripView: NSView {
             tabs.append(t)
         }
         let accent = config.ringTiledColor
+        activeIndex = items.firstIndex { $0.id == focused }
         for (i, t) in tabs.enumerated() {
             t.isHidden = i >= items.count
             guard i < items.count else { continue }
             let item = items[i]
             let active = item.id == focused
+            // Tabs overlap like folder tabs; the active one is brought to the front and stands a little taller.
+            if active { addSubview(t, positioned: .above, relativeTo: nil) }
             t.configure(title: BarView.formatTitle(config.tabTitleFormat, app: item.app, title: item.title,
                                                    color: active ? accent.contrastingText : .white),
                         active: active, accent: accent, vertical: vertical)
@@ -87,18 +91,23 @@ private final class TabStripView: NSView {
         layoutTabs()
     }
 
-    /// Tabs share the strip, with a cap so a lone tab does not span the screen; the active one stands proud by a hair.
+    /// Tabs share the strip, with a cap so a lone tab does not span the screen. Along the strip they overlap a
+    /// little, folder style, and the active one stands a little taller.
     private func layoutTabs() {
-        let n = CGFloat(max(1, items.count)), gap: CGFloat = 4, pad: CGFloat = 16
+        let n = CGFloat(max(1, items.count)), pad: CGFloat = 16
         if vertical {
+            let gap: CGFloat = 4
             let h = min(30, (bounds.height - pad * 2 - gap * (n - 1)) / n)
             for (i, t) in tabs.enumerated() where i < items.count {
-                t.frame = CGRect(x: pad, y: pad + CGFloat(i) * (h + gap), width: bounds.width - pad, height: h)
+                let active = i == activeIndex
+                t.frame = CGRect(x: active ? pad - 4 : pad, y: pad + CGFloat(i) * (h + gap), width: bounds.width - (active ? pad - 4 : pad), height: h)
             }
         } else {
-            let w = min(240, (bounds.width - pad * 2 - gap * (n - 1)) / n)
+            let overlap: CGFloat = 8
+            let w = min(240, (bounds.width - pad * 2 + overlap * (n - 1)) / n)
             for (i, t) in tabs.enumerated() where i < items.count {
-                t.frame = CGRect(x: pad + CGFloat(i) * (w + gap), y: 4, width: w, height: bounds.height - 4)
+                let active = i == activeIndex
+                t.frame = CGRect(x: pad + CGFloat(i) * (w - overlap), y: active ? 1 : 5, width: w, height: bounds.height - (active ? 1 : 5))
             }
         }
     }
