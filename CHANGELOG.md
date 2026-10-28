@@ -4,7 +4,7 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
-## [Unreleased]
+## [0.25.2] - 2026-10-28
 
 ### Fixed
 - The focus ring stayed on the previously focused window while Settings was open and lingered there after closing it: the ring now follows app activation, hiding while a BetterWM window is up, and closing the last BetterWM window hands focus back to the app you came from.
