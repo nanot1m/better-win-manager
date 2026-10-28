@@ -76,7 +76,6 @@ private final class TabStripView: NSView {
             guard i < items.count else { continue }
             let item = items[i]
             let active = item.id == focused
-            // Tabs overlap like folder tabs; the active one is brought to the front and stands a little taller.
             if active { addSubview(t, positioned: .above, relativeTo: nil) }
             t.configure(title: BarView.formatTitle(config.tabTitleFormat, app: item.app, title: item.title,
                                                    color: active ? accent.contrastingText : .white),
@@ -91,8 +90,7 @@ private final class TabStripView: NSView {
         layoutTabs()
     }
 
-    /// Tabs share the strip, with a cap so a lone tab does not span the screen. Along the strip they overlap a
-    /// little, folder style, and the active one stands a little taller.
+    /// Tabs share the strip, with a cap so a lone tab does not span the screen; the active one stands a little taller.
     private func layoutTabs() {
         let n = CGFloat(max(1, items.count)), pad: CGFloat = 16
         if vertical {
@@ -103,11 +101,11 @@ private final class TabStripView: NSView {
                 t.frame = CGRect(x: active ? pad - 4 : pad, y: pad + CGFloat(i) * (h + gap), width: bounds.width - (active ? pad - 4 : pad), height: h)
             }
         } else {
-            let overlap: CGFloat = 8
-            let w = min(240, (bounds.width - pad * 2 + overlap * (n - 1)) / n)
+            let gap: CGFloat = 4
+            let w = min(240, (bounds.width - pad * 2 - gap * (n - 1)) / n)
             for (i, t) in tabs.enumerated() where i < items.count {
                 let active = i == activeIndex
-                t.frame = CGRect(x: pad + CGFloat(i) * (w - overlap), y: active ? 1 : 5, width: w, height: bounds.height - (active ? 1 : 5))
+                t.frame = CGRect(x: pad + CGFloat(i) * (w + gap), y: active ? 1 : 5, width: w, height: bounds.height - (active ? 1 : 5))
             }
         }
     }
