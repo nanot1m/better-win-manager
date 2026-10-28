@@ -325,6 +325,22 @@ struct ReconcilerTests {
         expect(!Version.isNewer("0.23.0", than: "0.23.0") && !Version.isNewer("0.22.9", than: "0.23") && !Version.isNewer("dev", than: "0.1"), #function, #line)
     }
 
+    func testRestorePrefersSameWindowOverTitle() {
+        var state = DesiredState()
+        var g = Grid(); g.columns = [Column([1]), Column([2])]
+        state.grids[space] = g
+        let a = WindowInfo(id: 1, pid: 1, bundleID: "com.code", frame: CGRect(x: 0, y: 0, width: 800, height: 600), spaces: [space], title: "project A")
+        let b = WindowInfo(id: 2, pid: 1, bundleID: "com.code", frame: CGRect(x: 800, y: 0, width: 800, height: 600), spaces: [space], title: "project B")
+        let saved = SavedLayout.capture(state, Snapshot(screens: [], windows: [a, b], focused: nil, now: Date(timeIntervalSinceReferenceDate: 0)))
+        // After a relaunch both windows show new titles, and B even carries A's old one; the ids still tell them apart.
+        var a2 = a; a2.title = "project B"
+        var b2 = b; b2.title = "something else"
+        let grid = saved.restore(space: space, candidates: [b2, a2])
+        expect(grid?.columns.map(\.windows) == [[1], [2]], #function, #line)
+        let roundTrip = try! JSONDecoder().decode(SavedLayout.self, from: try! JSONEncoder().encode(saved))
+        expect(roundTrip == saved && roundTrip.spaces[0].columns[0].windows[0].id == 1, #function, #line)
+    }
+
     func testEdgeMoveCyclesWidth() {
         var g = Grid()
         g.columns = [Column([1]), Column([2])]
@@ -707,6 +723,7 @@ let tests: [(String, () -> Void)] = [
     ("restoreFallsBackToNearestFrame", t.testRestoreFallsBackToNearestFrame),
     ("edgeMoveCyclesWidth", t.testEdgeMoveCyclesWidth),
     ("versionComparison", t.testVersionComparison),
+    ("restorePrefersSameWindowOverTitle", t.testRestorePrefersSameWindowOverTitle),
     ("tabbedStackFramesAndStrip", t.testTabbedStackFramesAndStrip),
     ("dragEndRules", t.testDragEndRules),
     ("resizeByDeltaMovesBoundaries", t.testResizeByDeltaMovesBoundaries),

@@ -7,6 +7,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 ## [Unreleased]
 
 ### Added
+- The saved layout remembers each window's id, so a BetterWM relaunch (an update, Reload) puts every window back on its desktop and in its slot exactly, however its title has changed meanwhile. Title matching remains the fallback for windows of apps that restarted.
 - Check for Updates… in the menu, a daily check (`checkForUpdates`) that offers a newer release with its notes, and `autoUpdate` to download the signed release, swap it in and relaunch without asking. Dev builds only point at the release page.
 
 ## [0.23.1] - 2026-10-28

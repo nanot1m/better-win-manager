@@ -8,8 +8,11 @@ public struct SavedLayout: Codable, Equatable {
         public var title: String
         public var frame: CGRect
         public var heightWeight: CGFloat
-        public init(bundleID: String?, title: String, frame: CGRect, heightWeight: CGFloat) {
-            self.bundleID = bundleID; self.title = title; self.frame = frame; self.heightWeight = heightWeight
+        /// The window's id when saved; stable for as long as the app keeps the window open, so a BetterWM
+        /// relaunch puts every window back exactly, whatever its title has become.
+        public var id: WindowID?
+        public init(bundleID: String?, title: String, frame: CGRect, heightWeight: CGFloat, id: WindowID? = nil) {
+            self.bundleID = bundleID; self.title = title; self.frame = frame; self.heightWeight = heightWeight; self.id = id
         }
     }
     public struct Column: Codable, Equatable {
@@ -114,7 +117,7 @@ public struct SavedLayout: Codable, Equatable {
             let columns = grid.columns.compactMap { col -> Column? in
                 let windows = col.windows.compactMap { id -> Window? in
                     guard let w = snapshot.window(id) else { return nil }
-                    return Window(bundleID: w.bundleID, title: w.title, frame: w.frame, heightWeight: grid.heightWeights[id] ?? 1)
+                    return Window(bundleID: w.bundleID, title: w.title, frame: w.frame, heightWeight: grid.heightWeights[id] ?? 1, id: id)
                 }
                 return windows.isEmpty ? nil : Column(weight: col.weight, windows: windows)
             }
@@ -122,7 +125,7 @@ public struct SavedLayout: Codable, Equatable {
         }
         for w in snapshot.windows where !state.isTiled(w.id) {
             guard let space = floatingSpace(w) else { continue }
-            let slot = Window(bundleID: w.bundleID, title: w.title, frame: w.frame, heightWeight: 1)
+            let slot = Window(bundleID: w.bundleID, title: w.title, frame: w.frame, heightWeight: 1, id: w.id)
             if let i = out.spaces.firstIndex(where: { $0.id == space }) { out.spaces[i].floating.append(slot) }
             else { out.spaces.append(Space(id: space, columns: [], floating: [slot])) }
         }
@@ -140,7 +143,7 @@ public struct SavedLayout: Codable, Equatable {
         for slot in saved.floating {
             let sameApp = pool.indices.filter { pool[$0].bundleID == slot.bundleID }
             guard !sameApp.isEmpty else { continue }
-            let exact = sameApp.first { pool[$0].title == slot.title }
+            let exact = sameApp.first { pool[$0].id == slot.id } ?? sameApp.first { pool[$0].title == slot.title }
             guard let pick = exact ?? (exactTitle ? nil : sameApp.min { distance(pool[$0].frame, slot.frame) < distance(pool[$1].frame, slot.frame) }) else { continue }
             out.append((pool.remove(at: pick).id, slot.frame))
         }
@@ -150,7 +153,7 @@ public struct SavedLayout: Codable, Equatable {
     public func mode(for space: SpaceID) -> LayoutMode? { spaces.first { $0.id == space }?.mode }
 
     /// Rebuilds a grid for `space` from the saved slots, using the windows in `candidates`.
-    /// Matching prefers same app and title, then same app and nearest frame, then any window of the app.
+    /// Matching prefers the very same window (by id), then same app and title, then same app and nearest frame.
     /// Unmatched slots are dropped; a column with no survivors disappears.
     public func restore(space: SpaceID, candidates: [WindowInfo], exactTitle: Bool = false) -> Grid? {
         guard let saved = spaces.first(where: { $0.id == space }) else { return nil }
@@ -158,7 +161,8 @@ public struct SavedLayout: Codable, Equatable {
         func take(_ slot: Window) -> WindowInfo? {
             let sameApp = pool.indices.filter { pool[$0].bundleID == slot.bundleID }
             guard !sameApp.isEmpty else { return nil }
-            let exact = sameApp.first { pool[$0].title == slot.title }
+            // The same window (still open across our relaunch) beats a title match, which beats the nearest frame.
+            let exact = sameApp.first { pool[$0].id == slot.id } ?? sameApp.first { pool[$0].title == slot.title }
             guard let pick = exact ?? (exactTitle ? nil : sameApp.min { distance(pool[$0].frame, slot.frame) < distance(pool[$1].frame, slot.frame) }) else { return nil }
             return pool.remove(at: pick)
         }
