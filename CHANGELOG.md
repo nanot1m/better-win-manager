@@ -4,7 +4,7 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
-## [Unreleased]
+## [0.25.0] - 2026-10-28
 
 ### Added
 - Tabs in a tabbed stack can be dragged along the strip to reorder the deck. Reordering leaves the front window alone.
