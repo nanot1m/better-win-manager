@@ -12,7 +12,7 @@ Move actions reorder the grid: Move Left/Right carries a window to the neighbour
 
 Per screen, as an alternative to columns. Windows keep their deck positions; focusing one only brings it to the front, Move Left/Right reorder the deck. Toggle it with ⌃⌥S, the popup's S key, or the menu. `stackScreensNarrowerThan` starts narrow screens in this layout.
 
-How a stacked screen looks is `stackStyle`: a **cascade**, where every window gets almost the whole screen and each is shifted right by `stackOffset` so the ones behind stay visible as strips you can click; or **tabs**, where every window fills the whole screen behind a row of folder-style tabs along the top (`tabsTop`) or down the left edge (`tabsLeft`). The focused window's tab is the raised one in the accent colour, and it replaces the focus ring there; clicking a tab brings that window to the front. Dropping a dragged window along the strip picks its deck position. Tabs show `tabTitleFormat`.
+How a stacked screen looks is `stackStyle`: a **cascade**, where every window gets almost the whole screen and each is shifted right by `stackOffset` so the ones behind stay visible as strips you can click; or **tabs**, where every window fills the whole screen behind a row of folder-style tabs along the top (`tabsTop`) or down the left edge (`tabsLeft`). The focused window's tab is the one in the accent colour; clicking a tab brings that window to the front. Dropping a dragged window along the strip picks its deck position. Tabs show `tabTitleFormat`.
 
 ## Floating windows
 

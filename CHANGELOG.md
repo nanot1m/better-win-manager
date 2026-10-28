@@ -7,7 +7,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 ## [Unreleased]
 
 ### Added
-- Stacked layout can look like tabs instead of a cascade: `stackStyle` is `cascade`, `tabsTop` or `tabsLeft` (Settings › Tiling › Stacked layout). With tabs every window fills the screen behind a row of folder-style tabs; the focused window's tab is raised in the accent colour and stands in for the focus ring, and clicking a tab brings its window forward. Strip size (`tabHeight`, `tabWidth`) and the tab label (`tabTitleFormat`, `{app}` and `{title}`) are settings.
+- Stacked layout can look like tabs instead of a cascade: `stackStyle` is `cascade`, `tabsTop` or `tabsLeft` (Settings › Tiling › Stacked layout). With tabs every window fills the screen behind a row of folder-style tabs; the focused window's tab is in the accent colour, and clicking a tab brings its window forward. Strip size (`tabHeight`, `tabWidth`) and the tab label (`tabTitleFormat`, `{app}` and `{title}`) are settings.
 
 ### Fixed
 - Crash while using the Settings window: with BetterWM frontmost, the background Accessibility queue asked our own process for its focused window, which ran AppKit's accessibility code on two threads at once. Our own windows are never queried through Accessibility now.

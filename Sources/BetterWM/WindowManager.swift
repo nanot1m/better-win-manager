@@ -586,7 +586,6 @@ final class WindowManager {
         focusRing.isTiled = { [unowned self] w in self.isTiled(w) }
         focusRing.isTiledID = { [unowned self] id in self.state.isTiled(id) }
         focusRing.focusedWindow = { [unowned self] in self.system.focused }
-        focusRing.ringless = { [unowned self] id in self.inTabbedStack(id) }
         focusRing.onReorder = { [unowned self] in self.stackHandles() }
         if config.restoreLayouts, let data = try? Data(contentsOf: Config.statePath),
            let layout = try? JSONDecoder().decode(SavedLayout.self, from: data) {
@@ -1444,12 +1443,6 @@ final class WindowManager {
     func describe(_ id: WindowID) -> String { system.axWindow(id).map(describe) ?? "#\(id)" }
 
     // MARK: Gap handles
-
-    /// Whether a window sits in a stacked grid drawn as tabs, where the active tab marks focus.
-    private func inTabbedStack(_ id: WindowID) -> Bool {
-        guard config.stackStyle != .cascade, let space = state.space(containing: id) else { return false }
-        return state.grid(for: space).mode == .stacked
-    }
 
     private var tabStrips: [TabStripWindow] = []
     private func refreshTabStrips() {

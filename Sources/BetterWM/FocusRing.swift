@@ -18,8 +18,6 @@ final class FocusRing {
     var isTiled: (AXWindow) -> Bool = { _ in true }
     /// Same question by window ID, for callers that only have one (workspace switches, re-measures).
     var isTiledID: (CGWindowID) -> Bool = { _ in true }
-    /// Windows whose focus is shown another way (the active tab of a tabbed stack) get no ring.
-    var ringless: (CGWindowID) -> Bool = { _ in false }
     /// Fired after the ring window is (re)ordered so dependants like the gap handles can stack above it.
     var onReorder: (() -> Void)?
     /// Fired when the ringed window changes, including between windows of one app.
@@ -163,11 +161,6 @@ final class FocusRing {
     }
 
     private func present(id: CGWindowID, frame: CGRect, floating: Bool? = nil) {
-        if ringless(id) {
-            current = id
-            window.orderOut(nil)
-            return
-        }
         let floating = floating ?? !isTiledID(id)
         let wasHidden = !window.isVisible
         let targetChanged = current != id

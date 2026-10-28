@@ -19,7 +19,8 @@ final class TabStripWindow {
     var isVisible: Bool { panel.isVisible }
 
     init() {
-        panel = .overlay(level: .floating)
+        // Above the focus ring, like the bar: the ring's top edge would otherwise draw over the tabs' bottoms.
+        panel = .overlay(level: NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1))
         panel.contentView = view
     }
 
