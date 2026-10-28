@@ -90,6 +90,21 @@ extension AppDelegate {
             let path = CommandLine.arguments[i + 1]
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [switcher] in switcher?.snapshot(to: path) }
         }
+        if let i = CommandLine.arguments.firstIndex(of: "--snapshot-tabstrip"), i + 1 < CommandLine.arguments.count {
+            let path = CommandLine.arguments[i + 1]
+            let items = [("Safari", "Apple – Start"), ("Code", "WindowManager.swift — better-win-manager"), ("Terminal", "zsh"), ("Mail", "Inbox")]
+                .enumerated().map { TabStripWindow.Item(id: WindowID($0.offset + 1), app: $0.element.0, title: $0.element.1) }
+            var c = manager.config
+            c.stackStyle = CommandLine.arguments.contains("--left") ? .tabsLeft : .tabsTop
+            let top = TabStripWindow()
+            let frame = c.stackStyle == .tabsLeft ? CGRect(x: 16, y: 300, width: c.tabWidth, height: 300) : CGRect(x: 16, y: 300, width: 1000, height: c.tabHeight)
+            top.show(frame: frame, items: items, focused: 2, vertical: c.stackStyle == .tabsLeft, config: c)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                top.snapshot(to: path)
+                top.hide()
+                print("tabstrip snapshot written")
+            }
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--snapshot-hud"), i + 1 < CommandLine.arguments.count {
             let path = CommandLine.arguments[i + 1]
             hud.enabled = true

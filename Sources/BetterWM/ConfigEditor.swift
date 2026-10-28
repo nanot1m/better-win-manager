@@ -46,6 +46,10 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var hideAppsSwitch: NSSwitch!
     private var debugLogSwitch: NSSwitch!
     private var stackOffsetField: NSTextField!
+    private var stackStylePopup: NSPopUpButton!
+    private var tabHeightField: NSTextField!
+    private var tabWidthField: NSTextField!
+    private var tabTitleField: NSTextField!
     private var resizeStepField: NSTextField!
     private var stackNarrowField: NSTextField!
     private var switcherThumbsSwitch: NSSwitch!
@@ -501,6 +505,15 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         }
         stackOffsetField = numberField("48")
         stackNarrowField = numberField("0")
+        stackStylePopup = NSPopUpButton()
+        for st in Config.StackStyle.allCases {
+            stackStylePopup.addItem(withTitle: st.title)
+            stackStylePopup.lastItem?.representedObject = st.rawValue
+        }
+        tabHeightField = numberField("30")
+        tabWidthField = numberField("180")
+        tabTitleField = NSTextField(string: "")
+        tabTitleField.widthAnchor.constraint(equalToConstant: 200).isActive = true
         resizeStepField = numberField("40")
         return [
             group("Grow and shrink", [
@@ -514,7 +527,10 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 row("Hold while dragging", "Drag a window with these keys held to drop it into a column.", [mods]),
             ]),
             group("Stacked layout", [
-                row("Cascade offset", "Windows cascade by this much so the ones behind stay visible. Toggle the layout per screen from the menu or with its hotkey.", [stackOffsetField, unit("pt")]),
+                row("Look", "Cascade shifts each window right; tabs give every window the whole screen behind a row of tabs. Toggle the layout per screen from the menu or with its hotkey.", [stackStylePopup]),
+                row("Cascade offset", "Windows cascade by this much so the ones behind stay visible.", [stackOffsetField, unit("pt")]),
+                row("Tab strip height / width", "Height of the strip for tabs on top; width for tabs on the left.", [tabHeightField, unit("pt"), tabWidthField, unit("pt")]),
+                row("Tab title", "{app} and {title} are replaced.", [tabTitleField]),
                 row("Start stacked on narrow screens", "Screens narrower than this begin in stacked layout; 0 never.", [stackNarrowField, unit("pt")]),
             ]),
         ]
@@ -861,6 +877,10 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         on(hideAppsSwitch, config.hideApps)
         on(debugLogSwitch, config.debugLog)
         stackOffsetField.stringValue = String(Int(config.stackOffset))
+        stackStylePopup.selectItem(at: Config.StackStyle.allCases.firstIndex(of: config.stackStyle) ?? 0)
+        tabHeightField.stringValue = String(Int(config.tabHeight))
+        tabWidthField.stringValue = String(Int(config.tabWidth))
+        tabTitleField.stringValue = config.tabTitleFormat
         resizeStepField.stringValue = String(Int(config.resizeStep))
         stackNarrowField.stringValue = String(Int(config.stackScreensNarrowerThan))
         on(switcherThumbsSwitch, config.switcherThumbnails)
@@ -942,6 +962,10 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.hideApps = isOn(hideAppsSwitch)
         config.debugLog = isOn(debugLogSwitch)
         config.stackOffset = number(stackOffsetField, or: defaults.stackOffset)
+        if let raw = stackStylePopup.selectedItem?.representedObject as? String, let st = Config.StackStyle(rawValue: raw) { config.stackStyle = st }
+        config.tabHeight = max(16, number(tabHeightField, or: defaults.tabHeight))
+        config.tabWidth = max(60, number(tabWidthField, or: defaults.tabWidth))
+        config.tabTitleFormat = tabTitleField.stringValue.isEmpty ? defaults.tabTitleFormat : tabTitleField.stringValue
         config.resizeStep = max(1, number(resizeStepField, or: defaults.resizeStep))
         config.stackScreensNarrowerThan = number(stackNarrowField, or: defaults.stackScreensNarrowerThan)
         config.switcherThumbnails = isOn(switcherThumbsSwitch)

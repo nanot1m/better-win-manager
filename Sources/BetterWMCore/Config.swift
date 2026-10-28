@@ -31,6 +31,22 @@ public struct Config {
     public var tileExistingOnStart: Bool = true
     /// Stacked mode: horizontal shift between cascaded windows, in points.
     public var stackOffset: CGFloat = 48
+    /// How a stacked screen looks: a cascade, or every window full size behind a row of tabs.
+    public enum StackStyle: String, CaseIterable {
+        case cascade, tabsTop, tabsLeft
+        public var title: String {
+            switch self {
+            case .cascade: return "Cascade"
+            case .tabsTop: return "Tabs on top"
+            case .tabsLeft: return "Tabs on the left"
+            }
+        }
+    }
+    public var stackStyle: StackStyle = .cascade
+    public var tabHeight: CGFloat = 30
+    public var tabWidth: CGFloat = 180
+    /// Tab label; {app} and {title} are replaced.
+    public var tabTitleFormat: String = "{app} — {title}"
     /// How much the grow and shrink actions change a window, in points.
     public var resizeStep: CGFloat = 40
     /// Screens narrower than this start in stacked mode (0 = never). Handy for a laptop panel next to a big display.
@@ -247,6 +263,12 @@ public struct Config {
         # shift so the ones behind stay visible; screens narrower than the threshold start stacked (0 = never).
         stackOffset = \(num(stackOffset))
         stackScreensNarrowerThan = \(num(stackScreensNarrowerThan))
+        # Stacked look: cascade, tabsTop or tabsLeft. Tabs take tabHeight (top) or tabWidth (left) points and
+        # show tabTitleFormat, where {app} and {title} are replaced.
+        stackStyle = \(stackStyle.rawValue)
+        tabHeight = \(num(tabHeight))
+        tabWidth = \(num(tabWidth))
+        tabTitleFormat = \(tabTitleFormat)
         # How much the grow and shrink actions change the focused window, in points.
         resizeStep = \(num(resizeStep))
 
@@ -392,6 +414,10 @@ public struct Config {
             case "restoreLayouts": cfg.restoreLayouts = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "hideApps": cfg.hideApps = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "stackOffset": cfg.stackOffset = Double(value).map { CGFloat($0) } ?? cfg.stackOffset
+            case "stackStyle": cfg.stackStyle = StackStyle(rawValue: value) ?? cfg.stackStyle
+            case "tabHeight": cfg.tabHeight = Double(value).map { CGFloat($0) } ?? cfg.tabHeight
+            case "tabWidth": cfg.tabWidth = Double(value).map { CGFloat($0) } ?? cfg.tabWidth
+            case "tabTitleFormat": cfg.tabTitleFormat = value
             case "resizeStep": cfg.resizeStep = Double(value).map { CGFloat($0) } ?? cfg.resizeStep
             case "stackScreensNarrowerThan": cfg.stackScreensNarrowerThan = Double(value).map { CGFloat($0) } ?? cfg.stackScreensNarrowerThan
             case "animateLayout": break  // removed: Accessibility-driven frame animation was too laggy

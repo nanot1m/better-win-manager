@@ -291,6 +291,28 @@ struct ReconcilerTests {
         expect(DragRules.outcome(moved: true, travel: 300, before: slot, after: slot, alt: false) == .init(rememberFloating: true), #function, #line)
     }
 
+    func testTabbedStackFramesAndStrip() {
+        var c = config
+        c.stackStyle = .tabsTop
+        c.tabHeight = 30
+        var g = Grid()
+        g.setMode(.stacked)
+        g.columns = [Column([1]), Column([2])]
+        let top = GridGeometry(grid: g, area: area, config: c)
+        let frames = Dictionary(uniqueKeysWithValues: top.windowFrames())
+        expect(frames[1] == frames[2] && frames[1]?.minY == 30 && frames[1]?.height == area.height - 30, #function, #line)
+        expect(top.tabStripFrame() == CGRect(x: 0, y: 0, width: area.width, height: 30), #function, #line)
+        c.stackStyle = .tabsLeft
+        c.tabWidth = 180
+        let left = GridGeometry(grid: g, area: area, config: c)
+        expect(left.windowFrames().first?.1 == CGRect(x: 180, y: 0, width: area.width - 180, height: area.height), #function, #line)
+        expect(left.tabStripFrame() == CGRect(x: 0, y: 0, width: 180, height: area.height), #function, #line)
+        // Dropping along the strip picks the deck position; a cascade keeps its strip-less geometry.
+        expect(left.zone(at: CGPoint(x: 90, y: area.height - 1), dragging: nil)?.0 == .newColumn(index: 2), #function, #line)
+        c.stackStyle = .cascade
+        expect(GridGeometry(grid: g, area: area, config: c).tabStripFrame() == nil, #function, #line)
+    }
+
     func testEdgeMoveCyclesWidth() {
         var g = Grid()
         g.columns = [Column([1]), Column([2])]
@@ -672,6 +694,7 @@ let tests: [(String, () -> Void)] = [
     ("savedLayoutRoundTripAndMatching", t.testSavedLayoutRoundTripAndMatching),
     ("restoreFallsBackToNearestFrame", t.testRestoreFallsBackToNearestFrame),
     ("edgeMoveCyclesWidth", t.testEdgeMoveCyclesWidth),
+    ("tabbedStackFramesAndStrip", t.testTabbedStackFramesAndStrip),
     ("dragEndRules", t.testDragEndRules),
     ("resizeByDeltaMovesBoundaries", t.testResizeByDeltaMovesBoundaries),
     ("configV1Migration", t.testConfigV1Migration),

@@ -327,10 +327,30 @@ public struct GridGeometry {
         return out
     }
 
+    /// The strip the tabs occupy on a stacked screen, or nil for a cascade (and for other layouts).
+    public func tabStripFrame() -> CGRect? {
+        guard grid.mode == .stacked else { return nil }
+        switch config.stackStyle {
+        case .cascade: return nil
+        case .tabsTop: return CGRect(x: inner.minX, y: inner.minY, width: inner.width, height: config.tabHeight)
+        case .tabsLeft: return CGRect(x: inner.minX, y: inner.minY, width: config.tabWidth, height: inner.height)
+        }
+    }
+
+    /// Tabs: every window fills what the strip leaves.
+    private var tabbedArea: CGRect {
+        switch config.stackStyle {
+        case .cascade: return inner
+        case .tabsTop: return CGRect(x: inner.minX, y: inner.minY + config.tabHeight, width: inner.width, height: inner.height - config.tabHeight)
+        case .tabsLeft: return CGRect(x: inner.minX + config.tabWidth, y: inner.minY, width: inner.width - config.tabWidth, height: inner.height)
+        }
+    }
+
     /// Cascade: every window as large as the screen allows, shifted right by `stackOffset` per position.
     private func stackedFrames() -> [(WindowID, CGRect)] {
         let ws = grid.windows
         guard !ws.isEmpty else { return [] }
+        if config.stackStyle != .cascade { return ws.map { ($0, tabbedArea) } }
         let n = CGFloat(ws.count)
         let offset = min(config.stackOffset, inner.width / max(1, n) / 2)
         let width = inner.width - offset * (n - 1)
@@ -405,8 +425,13 @@ public struct GridGeometry {
     /// Stacked: the deck position under the cursor, by the visible left strips; dropping past them appends.
     private func stackedZone(at p: CGPoint, dragging dragged: WindowID?) -> (DropZone, CGRect)? {
         let others = grid.windows.filter { $0 != dragged }
-        guard !others.isEmpty else { return (.newColumn(index: 0), inner) }
+        guard !others.isEmpty else { return (.newColumn(index: 0), tabbedArea) }
         let n = CGFloat(others.count)
+        if config.stackStyle != .cascade {
+            // The deck position follows where along the strip the window is dropped.
+            let along = config.stackStyle == .tabsTop ? (p.x - inner.minX) / max(1, inner.width) : (p.y - inner.minY) / max(1, inner.height)
+            return (.newColumn(index: min(others.count, max(0, Int(along * (n + 1))))), tabbedArea)
+        }
         let offset = min(config.stackOffset, inner.width / max(1, n + 1) / 2)
         let index = min(others.count, Int((p.x - inner.minX) / max(1, offset)))
         let width = inner.width - offset * n

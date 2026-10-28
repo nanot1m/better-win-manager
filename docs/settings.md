@@ -25,6 +25,9 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `hideApps` | true | Hide an app whose windows are all on other desktops; off parks every window in the screen corner instead, keeping them on screen for live previews |
 | `dragModifiers` | alt | Keys held while dragging to tile: `cmd`, `alt`, `ctrl`, `shift` joined with `+` |
 | `stackOffset` | 48 | Horizontal shift between cascaded windows in stacked layout |
+| `stackStyle` | cascade | How a stacked screen looks: `cascade`, `tabsTop` (every window full size under a row of tabs) or `tabsLeft` (tabs down the left edge) |
+| `tabHeight` / `tabWidth` | 30 / 180 | Size of the tab strip for `tabsTop` / `tabsLeft`; the windows get the rest |
+| `tabTitleFormat` | `{app} — {title}` | Tab label; `{app}` and `{title}` are replaced |
 | `resizeStep` | 40 | Points the `grow` / `shrink` actions resize the focused window by |
 | `stackScreensNarrowerThan` | 0 | Screens narrower than this start in stacked layout; 0 never |
 | `ignoreApps` | System Settings, Calculator, Activity Monitor, Installer, Passwords, App Store, 1Password, Karabiner settings and about twenty other utilities | Bundle identifiers never tiled automatically; dragging them into a column still works |

@@ -586,6 +586,7 @@ final class WindowManager {
         focusRing.isTiled = { [unowned self] w in self.isTiled(w) }
         focusRing.isTiledID = { [unowned self] id in self.state.isTiled(id) }
         focusRing.focusedWindow = { [unowned self] in self.system.focused }
+        focusRing.ringless = { [unowned self] id in self.inTabbedStack(id) }
         focusRing.onReorder = { [unowned self] in self.stackHandles() }
         if config.restoreLayouts, let data = try? Data(contentsOf: Config.statePath),
            let layout = try? JSONDecoder().decode(SavedLayout.self, from: data) {
@@ -1021,6 +1022,7 @@ final class WindowManager {
 
     private func refreshChrome() {
         refreshHandles()
+        refreshTabStrips()
         focusRing.update()
         stackHandles()
     }
@@ -1442,6 +1444,39 @@ final class WindowManager {
     func describe(_ id: WindowID) -> String { system.axWindow(id).map(describe) ?? "#\(id)" }
 
     // MARK: Gap handles
+
+    /// Whether a window sits in a stacked grid drawn as tabs, where the active tab marks focus.
+    private func inTabbedStack(_ id: WindowID) -> Bool {
+        guard config.stackStyle != .cascade, let space = state.space(containing: id) else { return false }
+        return state.grid(for: space).mode == .stacked
+    }
+
+    private var tabStrips: [TabStripWindow] = []
+    private func refreshTabStrips() {
+        var needed: [(CGRect, [TabStripWindow.Item], Bool)] = []
+        if config.stackStyle != .cascade {
+            for (space, geo) in activeGeometries() {
+                guard let frame = geo.tabStripFrame() else { continue }
+                let items = state.grid(for: space).windows.compactMap { id -> TabStripWindow.Item? in
+                    guard let pid = system.pid(of: id) else { return nil }
+                    return TabStripWindow.Item(id: id, app: NSRunningApplication(processIdentifier: pid)?.localizedName ?? "",
+                                               title: system.axWindow(id)?.title ?? "")
+                }
+                needed.append((frame, items, config.stackStyle == .tabsLeft))
+            }
+        }
+        while tabStrips.count < needed.count {
+            let s = TabStripWindow()
+            s.onSelect = { [weak self] id in self?.system.execute([.raise(id)]) }
+            tabStrips.append(s)
+        }
+        let focused = focusRing.currentWindowID ?? system.focused?.windowID
+        for (i, s) in tabStrips.enumerated() {
+            guard i < needed.count else { s.hide(); continue }
+            let (frame, items, vertical) = needed[i]
+            s.show(frame: frame, items: items, focused: focused, vertical: vertical, config: config)
+        }
+    }
 
     private func refreshHandles() {
         var needed: [(SpaceID, Handle, CGRect)] = []
