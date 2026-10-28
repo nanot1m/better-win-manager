@@ -19,8 +19,9 @@ final class TabStripWindow {
     var isVisible: Bool { panel.isVisible }
 
     init() {
-        // Above the focus ring, like the bar: the ring's top edge would otherwise draw over the tabs' bottoms.
-        panel = .overlay(level: NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1))
+        // Behind every app window: the strip lives in the area the layout keeps free, and a window carried over
+        // it stays on top.
+        panel = .overlay(level: .normal)
         panel.contentView = view
     }
 
@@ -28,7 +29,7 @@ final class TabStripWindow {
     func show(frame: CGRect, items: [Item], focused: WindowID?, vertical: Bool, config: Config) {
         panel.setFrame(frame.toCocoa(), display: false)
         view.configure(items: items, focused: focused, vertical: vertical, config: config)
-        if !panel.isVisible { panel.orderFrontRegardless() }
+        if !panel.isVisible { panel.orderBack(nil) }
     }
 
     func hide() { panel.orderOut(nil) }
