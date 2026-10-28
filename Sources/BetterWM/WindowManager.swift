@@ -661,6 +661,9 @@ final class WindowManager {
         axObserver = WindowObserver(onNewWindow: { [weak self] _ in self?.tick() },
                                     onFocusChange: { [weak self] in
                                         self?.system.refreshFocused {
+                                            // Focus reached a hidden window of a tabbed stack (⌘Tab, a click in the
+                                            // switcher): bring it in now rather than on the next pass.
+                                            if let self, let id = self.system.focused.flatMap(self.id) { self.bringForwardInTabbedStack(id, raise: false) }
                                             self?.followFocusedWindowsWorkspace()
                                             self?.refanStackedScreens()
                                             self?.scheduleFocusFollow()
@@ -1445,6 +1448,24 @@ final class WindowManager {
 
     // MARK: Gap handles
 
+    /// A window of a tabbed stack that is about to show waits past the corner; move it onto its frame before (or
+    /// right as) it comes to the front, so it never flashes at the corner while the layout pass catches up.
+    private func bringForwardInTabbedStack(_ id: WindowID, raise: Bool) {
+        guard config.stackStyle != .cascade, let space = state.space(containing: id),
+              let screen = system.screens().first(where: { $0.space == space }) else {
+            if raise { system.execute([.raise(id)]) }
+            return
+        }
+        let grid = state.grid(for: space)
+        guard grid.mode == .stacked, let frame = reconciler.geometry(grid, screen, front: id).frame(of: id) else {
+            if raise { system.execute([.raise(id)]) }
+            return
+        }
+        // Behind the current front at the same frame, then raised: the swap is a single frame.
+        system.execute(raise ? [.setFrame(id, frame), .raise(id)] : [.setFrame(id, frame)])
+        focusRing.show(windowID: id, frame: frame)
+    }
+
     private var tabStrips: [TabStripWindow] = []
     private func refreshTabStrips() {
         var needed: [(CGRect, [TabStripWindow.Item], TabStripWindow.Side)] = []
@@ -1461,7 +1482,7 @@ final class WindowManager {
         }
         while tabStrips.count < needed.count {
             let s = TabStripWindow()
-            s.onSelect = { [weak self] id in self?.system.execute([.raise(id)]) }
+            s.onSelect = { [weak self] id in self?.bringForwardInTabbedStack(id, raise: true) }
             tabStrips.append(s)
         }
         let focused = focusRing.currentWindowID ?? system.focused?.windowID

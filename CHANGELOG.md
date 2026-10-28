@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [Unreleased]
+
+### Fixed
+- Switching windows in a tabbed stack flashed: the incoming window appeared at the screen corner until the layout pass moved it in. It is now moved onto its frame as it comes forward, whether by a tab click, ⌘Tab or the switcher.
+
 ## [0.24.1] - 2026-10-28
 
 ### Fixed
