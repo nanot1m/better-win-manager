@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [Unreleased]
+
+### Changed
+- README, docs and the landing page describe signed, notarized releases: no quarantine step, Accessibility survives updates.
+
 ## [0.25.2] - 2026-10-28
 
 ### Fixed

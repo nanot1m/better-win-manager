@@ -2,11 +2,11 @@
 
 ## The app will not open
 
-Releases are ad-hoc signed. Gatekeeper refuses the first launch of a downloaded copy until you clear the quarantine flag (`xattr -dr com.apple.quarantine /Applications/BetterWM.app`) or right-click the app and choose Open. Builds from `make install` are not quarantined.
+Releases since 0.25.2 are signed with a Developer ID and notarized; Gatekeeper opens them. An older ad-hoc signed release refuses the first launch of a downloaded copy until you clear the quarantine flag (`xattr -dr com.apple.quarantine /Applications/BetterWM.app`) or right-click the app and choose Open. Builds from `make install` are ad-hoc signed but not quarantined.
 
 ## Nothing tiles, or windows do not move
 
-Accessibility permission is missing or was granted to an older release. Open System Settings › Privacy & Security › Accessibility, remove any stale BetterWM entry, add the current one, and relaunch. Each release counts as a new app because the signature is ad-hoc.
+Accessibility permission is missing, or was granted to an ad-hoc signed build (a release before 0.25.2, or one from `make install`), which macOS treats as a different app from a signed release. Open System Settings › Privacy & Security › Accessibility, remove any stale BetterWM entry, add the current one, and relaunch. Signed releases keep the permission across updates.
 
 ## A hotkey does nothing
 

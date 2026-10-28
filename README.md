@@ -22,22 +22,15 @@ The [docs](docs/README.md) folder covers everything in depth: [getting started](
 
 ```sh
 brew install --cask nanot1m/tap/betterwm
-xattr -dr com.apple.quarantine /Applications/BetterWM.app
 ```
 
-The second line clears Gatekeeper's block on the ad-hoc signed app (see below); current Homebrew no longer offers `--no-quarantine`. The cask lives in [nanot1m/homebrew-tap](https://github.com/nanot1m/homebrew-tap) and is updated by the release workflow.
+The cask lives in [nanot1m/homebrew-tap](https://github.com/nanot1m/homebrew-tap) and is updated by the release workflow.
 
 ### From a release
 
 Download `BetterWM-x.y.z.zip` from [Releases](https://github.com/nanot1m/better-win-manager/releases), unzip, and move `BetterWM.app` to Applications.
 
-Releases are ad-hoc signed, not notarized, so Gatekeeper blocks the first launch. Either right-click the app and choose Open, or clear the quarantine flag:
-
-```sh
-xattr -dr com.apple.quarantine /Applications/BetterWM.app
-```
-
-Grant Accessibility access when prompted (System Settings → Privacy & Security → Accessibility), then relaunch. Because the signature is ad-hoc, macOS treats each release as a new app and asks for Accessibility again after updating.
+Releases are signed with a Developer ID and notarized, so the app opens without a Gatekeeper warning. Grant Accessibility access when prompted (System Settings → Privacy & Security → Accessibility), then relaunch; the permission survives updates. The app checks for new releases once a day and can install them itself (Settings › Updates).
 
 ### From source
 
@@ -150,7 +143,7 @@ Placement strategies:
 swift build
 .build/debug/BetterWM --settings                       # open Settings on launch
 .build/debug/BetterWM --snapshot-settings /tmp/s.png   # render each Settings tab to PNG
-make zip                                               # dist/BetterWM-<version>.zip, ad-hoc signed
+make zip                                               # dist/BetterWM-<version>.zip, ad-hoc signed (releases are signed in CI)
 swift run CoreTests                                    # reconciler tests (plain executable; CLT has no XCTest)
 make run                                               # debug build as a signed .app (needed for Location Services)
 make demo                                              # record demo/demo.txt to dist/demo.mov (+ .mp4 with ffmpeg)

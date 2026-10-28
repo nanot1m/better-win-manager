@@ -6,10 +6,9 @@ Homebrew:
 
 ```sh
 brew install --cask nanot1m/tap/betterwm
-xattr -dr com.apple.quarantine /Applications/BetterWM.app
 ```
 
-Or download `BetterWM-x.y.z.zip` from [Releases](https://github.com/nanot1m/better-win-manager/releases), unzip, move `BetterWM.app` to Applications, and run the same `xattr` line. Releases are ad-hoc signed, not notarized, so without it Gatekeeper refuses the first launch; right-clicking the app and choosing Open once also works.
+Or download `BetterWM-x.y.z.zip` from [Releases](https://github.com/nanot1m/better-win-manager/releases), unzip, and move `BetterWM.app` to Applications. Releases are signed with a Developer ID and notarized, so macOS opens them like any other app. Updates: the app checks once a day and offers new releases; Settings › Updates can install them automatically.
 
 From source, with Command Line Tools only (no Xcode): `make install` builds, bundles, signs and copies to Applications.
 
@@ -22,8 +21,6 @@ From source, with Command Line Tools only (no Xcode): `make install` builds, bun
 
 On first launch, while Accessibility is missing, a welcome window lists both permissions with a button to the right System Settings pane each; it notices when a permission is granted, no relaunch needed. It is available later from the menu as Permissions…
 | Location Services | Weather for your current position | Optional; set a fixed `barWeatherLocation` instead |
-
-Because the signature is ad-hoc, macOS treats every release as a new app and asks for Accessibility again after each update. Grant it and relaunch.
 
 ## The first five minutes
 
