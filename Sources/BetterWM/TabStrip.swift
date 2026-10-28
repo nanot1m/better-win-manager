@@ -89,7 +89,8 @@ private final class TabStripView: NSView {
             guard i < items.count else { continue }
             let item = items[i]
             let active = item.id == focused
-            if active { addSubview(t, positioned: .above, relativeTo: nil) }
+            // Re-adding a view that is already frontmost drops a frame; only move it when something is above it.
+            if active, subviews.last !== t { addSubview(t, positioned: .above, relativeTo: nil) }
             t.configure(title: BarView.formatTitle(config.tabTitleFormat, app: item.app, title: item.title,
                                                    color: active ? accent.contrastingText : .white),
                         active: active, accent: accent, side: side)
