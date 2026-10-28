@@ -61,9 +61,12 @@ public struct Reconciler {
         self.enabled = enabled
     }
 
-    public func geometry(_ grid: Grid, _ screen: ScreenInfo) -> GridGeometry {
-        GridGeometry(grid: grid, area: screen.area, config: config)
+    public func geometry(_ grid: Grid, _ screen: ScreenInfo, front: WindowID? = nil) -> GridGeometry {
+        GridGeometry(grid: grid, area: screen.area, config: config, front: front)
     }
+
+    /// The frontmost window of `grid` in `snapshot`, whose windows are front to back.
+    func front(of grid: Grid, in snapshot: Snapshot) -> WindowID? { snapshot.windows.first { grid.contains($0.id) }?.id }
 
     public func isIgnored(_ w: WindowInfo) -> Bool {
         if let id = w.bundleID, config.ignoreApps.contains(id) { return true }
@@ -111,7 +114,7 @@ public struct Reconciler {
             // Minimum sizes: a window still larger than the frame we asked for refused to shrink; distribute space
             // around it. Only once it had time to comply and did not change at all: a window passing through a
             // larger frame (leaving fullscreen, mid-resize) has no such minimum.
-            let geo = geometry(grid, screen)
+            let geo = geometry(grid, screen, front: front(of: grid, in: snapshot))
             for (w, target) in geo.windowFrames() {
                 guard !snapshot.away.contains(w), let actual = snapshot.window(w)?.frame, state.requested[w] == target else { continue }
                 if actual.approximatelyEquals(target, tolerance: 0.75) { state.attempts[w] = nil; continue }
@@ -153,7 +156,7 @@ public struct Reconciler {
     /// Every tiled window on an active screen with its slot and its real frame.
     func slots(_ state: DesiredState, _ snapshot: Snapshot) -> [(window: WindowID, target: CGRect, actual: CGRect)] {
         snapshot.screens.flatMap { screen in
-            geometry(state.grid(for: screen.space), screen).windowFrames().compactMap { w, target in
+            geometry(state.grid(for: screen.space), screen, front: front(of: state.grid(for: screen.space), in: snapshot)).windowFrames().compactMap { w, target in
                 snapshot.away.contains(w) ? nil : snapshot.window(w).map { (w, target, $0.frame) }
             }
         }

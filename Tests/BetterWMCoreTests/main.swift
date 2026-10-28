@@ -302,6 +302,9 @@ struct ReconcilerTests {
         let frames = Dictionary(uniqueKeysWithValues: top.windowFrames())
         expect(frames[1] == frames[2] && frames[1]?.minY == 30 && frames[1]?.height == area.height - 30, #function, #line)
         expect(top.tabStripFrame() == CGRect(x: 0, y: 0, width: area.width, height: 30), #function, #line)
+        // With a front window the others wait past the corner, two points on screen, at full size.
+        let fronted = Dictionary(uniqueKeysWithValues: GridGeometry(grid: g, area: area, config: c, front: 2).windowFrames())
+        expect(fronted[2] == frames[2] && fronted[1]?.origin == CGPoint(x: area.maxX - 2, y: area.maxY - 2) && fronted[1]?.size == frames[1]?.size, #function, #line)
         c.stackStyle = .tabsLeft
         c.tabWidth = 180
         let left = GridGeometry(grid: g, area: area, config: c)

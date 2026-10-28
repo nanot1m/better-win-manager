@@ -266,11 +266,15 @@ public struct GridGeometry {
     public let grid: Grid
     public let area: CGRect
     public let config: Config
+    /// The window in front of a tabbed stack; the others are kept off screen behind the corner. Nil places every
+    /// window of the stack at its full frame (previews, drop zones).
+    public let front: WindowID?
 
-    public init(grid: Grid, area: CGRect, config: Config) {
+    public init(grid: Grid, area: CGRect, config: Config, front: WindowID? = nil) {
         self.grid = grid
         self.area = area
         self.config = config
+        self.front = front
     }
 
     public var inner: CGRect { area.insetBy(dx: config.outerGap, dy: config.outerGap) }
@@ -350,7 +354,13 @@ public struct GridGeometry {
     private func stackedFrames() -> [(WindowID, CGRect)] {
         let ws = grid.windows
         guard !ws.isEmpty else { return [] }
-        if config.stackStyle != .cascade { return ws.map { ($0, tabbedArea) } }
+        if config.stackStyle != .cascade {
+            // Only the front window shows; the rest wait past the corner with two points on screen, like parked
+            // windows, so a tab click brings one in at full size with no resize.
+            guard let front, ws.contains(front) else { return ws.map { ($0, tabbedArea) } }
+            let hidden = CGRect(x: area.maxX - 2, y: area.maxY - 2, width: tabbedArea.width, height: tabbedArea.height)
+            return ws.map { ($0, $0 == front ? tabbedArea : hidden) }
+        }
         let n = CGFloat(ws.count)
         let offset = min(config.stackOffset, inner.width / max(1, n) / 2)
         let width = inner.width - offset * (n - 1)

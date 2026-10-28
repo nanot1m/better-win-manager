@@ -4,6 +4,11 @@ All notable changes to BetterWM. The format follows [Keep a Changelog](https://k
 
 Config (`config.conf`) and layout state (`state.json`) are versioned and migrated on load, so upgrading never loses settings or layouts.
 
+## [Unreleased]
+
+### Changed
+- In a tabbed stack only the front window is on screen; the others wait past the screen corner at full size, so a tab click brings one in without a resize and nothing peeks out from behind.
+
 ## [0.22.0] - 2026-10-28
 
 ### Added
