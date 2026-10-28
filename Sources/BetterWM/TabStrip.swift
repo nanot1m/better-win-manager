@@ -87,7 +87,7 @@ private final class TabStripView: NSView {
 
     /// Tabs share the strip, with a cap so a lone tab does not span the screen; the active one stands proud by a hair.
     private func layoutTabs() {
-        let n = CGFloat(max(1, items.count)), gap: CGFloat = 4, pad: CGFloat = 6
+        let n = CGFloat(max(1, items.count)), gap: CGFloat = 4, pad: CGFloat = 16
         if vertical {
             let h = min(30, (bounds.height - pad * 2 - gap * (n - 1)) / n)
             for (i, t) in tabs.enumerated() where i < items.count {
@@ -157,13 +157,13 @@ private final class TabView: NSView {
             path.addArc(tangent1End: CGPoint(x: b.minX, y: b.maxY), tangent2End: CGPoint(x: b.minX + r, y: b.maxY), radius: r)
             path.addLine(to: CGPoint(x: b.maxX, y: b.maxY))
         } else {
-            // Flipped geometry: minY is the top edge.
-            path.move(to: CGPoint(x: b.minX, y: b.maxY))
-            path.addLine(to: CGPoint(x: b.minX, y: b.minY + r))
-            path.addArc(tangent1End: CGPoint(x: b.minX, y: b.minY), tangent2End: CGPoint(x: b.minX + r, y: b.minY), radius: r)
-            path.addLine(to: CGPoint(x: b.maxX - r, y: b.minY))
-            path.addArc(tangent1End: CGPoint(x: b.maxX, y: b.minY), tangent2End: CGPoint(x: b.maxX, y: b.minY + r), radius: r)
-            path.addLine(to: CGPoint(x: b.maxX, y: b.maxY))
+            // The mask layer is not geometry-flipped with the view: maxY is the top edge.
+            path.move(to: CGPoint(x: b.minX, y: b.minY))
+            path.addLine(to: CGPoint(x: b.minX, y: b.maxY - r))
+            path.addArc(tangent1End: CGPoint(x: b.minX, y: b.maxY), tangent2End: CGPoint(x: b.minX + r, y: b.maxY), radius: r)
+            path.addLine(to: CGPoint(x: b.maxX - r, y: b.maxY))
+            path.addArc(tangent1End: CGPoint(x: b.maxX, y: b.maxY), tangent2End: CGPoint(x: b.maxX, y: b.maxY - r), radius: r)
+            path.addLine(to: CGPoint(x: b.maxX, y: b.minY))
         }
         path.closeSubpath()
         shape.frame = b
