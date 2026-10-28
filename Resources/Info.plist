@@ -24,6 +24,8 @@
 	<string>13.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>BetterWM reads playback information from Music and Spotify to show the Now Playing widget.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Used only to show local weather in the status bar.</string>
 	<key>NSLocationUsageDescription</key>

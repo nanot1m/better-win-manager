@@ -2,7 +2,7 @@
 # Run only on a disposable macOS CI runner. Never enable shell tracing here.
 set -euo pipefail
 umask 077
-: "${APP_PATH:?}" "${ZIP_PATH:?}" "${APPLE_CERTIFICATE_P12_BASE64:?}" "${APPLE_CERTIFICATE_PASSWORD:?}"
+: "${RUNNER_TEMP:?Set RUNNER_TEMP to an existing writable temporary directory}" "${APP_PATH:?}" "${ZIP_PATH:?}" "${APPLE_CERTIFICATE_P12_BASE64:?}" "${APPLE_CERTIFICATE_PASSWORD:?}"
 : "${APPLE_SIGNING_IDENTITY:?}" "${APPLE_TEAM_ID:?}" "${ASC_KEY_ID:?}" "${ASC_ISSUER_ID:?}" "${ASC_PRIVATE_KEY_BASE64:?}"
 [[ "$APPLE_SIGNING_IDENTITY" == "Developer ID Application: "* ]] || { echo 'Expected a Developer ID Application identity'; exit 1; }
 secret_dir=$(mktemp -d "$RUNNER_TEMP/apple-release.XXXXXX")
@@ -28,7 +28,7 @@ security import "$secret_dir/certificate.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" >/dev/null
 security list-keychains -d user -s "$keychain" "${original_keychains[@]}"
 # These bundles contain one executable and no nested frameworks or helpers.
-codesign --force --timestamp --options runtime --keychain "$keychain" --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH"
+codesign --force --timestamp --options runtime --entitlements Resources/BetterWM.entitlements --keychain "$keychain" --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 codesign -d --verbose=4 "$APP_PATH" 2> "$secret_dir/signature.txt"
 grep -Fqx "TeamIdentifier=$APPLE_TEAM_ID" "$secret_dir/signature.txt"
