@@ -6,6 +6,8 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-10-29
+
 ### Added
 - `focusRingPadding` (Settings › Focus ring › Gap to the window): space between a window and its ring. Tiled windows shrink inside their slot by it; the ring stays on the slot's edge.
 
