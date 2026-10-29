@@ -98,7 +98,7 @@ extension AppDelegate {
             let side: TabStripWindow.Side = CommandLine.arguments.contains("--left") ? .left : CommandLine.arguments.contains("--right") ? .right : .top
             let top = TabStripWindow()
             let frame = side == .top ? CGRect(x: 16, y: 300, width: 1000, height: c.tabHeight) : CGRect(x: 16, y: 300, width: c.tabHeight, height: 700)
-            top.show(frame: frame, items: items, focused: 2, side: side, config: c)
+            top.show(frame: frame, items: items, focused: 2, inactive: false, side: side, config: c)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 top.snapshot(to: path)
                 top.hide()

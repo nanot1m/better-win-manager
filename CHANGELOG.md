@@ -10,6 +10,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 - `focusRingPadding` (Settings › Focus ring › Gap to the window): space between a window and its ring. Tiled windows shrink inside their slot by it; the ring stays on the slot's edge.
 
 ### Changed
+- When no window has focus (the desktop, an app without windows) the ring stays on the window focus will return to, in grey, and so does its tab; before, the ring vanished and a tabbed stack showed no active tab.
 - On a tabbed screen the tab strip sits above the focus ring: the layout leaves the ring's reach free between the strip and the window.
 
 ## [0.26.1] - 2026-10-29

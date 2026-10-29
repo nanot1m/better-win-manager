@@ -32,9 +32,10 @@ final class TabStripWindow {
     }
 
     /// `frame` in AX coordinates.
-    func show(frame: CGRect, items: [Item], focused: WindowID?, side: Side, config: Config) {
+    /// `inactive`: the front window has no focus; its tab is greyed like the ring.
+    func show(frame: CGRect, items: [Item], focused: WindowID?, inactive: Bool, side: Side, config: Config) {
         panel.setFrame(frame.toCocoa(), display: false)
-        view.configure(items: items, focused: focused, side: side, config: config)
+        view.configure(items: items, focused: focused, inactive: inactive, side: side, config: config)
         if !panel.isVisible { panel.orderBack(nil) }
     }
 
@@ -66,7 +67,7 @@ private final class TabStripView: NSView {
     override var isFlipped: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    func configure(items: [TabStripWindow.Item], focused: WindowID?, side: TabStripWindow.Side, config: Config) {
+    func configure(items: [TabStripWindow.Item], focused: WindowID?, inactive: Bool, side: TabStripWindow.Side, config: Config) {
         self.items = items
         self.side = side
         maxLength = config.tabWidth
@@ -84,7 +85,7 @@ private final class TabStripView: NSView {
             addSubview(t)
             tabs.append(t)
         }
-        let accent = config.ringTiledColor
+        let accent = inactive ? FocusRing.inactiveColor : config.ringTiledColor
         activeIndex = items.firstIndex { $0.id == focused }
         for (i, t) in tabs.enumerated() {
             t.isHidden = i >= items.count

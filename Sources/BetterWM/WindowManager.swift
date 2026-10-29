@@ -675,7 +675,7 @@ final class WindowManager {
                                                           object: nil, queue: .main) { [weak self] _ in
             // The ring follows the active app too: it hides while one of our own windows (Settings) is up and
             // comes back on the window focus returns to.
-            self?.system.refreshFocused { self?.focusRing.update(); self?.scheduleFocusFollow() }
+            self?.system.refreshFocused { self?.focusRing.update(); self?.refreshTabStrips(); self?.scheduleFocusFollow() }
         }
         // WindowServer reports a new front window before Accessibility does; stacked screens re-fan on it.
         wsEvents.onEvent = { [weak self] event, wid in
@@ -1542,7 +1542,7 @@ final class WindowManager {
         for (i, s) in tabStrips.enumerated() {
             guard i < needed.count else { s.hide(); continue }
             let (frame, items, side) = needed[i]
-            s.show(frame: frame, items: items, focused: focused, side: side, config: config)
+            s.show(frame: frame, items: items, focused: focused, inactive: focusRing.isInactive, side: side, config: config)
         }
     }
 

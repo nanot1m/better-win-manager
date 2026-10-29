@@ -12,6 +12,9 @@ final class FocusRing {
     /// The window the ring is on; the bar outlines it. Electron apps report no focused window for a moment
     /// after a switch, so readers prefer this over asking Accessibility again.
     var currentWindowID: CGWindowID? { current }
+    /// The ring is on the window focus will come back to, greyed: no window has focus right now.
+    private(set) var isInactive = false
+    static let inactiveColor = NSColor(white: 0.55, alpha: 1)
     /// Corner radii rarely change for a window's lifetime, so one measurement per window ID is enough.
     private var radiusCache: [CGWindowID: CGFloat] = [:]
     /// Floating windows get a ring only when `focusRingFloating` is set; skipping them keeps drags cheap.
@@ -147,6 +150,12 @@ final class FocusRing {
             // Electron apps briefly report no focused window while moving focus inside one; don't blink.
             if let id = current, let owner = CGWindowInfo.list(.optionOnScreenOnly).first(where: { $0.id == id }),
                NSWorkspace.shared.frontmostApplication?.processIdentifier == owner.pid { return }
+            // Nothing has focus (the desktop, an app without windows): keep the ring on the last window, greyed,
+            // so a tabbed stack still shows which window is in front.
+            if let id = current, CGWindowInfo.isOnScreen(id), let f = WindowServerEvents.bounds(of: id) {
+                present(id: id, frame: f, inactive: true)
+                return
+            }
             current = nil
             window.orderOut(nil)
             return
@@ -163,16 +172,17 @@ final class FocusRing {
         present(id: id, frame: WindowServerEvents.bounds(of: id) ?? w.frame, floating: !isTiled(w))
     }
 
-    private func present(id: CGWindowID, frame: CGRect, floating: Bool? = nil) {
+    private func present(id: CGWindowID, frame: CGRect, floating: Bool? = nil, inactive: Bool = false) {
         let floating = floating ?? !isTiledID(id)
         let wasHidden = !window.isVisible
-        let targetChanged = current != id
+        let targetChanged = current != id || isInactive != inactive
         if current != id {
             current = id
             events.watch([id])
-            onFocusChange?()
         }
-        let color = config.ringColor(floating: floating)
+        isInactive = inactive
+        if targetChanged { onFocusChange?() }
+        let color = inactive ? Self.inactiveColor : config.ringColor(floating: floating)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         layer.cornerRadius = radius(for: id) + pad
