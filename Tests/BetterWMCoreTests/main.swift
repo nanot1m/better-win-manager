@@ -298,6 +298,12 @@ struct ReconcilerTests {
         var g = Grid()
         g.setMode(.stacked)
         g.columns = [Column([1]), Column([2])]
+        // The ring reaches beyond the window; the strip sits above that reach.
+        c.focusRing = true
+        c.focusRingWidth = 6
+        c.focusRingPadding = 3
+        expect(GridGeometry(grid: g, area: area, config: c).windowFrames().first?.1.minY == 30 + 7, #function, #line)
+        c.focusRing = false
         let top = GridGeometry(grid: g, area: area, config: c)
         let frames = Dictionary(uniqueKeysWithValues: top.windowFrames())
         expect(frames[1] == frames[2] && frames[1]?.minY == 30 && frames[1]?.height == area.height - 30, #function, #line)

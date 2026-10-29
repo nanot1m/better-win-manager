@@ -88,6 +88,8 @@ public struct Config {
     public var focusRingWidth: CGFloat = 6
     /// Gap between the window's edge and the ring, in points.
     public var focusRingPadding: CGFloat = 0
+    /// How far the ring reaches beyond the window's edge; the layout keeps that much clear of the tab strip.
+    public var focusRingOutset: CGFloat { focusRing ? focusRingWidth / 2 + 1 + focusRingPadding : 0 }
     public var focusRingRadius: CGFloat = 24
     /// Measure each window's real corner radius once and match it; `focusRingRadius` is the fallback.
     public var focusRingAutoRadius: Bool = true

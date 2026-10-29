@@ -106,27 +106,7 @@ final class FocusRing {
         }
     }
 
-    private var pad: CGFloat { config.focusRingWidth / 2 + 1 + config.focusRingPadding }
-
-    /// Tab strips on screen, in AX coordinates: the ring is cut away under them, so the tabs sit on the window
-    /// with the ring running along its other sides.
-    var tabStripFrames: () -> [CGRect] = { [] }
-    private let mask = CAShapeLayer()
-
-    private func applyMask(ringFrame: CGRect) {
-        let strips = tabStripFrames().filter { $0.intersects(ringFrame) }
-        guard !strips.isEmpty else { layer.mask = nil; return }
-        let path = CGMutablePath()
-        path.addRect(CGRect(origin: .zero, size: ringFrame.size))
-        for s in strips {
-            let local = s.toCocoa().offsetBy(dx: -ringFrame.toCocoa().minX, dy: -ringFrame.toCocoa().minY)
-            path.addRect(local)
-        }
-        mask.fillRule = .evenOdd
-        mask.frame = CGRect(origin: .zero, size: ringFrame.size)
-        mask.path = path
-        layer.mask = mask
-    }
+    private var pad: CGFloat { config.focusRingOutset }
 
     /// Shows the ring for a window we are about to focus, at the frame it will have, without waiting for the
     /// focus notification. Used when switching workspaces so ring and windows appear in the same frame.
@@ -221,7 +201,6 @@ final class FocusRing {
     private func place(frame: CGRect) {
         let padded = frame.insetBy(dx: -pad, dy: -pad)
         let target = padded.toCocoa()
-        applyMask(ringFrame: padded)
         guard window.frame != target else { return }
         if window.frame.size == target.size, window.isVisible,
            WindowServerEvents.move(CGWindowID(window.windowNumber), to: padded.origin) {

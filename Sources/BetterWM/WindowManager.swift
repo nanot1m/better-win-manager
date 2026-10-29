@@ -611,7 +611,6 @@ final class WindowManager {
         focusRing.isTiled = { [unowned self] w in self.isTiled(w) }
         focusRing.isTiledID = { [unowned self] id in self.state.isTiled(id) }
         focusRing.focusedWindow = { [unowned self] in self.system.focused }
-        focusRing.tabStripFrames = { [unowned self] in self.tabStripFrames }
         focusRing.onReorder = { [unowned self] in self.stackHandles() }
         if config.restoreLayouts, let data = try? Data(contentsOf: Config.statePath),
            let layout = try? JSONDecoder().decode(SavedLayout.self, from: data) {
@@ -1518,7 +1517,6 @@ final class WindowManager {
     }
 
     private var tabStrips: [TabStripWindow] = []
-    private var tabStripFrames: [CGRect] = []
     private func refreshTabStrips() {
         var needed: [(CGRect, [TabStripWindow.Item], TabStripWindow.Side)] = []
         if config.stackStyle != .cascade {
@@ -1540,7 +1538,6 @@ final class WindowManager {
             s.onReorder = { [weak self] id, to in self?.reorderDeck(id, to: to) }
             tabStrips.append(s)
         }
-        tabStripFrames = needed.map(\.0)
         let focused = focusRing.currentWindowID ?? system.focused?.windowID
         for (i, s) in tabStrips.enumerated() {
             guard i < needed.count else { s.hide(); continue }

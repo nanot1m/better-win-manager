@@ -354,13 +354,14 @@ public struct GridGeometry {
         grid.mode == .stacked && config.stackStyle != .cascade && frame.minX == area.maxX - 2 && frame.minY == area.maxY - 2
     }
 
-    /// Tabs: every window fills what the strip leaves.
+    /// Tabs: every window fills what the strip leaves, plus room for the focus ring between the two.
     private var tabbedArea: CGRect {
+        let t = config.tabHeight + config.focusRingOutset
         switch config.stackStyle {
         case .cascade: return inner
-        case .tabsTop: return CGRect(x: inner.minX, y: inner.minY + config.tabHeight, width: inner.width, height: inner.height - config.tabHeight)
-        case .tabsLeft: return CGRect(x: inner.minX + config.tabHeight, y: inner.minY, width: inner.width - config.tabHeight, height: inner.height)
-        case .tabsRight: return CGRect(x: inner.minX, y: inner.minY, width: inner.width - config.tabHeight, height: inner.height)
+        case .tabsTop: return CGRect(x: inner.minX, y: inner.minY + t, width: inner.width, height: inner.height - t)
+        case .tabsLeft: return CGRect(x: inner.minX + t, y: inner.minY, width: inner.width - t, height: inner.height)
+        case .tabsRight: return CGRect(x: inner.minX, y: inner.minY, width: inner.width - t, height: inner.height)
         }
     }
 
