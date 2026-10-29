@@ -46,14 +46,14 @@ final class StatusBar {
         sound.onChange = { [weak self] in self?.refresh(); self?.soundPopover.refreshIfShown() }
         events.onEvent = { [weak self] event, _ in
             switch event {
-            case .frontChange, .spaceChange, .windowDestroy, .windowReorder: self?.refresh()
+            case .spaceChange: self?.stepAsideFromFullscreen(); self?.refresh()
+            case .frontChange, .windowDestroy, .windowReorder: self?.refresh()
             default: break
             }
         }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in self?.rebuild() }
-        // Entering fullscreen: hide before the first frame of the animation rather than at the next refresh.
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.windows.filter { !Spaces.isDesktop(Spaces.current(for: $0.targetScreen)) }.forEach { $0.orderOut(nil) }
+            self?.stepAsideFromFullscreen()
         }
         clock = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in self?.refresh() }
         inputSourceObserver = InputSource.observe { [weak self] in self?.refresh() }
@@ -96,6 +96,12 @@ final class StatusBar {
 
     /// Lights up one desktop's chip (on every bar showing it) while a dragged window is over it.
     func highlightDrop(_ desktop: Int?) { windows.forEach { $0.view.setDropTarget(desktop) } }
+
+    /// A screen switching to a fullscreen Space: hide at once, before the first frame of the animation; the
+    /// deferred refresh decides what comes back.
+    private func stepAsideFromFullscreen() {
+        windows.filter { !Spaces.isDesktop(Spaces.current(for: $0.targetScreen)) }.forEach { $0.orderOut(nil) }
+    }
 
     /// Show Desktop / Mission Control: step aside, come back when it ends.
     var hiddenForSystemReveal = false {

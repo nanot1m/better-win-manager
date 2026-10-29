@@ -637,13 +637,7 @@ final class WindowManager {
                                                           object: nil, queue: .main) { [weak self] _ in
             // The window list is still in flux while the slide animation runs, and macOS reports no end to it.
             guard let self else { return }
-            // A Space switch into fullscreen: our windows would ride along on top of the app for the first frames
-            // of the animation. Step aside at once; the tick after the switch brings back what belongs.
-            if NSScreen.screens.contains(where: { !Spaces.isDesktop(Spaces.current(for: $0)) }) {
-                self.tabStrips.forEach { $0.hide() }
-                self.handles.forEach { $0.orderOut(nil) }
-                self.focusRing.update()
-            }
+            self.stepAsideFromFullscreen()
             self.switching = true
             self.spaceSwitchGeneration += 1
             let generation = self.spaceSwitchGeneration
@@ -669,6 +663,7 @@ final class WindowManager {
             switch event {
             case .frontChange, .windowReorder: self?.refanStackedScreens()
             case .windowCreate, .windowDestroy: self?.scheduleTick()
+            case .spaceChange: self?.stepAsideFromFullscreen()
             default: break
             }
         }
@@ -1036,6 +1031,16 @@ final class WindowManager {
             return
         }
         for case let .setFrame(w, f) in commands where w == focused { focusRing.anticipate(windowID: focused, frame: f) }
+    }
+
+    /// A screen switching to a fullscreen Space: our windows would show over the app for the first frames of the
+    /// animation. WindowServer reports the switch before AppKit does; hide at once, the tick after brings back
+    /// what belongs.
+    private func stepAsideFromFullscreen() {
+        guard NSScreen.screens.contains(where: { !Spaces.isDesktop(Spaces.current(for: $0)) }) else { return }
+        tabStrips.forEach { $0.hide() }
+        handles.forEach { $0.orderOut(nil) }
+        focusRing.update()
     }
 
     private func refreshChrome() {
