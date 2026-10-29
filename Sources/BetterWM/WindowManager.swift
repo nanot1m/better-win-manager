@@ -1501,7 +1501,7 @@ final class WindowManager {
             for (space, geo) in activeGeometries() {
                 guard let frame = geo.tabStripFrame() else { continue }
                 // A fullscreen app on that screen covers everything; the strip would show through on top of it.
-                if let ws = VirtualWorkspaces.workspace(of: space), let s = screen(ofDesktop: ws), Spaces.isFullscreen(Spaces.current(for: s)) { continue }
+                if let ws = VirtualWorkspaces.workspace(of: space), let s = screen(ofDesktop: ws), !Spaces.isDesktop(Spaces.current(for: s)) { continue }
                 let items = state.grid(for: space).windows.compactMap { id -> TabStripWindow.Item? in
                     guard let pid = system.pid(of: id) else { return nil }
                     return TabStripWindow.Item(id: id, app: NSRunningApplication(processIdentifier: pid)?.localizedName ?? "",

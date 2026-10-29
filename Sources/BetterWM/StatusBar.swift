@@ -139,7 +139,8 @@ final class StatusBar {
                 self.sound.setOutputVolume(self.sound.state.outputVolume + Float(delta) * 0.03)
             }
             windows.append(w)
-            w.orderFrontRegardless()
+            // Entering fullscreen hides the menu bar, which lands here too: a fullscreen screen gets no bar.
+            if Spaces.isDesktop(Spaces.current(for: screen)) { w.orderFrontRegardless() }
         }
         refresh()
         onLayoutChange?()
