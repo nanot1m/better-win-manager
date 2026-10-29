@@ -448,6 +448,7 @@ struct ReconcilerTests {
 
     func testStackedModeGeometry() {
         var c = config
+        c.stackStyle = .cascade
         c.stackOffset = 50
         var g = Grid()
         g.columns = [Column([1, 2]), Column([3])]
@@ -467,6 +468,7 @@ struct ReconcilerTests {
 
     func testStackedDeckKeepsPositions() {
         var c = config
+        c.stackStyle = .cascade
         c.stackOffset = 50
         let r = Reconciler(config: c)
         var state = DesiredState()

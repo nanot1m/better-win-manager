@@ -43,7 +43,7 @@ public struct Config {
             }
         }
     }
-    public var stackStyle: StackStyle = .cascade
+    public var stackStyle: StackStyle = .tabsTop
     /// Thickness of the tab strip (height on top, width on the left; left tabs read sideways).
     public var tabHeight: CGFloat = 30
     /// Longest a single tab gets along the strip.
