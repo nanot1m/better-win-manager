@@ -248,11 +248,12 @@ final class BarWindow: NSPanel {
         hasShadow = false
         // Above app windows, like the menu bar it replaces: a floating or dragged window never covers it, and it is
         // a drop target. One step above the focus ring's level too, so a ring around a window right under the
-        // bar does not draw over it. Fullscreen Spaces hide it altogether.
+        // bar does not draw over it. Not a fullscreen auxiliary: macOS then never carries it into a fullscreen
+        // Space, not even for the first frames of the transition.
         level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
         acceptsMouseMovedEvents = true
         animationBehavior = .none
-        collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         contentView = view
     }
 

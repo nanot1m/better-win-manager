@@ -49,7 +49,7 @@ final class FocusRing {
         window.ignoresMouseEvents = true
         window.animationBehavior = .none
         // Bound to the current desktop so it slides away with it during a switch instead of floating over the transition.
-        window.collectionBehavior = [.moveToActiveSpace, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        window.collectionBehavior = [.moveToActiveSpace, .stationary, .ignoresCycle]
         let view = NSView()
         view.wantsLayer = true
         view.layer = layer
