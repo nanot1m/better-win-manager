@@ -74,6 +74,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var ringFloatingColor: NSColorWell!
     private var ringWidth: NSSlider!
     private var ringWidthLabel: NSTextField!
+    private var ringPadding: NSSlider!
+    private var ringPaddingLabel: NSTextField!
     private var ringRadius: NSSlider!
     private var ringRadiusLabel: NSTextField!
     private var ringAutoRadius: NSSwitch!
@@ -560,10 +562,13 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         ringWidth = NSSlider(value: 3, minValue: 1, maxValue: 12, target: self, action: #selector(ringSliderChanged(_:)))
         ringWidth.widthAnchor.constraint(equalToConstant: 220).isActive = true
         ringWidthLabel = NSTextField(labelWithString: "3 pt")
+        ringPadding = NSSlider(value: 0, minValue: 0, maxValue: 24, target: self, action: #selector(ringSliderChanged(_:)))
+        ringPadding.widthAnchor.constraint(equalToConstant: 220).isActive = true
+        ringPaddingLabel = NSTextField(labelWithString: "0 pt")
         ringRadius = NSSlider(value: 10, minValue: 0, maxValue: 30, target: self, action: #selector(ringSliderChanged(_:)))
         ringRadius.widthAnchor.constraint(equalToConstant: 220).isActive = true
         ringRadiusLabel = NSTextField(labelWithString: "10 pt")
-        for l in [ringWidthLabel!, ringRadiusLabel!] {
+        for l in [ringWidthLabel!, ringPaddingLabel!, ringRadiusLabel!] {
             l.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
             l.textColor = .secondaryLabelColor
             l.alignment = .right
@@ -581,6 +586,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             ]),
             group("Shape", [
                 row("Thickness", nil, [ringWidth, ringWidthLabel]),
+                row("Gap to the window", "Space between the window's edge and the ring.", [ringPadding, ringPaddingLabel]),
                 row("Match each window's corners", "Measures the window's own corner radius.", [ringAutoRadius]),
                 row("Fallback corner radius", "Used when a window's corners cannot be measured.", [ringRadius, ringRadiusLabel]),
             ]),
@@ -835,7 +841,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     @objc private func autoRadiusChanged() { ringRadius.isEnabled = ringAutoRadius.state == .off }
     @objc private func floatingColorModeChanged() { ringFloatingColor.isEnabled = ringFloatingMode.indexOfSelectedItem == 1 }
     @objc private func ringSliderChanged(_ s: NSSlider) {
-        (s === ringWidth ? ringWidthLabel : ringRadiusLabel)?.stringValue = "\(Int(s.doubleValue.rounded())) pt"
+        (s === ringWidth ? ringWidthLabel : s === ringPadding ? ringPaddingLabel : ringRadiusLabel)?.stringValue = "\(Int(s.doubleValue.rounded())) pt"
     }
     @objc private func barAppearanceChanged() {
         barBgColor.isEnabled = barBackgroundMode.indexOfSelectedItem == 1
@@ -921,10 +927,12 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         ringFloatingColor.color = config.ringColor(floating: true)
         floatingColorModeChanged()
         ringWidth.doubleValue = Double(config.focusRingWidth)
+        ringPadding.doubleValue = Double(config.focusRingPadding)
         ringRadius.doubleValue = Double(config.focusRingRadius)
         on(ringAutoRadius, config.focusRingAutoRadius)
         autoRadiusChanged()
         ringSliderChanged(ringWidth)
+        ringSliderChanged(ringPadding)
         ringSliderChanged(ringRadius)
         on(barSwitch, config.bar)
         barHeightField.stringValue = String(Int(config.barHeight))
@@ -1006,6 +1014,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.focusRingColor = ringColor.color.hexString
         config.focusRingFloatingColor = ringFloatingMode.indexOfSelectedItem == 0 ? "same" : ringFloatingColor.color.hexString
         config.focusRingWidth = CGFloat(ringWidth.doubleValue.rounded())
+        config.focusRingPadding = CGFloat(ringPadding.doubleValue.rounded())
         config.focusRingRadius = CGFloat(ringRadius.doubleValue.rounded())
         config.focusRingAutoRadius = isOn(ringAutoRadius)
         config.bar = isOn(barSwitch)

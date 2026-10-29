@@ -86,6 +86,8 @@ public struct Config {
     public var actionOverlay: Bool = false
     public var focusRingFloating: Bool = true
     public var focusRingWidth: CGFloat = 6
+    /// Gap between the window's edge and the ring, in points.
+    public var focusRingPadding: CGFloat = 0
     public var focusRingRadius: CGFloat = 24
     /// Measure each window's real corner radius once and match it; `focusRingRadius` is the fallback.
     public var focusRingAutoRadius: Bool = true
@@ -295,6 +297,8 @@ public struct Config {
         # Also ring floating (untiled) windows, not just tiled ones.
         focusRingFloating = \(focusRingFloating)
         focusRingWidth = \(num(focusRingWidth))
+        # Gap between the window and the ring.
+        focusRingPadding = \(num(focusRingPadding))
         # Match each window's own corner radius (measured once per window); the radius below is the fallback.
         focusRingAutoRadius = \(focusRingAutoRadius)
         focusRingRadius = \(num(focusRingRadius))
@@ -440,6 +444,7 @@ public struct Config {
             case "focusRingFloating": cfg.focusRingFloating = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRingStyle": break  // the glow style was removed in 0.12.1; accepted and ignored
             case "focusRingWidth": cfg.focusRingWidth = Double(value).map { CGFloat($0) } ?? cfg.focusRingWidth
+            case "focusRingPadding": cfg.focusRingPadding = Double(value).map { CGFloat($0) } ?? cfg.focusRingPadding
             case "focusRingAutoRadius": cfg.focusRingAutoRadius = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRingRadius": cfg.focusRingRadius = Double(value).map { CGFloat($0) } ?? cfg.focusRingRadius
             case "focusRingColor": cfg.focusRingColor = value

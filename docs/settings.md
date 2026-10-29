@@ -43,6 +43,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `focusRingColor` | FF9300 | Ring colour for tiled windows |
 | `focusRingFloatingColor` | 009193 | Ring colour for floating windows, or `same` |
 | `focusRingWidth` | 6 | Thickness |
+| `focusRingPadding` | 0 | Gap between the window and the ring |
 | `focusRingAutoRadius` | true | Measure each window's own corner radius |
 | `focusRingRadius` | 24 | Corner radius when measuring is not possible |
 

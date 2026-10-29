@@ -6,6 +6,12 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Added
+- `focusRingPadding` (Settings › Focus ring › Gap to the window): space between the window's edge and the ring.
+
+### Changed
+- On a tabbed screen the ring is cut away under the tab strip, so the tabs sit on the window and the ring runs along its other sides.
+
 ## [0.26.1] - 2026-10-29
 
 ### Changed
