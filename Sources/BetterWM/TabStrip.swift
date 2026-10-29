@@ -219,8 +219,9 @@ private final class TabView: NSView {
     private func layoutBody(animated: Bool) {
         let target: CGFloat = active ? 0 : hovering ? 2 : 4
         var f = bounds
+        // This view is not flipped: for a top strip the window is below, at minY.
         switch side {
-        case .top: f.origin.y += target
+        case .top: f.origin.y -= target
         case .left: f.origin.x += target
         case .right: f.origin.x -= target
         }
