@@ -98,15 +98,57 @@
   .step p { margin: 0; color: var(--muted); font-size: 15px; }
   .step pre { margin: 10px 0 0; background: #0f1116; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font: 13px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: #d6d8de; }
 
+
+  /* Tutorial */
+  .tutorial .wrap { display: grid; grid-template-columns: 1fr 1.5fr; gap: 40px; align-items: start; }
+  .tutorial .screen { margin: 0; max-width: none; position: sticky; top: 84px; }
+  .lesson { display: grid; gap: 10px; counter-reset: l; }
+  .lesson button { text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 14px 56px; position: relative; color: var(--text); cursor: pointer; font: inherit; transition: border-color .2s, background .2s; }
+  .lesson button::before { counter-increment: l; content: counter(l); position: absolute; left: 16px; top: 14px; width: 26px; height: 26px; border-radius: 50%; background: rgba(255,255,255,.08); color: var(--muted); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+  .lesson button.on { border-color: var(--accent); background: rgba(255,147,0,.07); }
+  .lesson button.on::before { background: var(--accent); color: #1a1205; }
+  .lesson h3 { margin: 0 0 4px; font-size: 16px; }
+  .lesson p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+  .lesson kbd, .setup kbd { font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; background: #0f1116; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; padding: 3px 6px; color: var(--text); white-space: nowrap; }
+  .tut .stage { overflow: hidden; }
+  .tut .w { position: absolute; transition: left .7s cubic-bezier(.2,.8,.2,1), top .7s cubic-bezier(.2,.8,.2,1), width .7s cubic-bezier(.2,.8,.2,1), height .7s cubic-bezier(.2,.8,.2,1), opacity .5s, outline-color .4s; outline: 4px solid transparent; outline-offset: 2px; }
+  .tut .w.a { left: 14%; top: 12%; width: 48%; height: 62%; outline-color: var(--teal); z-index: 2; }
+  .tut .w.b { left: 58%; top: 30%; width: 40%; height: 56%; opacity: 0; z-index: 1; }
+  .tut .zone { position: absolute; left: 50.5%; top: 12px; right: 12px; bottom: 12px; border: 2px dashed var(--accent); border-radius: 12px; background: rgba(255,147,0,.14); opacity: 0; transition: opacity .4s; }
+  .tut .cursor { position: absolute; left: 30%; top: 18%; width: 34px; height: 24px; border-radius: 6px; background: var(--accent); color: #1a1205; font: 700 13px/24px system-ui; text-align: center; opacity: 0; transition: left .7s cubic-bezier(.2,.8,.2,1), top .7s cubic-bezier(.2,.8,.2,1), opacity .3s; z-index: 5; }
+  .tut .tabs { position: absolute; left: 12px; right: 12px; top: 12px; height: 28px; display: flex; gap: 4px; padding: 0 10px; opacity: 0; transition: opacity .4s; z-index: 4; }
+  .tut .tab { flex: 0 1 180px; margin-top: 5px; border-radius: 8px 8px 0 0; background: rgba(255,255,255,.22); color: #fff; font: 600 11px/23px system-ui; padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: margin-top .25s, background .25s; }
+  .tut .tab.on { margin-top: 1px; line-height: 27px; background: var(--accent); color: #1a1205; }
+  /* 2: the window is carried onto the drop zone */
+  .tut.s2 .w.a { left: 50%; top: 16%; outline-color: var(--teal); }
+  .tut.s2 .zone, .tut.s2 .cursor { opacity: 1; }
+  .tut.s2 .cursor { left: 70%; top: 22%; }
+  /* 3: two columns */
+  .tut.s3 .w.a { left: 50.5%; top: 12px; width: calc(49.5% - 12px); height: calc(100% - 24px); outline-color: var(--accent); }
+  .tut.s3 .w.b { left: 12px; top: 12px; width: calc(49.5% - 22px); height: calc(100% - 24px); opacity: 1; }
+  /* 4 and 5: stacked, with tabs */
+  .tut.s4 .w, .tut.s5 .w { left: 12px; top: 40px; width: calc(100% - 24px); height: calc(100% - 52px); opacity: 1; }
+  .tut.s4 .tabs, .tut.s5 .tabs { opacity: 1; }
+  .tut.s4 .w.a { outline-color: var(--accent); z-index: 3; }
+  .tut.s5 .w.b { outline-color: var(--accent); z-index: 3; }
+  .tut.s5 .w.a { outline-color: transparent; }
+  .setup { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .setup-head { grid-column: 1 / -1; margin-top: 56px; }
+  .setup-head h2 { font-size: 26px; margin-bottom: 8px; }
+  .setup-head .sub { margin-bottom: 20px; }
+  .setup .card p { line-height: 1.55; }
+  .setup .path { display: block; margin-top: 10px; font-size: 13px; color: var(--text); }
+
   footer { margin-top: 110px; border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 14px; }
   footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 
   @media (max-width: 760px) {
     nav ul { display: none; }
-    .split { grid-template-columns: 1fr; }
+    .split, .tutorial .wrap, .setup { grid-template-columns: 1fr; }
+    .tutorial .screen { position: static; }
     .bar .right, .bar .title { display: none; }
   }
-  @media (prefers-reduced-motion: reduce) { .desk { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .desk, .tut .w, .tut .cursor, .tut .zone, .tut .tabs, .tut .tab { transition: none; } }
 </style>
 </head>
 <body>
@@ -114,6 +156,7 @@
   <div class="wrap">
     <a class="brand" href="#"><img class="logo" src="icon.png" alt="">BetterWM</a>
     <ul>
+      <li><a href="#tutorial">How it works</a></li>
       <li><a href="#features">Features</a></li>
       <li><a href="#keys">Hotkeys</a></li>
       <li><a href="#install">Install</a></li>
@@ -163,6 +206,46 @@
   </div>
 </header>
 
+<section id="tutorial" class="tutorial">
+  <div class="wrap">
+    <div>
+      <h2>How it works</h2>
+      <p class="sub">Two layouts cover everything: columns when you want to see windows side by side, a stack when one window at a time deserves the whole screen.</p>
+      <div class="lesson" id="lesson">
+        <button class="on"><h3>Windows start free</h3><p>Nothing happens on its own. A new window opens where its app puts it, and BetterWM only outlines it.</p></button>
+        <button><h3>Hold <kbd>⌥</kbd> and drag to tile</h3><p>Drop zones light up along the edges and between columns. Release over one and the window becomes a column.</p></button>
+        <button><h3>Columns share the screen</h3><p>Tile another window the same way, or press <kbd>⌃⌥T</kbd>. Drag the gap between columns to resize; <kbd>⌃⌥E</kbd> makes them equal again.</p></button>
+        <button><h3>Stack the screen with <kbd>⌃⌥S</kbd></h3><p>Every tiled window takes the whole screen, with a tab per window along the top. Pick a cascade or tabs on the left or right in Settings.</p></button>
+        <button><h3>Switch windows</h3><p>Click a tab, or press <kbd>⌃]</kbd> and <kbd>⌃[</kbd>. Drag tabs to reorder the stack. <kbd>⌃⌥S</kbd> again brings the columns back.</p></button>
+      </div>
+    </div>
+    <div class="screen tut" id="tut" aria-hidden="true">
+      <div class="bar">
+        <span class="chip on">1 <b style="background:#4285f4"></b><b style="background:#2bb3a3"></b></span>
+        <span class="chip">2 <b style="background:#f2994a"></b></span>
+        <span class="title" id="tutTitle">Code</span>
+        <span class="right"><span>EN</span><span>Thu 29 Oct&nbsp;&nbsp;17:40</span></span>
+      </div>
+      <div class="stage">
+        <div class="tabs"><span class="tab on" id="tabA">Code — better-win-manager</span><span class="tab" id="tabB">Safari — Apple</span></div>
+        <div class="zone"></div>
+        <div class="w b"><div class="t"><i></i><i></i><i></i><i></i><i></i></div></div>
+        <div class="w a"><div class="t"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+        <div class="cursor">⌥</div>
+      </div>
+    </div>
+    <div class="setup-head">
+      <h2>Set up macOS once</h2>
+      <p class="sub">BetterWM takes over what Mission Control did. Three settings keep the two from fighting.</p>
+    </div>
+    <div class="setup" style="grid-column: 1 / -1">
+      <div class="card"><div class="ico">▣</div><h3>Keep one native desktop</h3><p>BetterWM's desktops replace macOS Spaces: they switch instantly, keep their layouts, and follow their display. Extra native desktops only add a second, slower set of places for windows to hide.</p><span class="path">Mission Control: close every desktop but the first on each display.</span></div>
+      <div class="card"><div class="ico">⌃</div><h3>Free the Mission Control shortcuts</h3><p>macOS claims <kbd>⌃←</kbd> <kbd>⌃→</kbd> and <kbd>⌃1</kbd>–<kbd>⌃9</kbd> for its own desktops, so they never reach BetterWM until you turn them off.</p><span class="path">System Settings › Keyboard › Keyboard Shortcuts › Mission Control</span></div>
+      <div class="card"><div class="ico">⇆</div><h3>Hand over the gestures and F3</h3><p>Turn off the Mission Control swipe and let BetterWM's three- or four-finger swipe move between its desktops instead. The Mission Control key then opens BetterWM's overview.</p><span class="path">System Settings › Trackpad › More Gestures</span></div>
+    </div>
+  </div>
+</section>
+
 <section id="features">
   <div class="wrap">
     <h2>Everything a tiling manager needs, nothing it doesn't</h2>
@@ -208,7 +291,7 @@
       <div class="step"><h3>Install with Homebrew</h3><p>Or download the zip from the latest release and move the app to Applications.</p>
 <pre>brew install --cask nanot1m/tap/betterwm</pre></div>
       <div class="step"><h3>Grant Accessibility</h3><p>A welcome window links straight to the right System Settings pane. Screen Recording is optional and only adds window previews.</p></div>
-      <div class="step"><h3>Hold ⌥ and drag a window</h3><p>That's the whole tutorial. The <a href="https://github.com/nanot1m/better-win-manager/blob/master/docs/getting-started.md">getting started guide</a> covers the rest.</p></div>
+      <div class="step"><h3>Hold ⌥ and drag a window</h3><p>That's the whole tutorial; <a href="#tutorial">how it works</a> shows the rest. The <a href="https://github.com/nanot1m/better-win-manager/blob/master/docs/getting-started.md">getting started guide</a> covers the rest.</p></div>
     </div>
   </div>
 </section>
@@ -227,6 +310,28 @@
       setTimeout(() => e.target.textContent = 'Copy', 1500);
     });
   });
+
+  const tut = document.getElementById('tut');
+  const lesson = [...document.querySelectorAll('#lesson button')];
+  const tutTitle = document.getElementById('tutTitle');
+  let step = 0, hold = 0;
+  function showStep(i) {
+    step = i;
+    tut.className = 'screen tut s' + (i + 1);
+    lesson.forEach((b, j) => b.classList.toggle('on', j === i));
+    document.getElementById('tabA').classList.toggle('on', i !== 4);
+    document.getElementById('tabB').classList.toggle('on', i === 4);
+    tutTitle.textContent = i === 4 ? 'Safari' : 'Code';
+  }
+  lesson.forEach((b, i) => b.addEventListener('click', () => { showStep(i); if (hold !== Infinity) hold = Date.now() + 12000; }));
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const section = document.getElementById('tutorial');
+    section.addEventListener('mouseenter', () => { hold = Infinity; });
+    section.addEventListener('mouseleave', () => { hold = Date.now() + 2000; });
+    setInterval(() => { if (Date.now() >= hold) showStep((step + 1) % lesson.length); }, 3400);
+  } else {
+    showStep(2);
+  }
   const screen = document.getElementById('screen');
   const chips = screen.querySelectorAll('.chip[data-d]');
   const title = document.getElementById('title');

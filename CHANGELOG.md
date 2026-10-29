@@ -7,6 +7,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 ## [Unreleased]
 
 ### Changed
+- The landing page walks through columns and the stacked layout step by step on an animated mock screen, and recommends the macOS setup: one native desktop per display, Mission Control shortcuts and gesture turned off.
 - The release script retries stapling, which depends on a flaky Apple service, up to five times.
 
 ## [0.25.3] - 2026-10-29
