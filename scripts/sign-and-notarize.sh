@@ -100,7 +100,13 @@ if [[ "$status" != Accepted ]]; then
 fi
 
 group "Staple and verify"
-xcrun stapler staple "$APP_PATH"
+# The staple fetches the ticket from Apple's CloudKit, which drops connections now and then.
+for attempt in 1 2 3 4 5; do
+  if xcrun stapler staple "$APP_PATH"; then break; fi
+  (( attempt < 5 )) || fail "Stapling failed after $attempt attempts"
+  log "Staple attempt $attempt failed; retrying in 20 s"
+  sleep 20
+done
 xcrun stapler validate "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 spctl --assess --type execute --verbose=2 "$APP_PATH"

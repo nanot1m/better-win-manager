@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Changed
+- The release script retries stapling, which depends on a flaky Apple service, up to five times.
+
 ## [0.25.3] - 2026-10-29
 
 ### Changed
