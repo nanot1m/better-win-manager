@@ -173,7 +173,6 @@ final class FocusRing {
             }
             current = nil
             window.orderOut(nil)
-            showSecondary(nil)
             return
         }
         // An app can report a window it keeps alive after closing (ChatGPT) as focused; ring only what is visible.
@@ -183,7 +182,6 @@ final class FocusRing {
               !NSScreen.screens.contains(where: Spaces.showsFullscreen) else {
             current = nil
             window.orderOut(nil)
-            showSecondary(nil)
             return
         }
         present(id: id, frame: WindowServerEvents.bounds(of: id) ?? w.frame, floating: !isTiled(w))
@@ -218,7 +216,8 @@ final class FocusRing {
         }
     }
 
-    /// Grey ring around `id` (a stack's front window) unless the main ring is already there; nil hides it.
+    /// Grey ring around `id` (a stack's front window) unless the main ring is already there; nil hides it. The
+    /// manager owns it through the tab strips; the main ring only takes it down when it is itself switched off.
     func showSecondary(_ id: CGWindowID?) {
         guard let id, id != current, config.focusRing, !suspended, !hiddenForSystemReveal,
               CGWindowInfo.isOnScreen(id), let f = WindowServerEvents.bounds(of: id) else {
