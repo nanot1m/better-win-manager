@@ -302,8 +302,11 @@ struct ReconcilerTests {
         c.focusRing = true
         c.focusRingWidth = 6
         c.focusRingPadding = 3
+        // Ring 6 wide reaches 4 beyond the slot, so 2 of it lie inside: the window moves in by the gap plus those 2.
         let ringed = GridGeometry(grid: g, area: area, config: c).windowFrames().first!.1
-        expect(ringed.minY == 30 + 4 + 3 && ringed.minX == 3 && ringed.width == area.width - 6, #function, #line)
+        expect(ringed.minY == 30 + 4 + 5 && ringed.minX == 5 && ringed.width == area.width - 10, #function, #line)
+        c.focusRingPadding = 0
+        expect(GridGeometry(grid: g, area: area, config: c).windowFrames().first!.1.minX == 0, #function, #line)
         c.focusRing = false
         let top = GridGeometry(grid: g, area: area, config: c)
         let frames = Dictionary(uniqueKeysWithValues: top.windowFrames())

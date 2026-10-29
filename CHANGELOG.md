@@ -8,6 +8,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ### Fixed
 - The first tab starts past the focus ring's rounded corner instead of hanging over the curve.
+- The ring gap setting is the visible gap: the part of the ring that lies inside the slot no longer eats a point or two of it.
 
 ## [0.27.0] - 2026-10-29
 
