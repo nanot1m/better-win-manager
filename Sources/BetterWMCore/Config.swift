@@ -90,7 +90,7 @@ public struct Config {
     /// on the slot's edge.
     public var focusRingPadding: CGFloat = 0
     /// How far the ring reaches beyond a slot's edge; the layout keeps that much clear of the tab strip.
-    public var focusRingOutset: CGFloat { focusRing ? focusRingWidth / 2 + 1 : 0 }
+    public var focusRingOutset: CGFloat { focusRing ? (focusRingWidth / 2).rounded(.up) + 1 : 0 }
     /// The inset of a tiled window within its slot.
     public var tileInset: CGFloat { focusRing ? focusRingPadding : 0 }
     public var focusRingRadius: CGFloat = 24
