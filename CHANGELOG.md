@@ -13,6 +13,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ### Fixed
 - Tab strips showed on top of fullscreen apps; they now stay hidden on a fullscreen Space.
+- The bar, focus ring, tab strips and resize handles flashed over an app for a frame as it entered fullscreen; they now step aside as the switch begins.
 
 ## [0.25.2] - 2026-10-28
 

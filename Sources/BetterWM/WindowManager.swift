@@ -637,6 +637,13 @@ final class WindowManager {
                                                           object: nil, queue: .main) { [weak self] _ in
             // The window list is still in flux while the slide animation runs, and macOS reports no end to it.
             guard let self else { return }
+            // A Space switch into fullscreen: our windows would ride along on top of the app for the first frames
+            // of the animation. Step aside at once; the tick after the switch brings back what belongs.
+            if NSScreen.screens.contains(where: { !Spaces.isDesktop(Spaces.current(for: $0)) }) {
+                self.tabStrips.forEach { $0.hide() }
+                self.handles.forEach { $0.orderOut(nil) }
+                self.focusRing.update()
+            }
             self.switching = true
             self.spaceSwitchGeneration += 1
             let generation = self.spaceSwitchGeneration

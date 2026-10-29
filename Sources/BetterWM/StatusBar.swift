@@ -51,6 +51,10 @@ final class StatusBar {
             }
         }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in self?.rebuild() }
+        // Entering fullscreen: hide before the first frame of the animation rather than at the next refresh.
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.windows.filter { !Spaces.isDesktop(Spaces.current(for: $0.targetScreen)) }.forEach { $0.orderOut(nil) }
+        }
         clock = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in self?.refresh() }
         inputSourceObserver = InputSource.observe { [weak self] in self?.refresh() }
         rebuild()
@@ -169,7 +173,7 @@ final class StatusBar {
     private func buildAndRender() {
         // A fullscreen app owns the whole screen; stay out of its way.
         for w in windows {
-            let fullscreen = Spaces.isFullscreen(Spaces.current(for: w.targetScreen)) || hiddenForSystemReveal
+            let fullscreen = !Spaces.isDesktop(Spaces.current(for: w.targetScreen)) || hiddenForSystemReveal
             if fullscreen { w.orderOut(nil) } else if !w.isVisible { w.orderFrontRegardless() }
         }
         let focused = focusedAXWindow()
