@@ -151,8 +151,10 @@ final class FocusRing {
             return
         }
         // An app can report a window it keeps alive after closing (ChatGPT) as focused; ring only what is visible.
+        // A window on no Space is mid-transition to or from fullscreen.
         guard config.focusRingFloating || isTiled(w), let id = w.windowID, CGWindowInfo.isOnScreen(id),
-              Spaces.spaces(of: id).allSatisfy(Spaces.isDesktop) else {
+              case let spaces = Spaces.spaces(of: id), !spaces.isEmpty, spaces.allSatisfy(Spaces.isDesktop),
+              !NSScreen.screens.contains(where: Spaces.showsFullscreen) else {
             current = nil
             window.orderOut(nil)
             return

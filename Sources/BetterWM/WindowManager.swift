@@ -110,8 +110,12 @@ final class WindowManager {
         }
     }
 
-    /// Fullscreen, split view, or a fullscreen Space being torn down: macOS owns its frame until it is back.
-    private func isAway(_ id: WindowID) -> Bool { Spaces.spaces(of: id).first.map { !Spaces.isDesktop($0) } ?? false }
+    /// Fullscreen, split view, a fullscreen Space being torn down, or on no Space at all mid-transition: macOS owns
+    /// its frame until it is back on a desktop.
+    private func isAway(_ id: WindowID) -> Bool {
+        let spaces = Spaces.spaces(of: id)
+        return spaces.isEmpty || spaces.contains { !Spaces.isDesktop($0) }
+    }
     private var lastAway: Set<WindowID> = []
     private func markAway(_ snap: inout Snapshot) {
         let missing = missingDisplays
@@ -120,8 +124,9 @@ final class WindowManager {
         })
         if snap.away != lastAway {
             lastAway = snap.away
-            Log.write("away", snap.away.isEmpty ? "every window is ours again"
-                      : "leaving \(snap.away.sorted().map { "#\($0)" }.joined(separator: " ")) to macOS (fullscreen, or on a display within its grace)")
+            let screens = NSScreen.screens.map { "\(Spaces.current(for: $0))\(Spaces.showsFullscreen($0) ? " fullscreen" : "")" }
+            Log.write("away", (snap.away.isEmpty ? "every window is ours again"
+                      : "leaving \(snap.away.sorted().map { "#\($0)" }.joined(separator: " ")) to macOS (fullscreen, or on a display within its grace)") + "; screens \(screens)")
         }
     }
 
@@ -576,6 +581,20 @@ final class WindowManager {
                 },
                 // Moves ignored while macOS is waking or rearranging displays say nothing about the window.
                 countRefusals: snap.now >= claimsSuspendedUntil, now: snap.now)
+        wsEvents.watch(Array(v.parkedWindows.subtracting(watchedParked)))
+        watchedParked = v.parkedWindows
+    }
+
+    private var watchedParked: Set<WindowID> = []
+    /// A fullscreen transition makes macOS pull parked windows back onto the screen (they count as off screen).
+    /// WindowServer reports the move at once; put the window back before the next frame rather than at the next tick.
+    private func reparkIfPushedOnScreen(_ id: WindowID) {
+        guard desktops.isParked(id), !interacting, let f = WindowServerEvents.bounds(of: id) else { return }
+        let o = Parking.origin(for: f, home: screen(ofDesktop: desktops.workspace(of: id))?.frame.toCocoa(),
+                               screens: NSScreen.screens.map { $0.frame.toCocoa() })
+        guard abs(o.x - f.minX) > 100 || abs(o.y - f.minY) > 100 else { return }
+        Log.write("park", "#\(id) pushed on screen to \(Int(f.minX)),\(Int(f.minY)); back to the corner")
+        system.execute([.setFrame(id, CGRect(origin: o, size: f.size))])
     }
 
     var enabled: Bool {
@@ -659,11 +678,12 @@ final class WindowManager {
             self?.system.refreshFocused { self?.focusRing.update(); self?.scheduleFocusFollow() }
         }
         // WindowServer reports a new front window before Accessibility does; stacked screens re-fan on it.
-        wsEvents.onEvent = { [weak self] event, _ in
+        wsEvents.onEvent = { [weak self] event, wid in
             switch event {
             case .frontChange, .windowReorder: self?.refanStackedScreens()
             case .windowCreate, .windowDestroy: self?.scheduleTick()
             case .spaceChange: self?.stepAsideFromFullscreen()
+            case .windowMove: if let wid { self?.reparkIfPushedOnScreen(wid) }
             default: break
             }
         }
@@ -1037,10 +1057,12 @@ final class WindowManager {
     /// animation. WindowServer reports the switch before AppKit does; hide at once, the tick after brings back
     /// what belongs.
     private func stepAsideFromFullscreen() {
-        guard NSScreen.screens.contains(where: { !Spaces.isDesktop(Spaces.current(for: $0)) }) else { return }
+        guard NSScreen.screens.contains(where: Spaces.showsFullscreen) else { return }
         tabStrips.forEach { $0.hide() }
         handles.forEach { $0.orderOut(nil) }
         focusRing.update()
+        // macOS shoves parked windows onto the screen during the transition; that is no refusal of theirs.
+        if claimsSuspendedUntil < Date() { suspendClaims(until: Date().addingTimeInterval(5)) }
     }
 
     private func refreshChrome() {
@@ -1501,7 +1523,7 @@ final class WindowManager {
             for (space, geo) in activeGeometries() {
                 guard let frame = geo.tabStripFrame() else { continue }
                 // A fullscreen app on that screen covers everything; the strip would show through on top of it.
-                if let ws = VirtualWorkspaces.workspace(of: space), let s = screen(ofDesktop: ws), !Spaces.isDesktop(Spaces.current(for: s)) { continue }
+                if let ws = VirtualWorkspaces.workspace(of: space), let s = screen(ofDesktop: ws), Spaces.showsFullscreen(s) { continue }
                 let items = state.grid(for: space).windows.compactMap { id -> TabStripWindow.Item? in
                     guard let pid = system.pid(of: id) else { return nil }
                     return TabStripWindow.Item(id: id, app: NSRunningApplication(processIdentifier: pid)?.localizedName ?? "",

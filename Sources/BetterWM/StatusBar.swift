@@ -100,7 +100,9 @@ final class StatusBar {
     /// A screen switching to a fullscreen Space: hide at once, before the first frame of the animation; the
     /// deferred refresh decides what comes back.
     private func stepAsideFromFullscreen() {
-        windows.filter { !Spaces.isDesktop(Spaces.current(for: $0.targetScreen)) }.forEach { $0.orderOut(nil) }
+        let leaving = windows.filter { Spaces.showsFullscreen($0.targetScreen) }
+        guard !leaving.isEmpty else { return }
+        leaving.forEach { $0.orderOut(nil) }
     }
 
     /// Show Desktop / Mission Control: step aside, come back when it ends.
@@ -140,7 +142,7 @@ final class StatusBar {
             }
             windows.append(w)
             // Entering fullscreen hides the menu bar, which lands here too: a fullscreen screen gets no bar.
-            if Spaces.isDesktop(Spaces.current(for: screen)) { w.orderFrontRegardless() }
+            if !Spaces.showsFullscreen(screen) { w.orderFrontRegardless() }
         }
         refresh()
         onLayoutChange?()
@@ -180,7 +182,7 @@ final class StatusBar {
     private func buildAndRender() {
         // A fullscreen app owns the whole screen; stay out of its way.
         for w in windows {
-            let fullscreen = !Spaces.isDesktop(Spaces.current(for: w.targetScreen)) || hiddenForSystemReveal
+            let fullscreen = Spaces.showsFullscreen(w.targetScreen) || hiddenForSystemReveal
             if fullscreen { w.orderOut(nil) } else if !w.isVisible { w.orderFrontRegardless() }
         }
         let focused = focusedAXWindow()

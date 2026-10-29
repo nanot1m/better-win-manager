@@ -6,14 +6,16 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.25.3] - 2026-10-29
+
 ### Changed
 - README, docs and the landing page describe signed, notarized releases: no quarantine step, Accessibility survives updates.
 - Tabs animate: hovering an inactive tab lifts it halfway, and switching windows (by keyboard or click) glides the lift and colour between the old and new active tab.
 - The log notes when windows are left to macOS (fullscreen, or on a display within its reconnect grace) and when they are taken back, to trace layouts that do not restore after a display change.
 
 ### Fixed
-- Tab strips showed on top of fullscreen apps; they now stay hidden on a fullscreen Space.
-- The bar, focus ring, tab strips and resize handles flashed over an app for a frame as it entered fullscreen; they now step aside as the switch begins.
+- The bar, tab strips, resize handles and focus ring showed over fullscreen apps: for a frame as the switch began, and for good with Chrome, whose fullscreen window stays on the desktop Space for a while. A screen now counts as fullscreen when its Space is no desktop or when a window of another app covers it entirely, and everything steps aside on the WindowServer event, before the first frame.
+- Entering fullscreen made macOS pull parked windows onto the screen; each time counted as a refusal, and after four the window was adopted into the shown desktop (Chrome moved from desktop 1 to 5). Parked windows are watched and put back on the move event, and the refusal rule pauses around fullscreen transitions.
 
 ## [0.25.2] - 2026-10-28
 
