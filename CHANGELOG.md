@@ -6,6 +6,8 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-10-29
+
 ### Changed
 - While a floating window has the focus, a tabbed stack keeps its front window marked: its tab in grey and a grey ring around it.
 
