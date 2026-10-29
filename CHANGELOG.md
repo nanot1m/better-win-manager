@@ -6,6 +6,8 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-29
+
 ### Changed
 - Stacked screens show tabs along the top by default (`stackStyle = tabsTop`). A saved config keeps whatever it has; only fresh installs change.
 - The landing page walks through columns and the stacked layout step by step on an animated mock screen, and recommends the macOS setup: one native desktop per display, Mission Control shortcuts and gesture turned off.
