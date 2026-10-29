@@ -166,3 +166,7 @@ MIT.
 ## Signed releases
 
 See [release setup and required GitHub secrets](docs/RELEASING.md) for automated Developer ID signing, Apple notarization, stapling, and GitHub Releases.
+
+## Support
+
+If BetterWM is useful to you, you can [sponsor my work on GitHub](https://github.com/sponsors/nanot1m). Your support helps me maintain the project, fix bugs and develop new features.
