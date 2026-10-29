@@ -8,6 +8,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ### Changed
 - README, docs and the landing page describe signed, notarized releases: no quarantine step, Accessibility survives updates.
+- Tabs animate: hovering an inactive tab lifts it halfway, and switching windows (by keyboard or click) glides the lift and colour between the old and new active tab.
+- The log notes when windows are left to macOS (fullscreen, or on a display within its reconnect grace) and when they are taken back, to trace layouts that do not restore after a display change.
+
+### Fixed
+- Tab strips showed on top of fullscreen apps; they now stay hidden on a fullscreen Space.
 
 ## [0.25.2] - 2026-10-28
 

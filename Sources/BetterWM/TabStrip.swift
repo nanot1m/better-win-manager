@@ -26,8 +26,8 @@ final class TabStripWindow {
 
     init() {
         // Behind every app window: the strip lives in the area the layout keeps free, and a window carried over
-        // it stays on top.
-        panel = .overlay(level: .normal)
+        // it stays on top. Not an auxiliary of fullscreen Spaces, so a fullscreen app covers it.
+        panel = .overlay(level: .normal, behavior: [.canJoinAllSpaces, .transient])
         panel.contentView = view
     }
 
@@ -137,7 +137,8 @@ private final class TabStripView: NSView {
         }
     }
 
-    /// Tabs share the strip, with a cap so a lone tab does not span the screen; the active one stands a little taller.
+    /// Tabs share the strip, with a cap so a lone tab does not span the screen. Every tab gets the full height; an
+    /// inactive one sits a little lower, which is the tab's own business so it can animate the change.
     private func layoutTabs() {
         let n = CGFloat(max(1, items.count)), pad: CGFloat = 16, gap: CGFloat = 4
         if side != .top {
@@ -145,84 +146,115 @@ private final class TabStripView: NSView {
             // read bottom to top, so the deck runs that way too; on the right, top to bottom.
             let h = min(maxLength, (bounds.height - pad * 2 - gap * (n - 1)) / n)
             for (i, t) in tabs.enumerated() where i < items.count {
-                let active = i == activeIndex
                 let slot = side == .left ? CGFloat(items.count - 1 - i) : CGFloat(i)
-                let lift: CGFloat = active ? 1 : 5
                 let y = pad + slot * (h + gap)
-                t.frame = side == .left ? CGRect(x: lift, y: y, width: bounds.width - lift, height: h)
-                                        : CGRect(x: 0, y: y, width: bounds.width - lift, height: h)
+                t.frame = side == .left ? CGRect(x: 1, y: y, width: bounds.width - 1, height: h)
+                                        : CGRect(x: 0, y: y, width: bounds.width - 1, height: h)
             }
         } else {
             let w = min(maxLength, (bounds.width - pad * 2 - gap * (n - 1)) / n)
             for (i, t) in tabs.enumerated() where i < items.count {
-                let active = i == activeIndex
-                t.frame = CGRect(x: pad + CGFloat(i) * (w + gap), y: active ? 1 : 5, width: w, height: bounds.height - (active ? 1 : 5))
+                t.frame = CGRect(x: pad + CGFloat(i) * (w + gap), y: 1, width: w, height: bounds.height - 1)
             }
         }
     }
 }
 
-/// One folder tab: rounded on the side away from the window, square where it meets it.
+/// One folder tab: rounded on the side away from the window, square where it meets it. The painted part is a
+/// `body` view inside an invisible full-size frame: an inactive tab's body sits a few points closer to the window
+/// (its far edge clipped by the strip), a hovered one halfway up, and the move between those is animated. The outer
+/// view's layer is left to the reorder drag.
 private final class TabView: NSView {
     var onClick: (() -> Void)?
     var onDragBegan: (() -> Void)?
     var onDragMoved: ((CGFloat) -> Void)?
     var onDragEnded: (() -> Void)?
     var horizontal = true
+    private let body = NSView()
     private let label = NSTextField(labelWithString: "")
     private var active = false
     private var accent = NSColor.controlAccentColor
     private var hovering = false
     private var side = TabStripWindow.Side.top
     private let shape = CAShapeLayer()
+    private var lift: CGFloat?
+    private static let duration = 0.16
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.mask = shape
+        layer?.masksToBounds = true
+        body.wantsLayer = true
+        body.layer?.mask = shape
+        addSubview(body)
         label.lineBreakMode = .byTruncatingTail
         label.alignment = .center
-        addSubview(label)
+        body.addSubview(label)
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
     }
     required init?(coder: NSCoder) { fatalError() }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     func configure(title: NSAttributedString, active: Bool, accent: NSColor, side: TabStripWindow.Side) {
+        let wasActive = self.active
         self.active = active
         self.accent = accent
         self.side = side
         horizontal = side == .top
         label.attributedStringValue = title
+        layoutBody(animated: wasActive != active)
         updateShape()
         layoutLabel()
-        paint()
+        paint(animated: wasActive != active)
     }
 
     override func layout() {
         super.layout()
+        layoutBody(animated: false)
         updateShape()
         layoutLabel()
     }
 
+    /// Toward the window by 4 points when inactive, 2 when hovered; a fresh tab takes its place without animating.
+    private func layoutBody(animated: Bool) {
+        let target: CGFloat = active ? 0 : hovering ? 2 : 4
+        var f = bounds
+        switch side {
+        case .top: f.origin.y += target
+        case .left: f.origin.x += target
+        case .right: f.origin.x -= target
+        }
+        let animate = animated && lift != nil && lift != target && !isHidden
+        lift = target
+        if animate {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = Self.duration
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                body.animator().frame = f
+            }
+        } else {
+            body.frame = f
+        }
+    }
+
     private func layoutLabel() {
-        let inset: CGFloat = 8, h = label.intrinsicContentSize.height
+        let inset: CGFloat = 8, h = label.intrinsicContentSize.height, b = body.bounds
         if side != .top {
             // The frame is set unrotated (long side along y) and then turned about its centre: a left spine reads
             // bottom to top, a right one top to bottom.
             label.frameCenterRotation = 0
-            label.frame = CGRect(x: bounds.midX - (bounds.height - inset * 2) / 2, y: bounds.midY - h / 2, width: bounds.height - inset * 2, height: h)
+            label.frame = CGRect(x: b.midX - (b.height - inset * 2) / 2, y: b.midY - h / 2, width: b.height - inset * 2, height: h)
             label.frameCenterRotation = side == .left ? 90 : -90
         } else {
             // A tab view outlives a style change; undo a sideways turn from before.
             label.frameCenterRotation = 0
-            label.frame = CGRect(x: inset, y: bounds.midY - h / 2, width: bounds.width - inset * 2, height: h)
+            label.frame = CGRect(x: inset, y: b.midY - h / 2, width: b.width - inset * 2, height: h)
         }
     }
 
     /// Rounded away from the window, square where it meets it.
     private func updateShape() {
-        let r: CGFloat = 8, b = bounds
+        let r: CGFloat = 8, b = body.bounds
         let path = CGMutablePath()
         switch side {
         case .right:
@@ -253,15 +285,24 @@ private final class TabView: NSView {
         shape.path = path
     }
 
-    private func paint() {
+    private func paint(animated: Bool) {
+        guard let layer = body.layer else { return }
         let base = active ? accent : NSColor(white: 0.22, alpha: 0.92)
-        layer?.backgroundColor = (hovering && !active ? base.blended(withFraction: 0.15, of: .white) ?? base : base).cgColor
-        layer?.borderWidth = active ? 0 : 1
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        let color = (hovering && !active ? base.blended(withFraction: 0.15, of: .white) ?? base : base).cgColor
+        if animated, let from = layer.presentation()?.backgroundColor ?? layer.backgroundColor {
+            let anim = CABasicAnimation(keyPath: "backgroundColor")
+            anim.fromValue = from
+            anim.toValue = color
+            anim.duration = Self.duration
+            layer.add(anim, forKey: "paint")
+        }
+        layer.backgroundColor = color
+        layer.borderWidth = active ? 0 : 1
+        layer.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
     }
 
-    override func mouseEntered(with event: NSEvent) { hovering = true; paint() }
-    override func mouseExited(with event: NSEvent) { hovering = false; paint() }
+    override func mouseEntered(with event: NSEvent) { hovering = true; layoutBody(animated: true); paint(animated: true) }
+    override func mouseExited(with event: NSEvent) { hovering = false; layoutBody(animated: true); paint(animated: true) }
 
     /// A click brings the window forward; a drag past a few points moves the tab along the strip.
     override func mouseDown(with event: NSEvent) {

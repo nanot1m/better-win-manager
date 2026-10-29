@@ -112,11 +112,17 @@ final class WindowManager {
 
     /// Fullscreen, split view, or a fullscreen Space being torn down: macOS owns its frame until it is back.
     private func isAway(_ id: WindowID) -> Bool { Spaces.spaces(of: id).first.map { !Spaces.isDesktop($0) } ?? false }
+    private var lastAway: Set<WindowID> = []
     private func markAway(_ snap: inout Snapshot) {
         let missing = missingDisplays
         snap.away = Set(snap.windows.map(\.id).filter { id in
             isAway(id) || (desktops.display(of: desktops.workspace(of: id)).map(missing.contains) ?? false)
         })
+        if snap.away != lastAway {
+            lastAway = snap.away
+            Log.write("away", snap.away.isEmpty ? "every window is ours again"
+                      : "leaving \(snap.away.sorted().map { "#\($0)" }.joined(separator: " ")) to macOS (fullscreen, or on a display within its grace)")
+        }
     }
 
     private func configureWorkspaces() {
@@ -1482,6 +1488,8 @@ final class WindowManager {
         if config.stackStyle != .cascade {
             for (space, geo) in activeGeometries() {
                 guard let frame = geo.tabStripFrame() else { continue }
+                // A fullscreen app on that screen covers everything; the strip would show through on top of it.
+                if let ws = VirtualWorkspaces.workspace(of: space), let s = screen(ofDesktop: ws), Spaces.isFullscreen(Spaces.current(for: s)) { continue }
                 let items = state.grid(for: space).windows.compactMap { id -> TabStripWindow.Item? in
                     guard let pid = system.pid(of: id) else { return nil }
                     return TabStripWindow.Item(id: id, app: NSRunningApplication(processIdentifier: pid)?.localizedName ?? "",
