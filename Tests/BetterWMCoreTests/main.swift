@@ -298,11 +298,12 @@ struct ReconcilerTests {
         var g = Grid()
         g.setMode(.stacked)
         g.columns = [Column([1]), Column([2])]
-        // The ring reaches beyond the window; the strip sits above that reach.
+        // The ring reaches beyond the slot; the strip sits above that reach, and the gap shrinks the window inside.
         c.focusRing = true
         c.focusRingWidth = 6
         c.focusRingPadding = 3
-        expect(GridGeometry(grid: g, area: area, config: c).windowFrames().first?.1.minY == 30 + 7, #function, #line)
+        let ringed = GridGeometry(grid: g, area: area, config: c).windowFrames().first!.1
+        expect(ringed.minY == 30 + 4 + 3 && ringed.minX == 3 && ringed.width == area.width - 6, #function, #line)
         c.focusRing = false
         let top = GridGeometry(grid: g, area: area, config: c)
         let frames = Dictionary(uniqueKeysWithValues: top.windowFrames())

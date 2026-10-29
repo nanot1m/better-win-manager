@@ -106,7 +106,8 @@ final class FocusRing {
         }
     }
 
-    private var pad: CGFloat { config.focusRingOutset }
+    /// The ring sits on the slot's edge; a tiled window is `tileInset` inside it, a floating one gets the same gap.
+    private var pad: CGFloat { config.focusRingOutset + config.tileInset }
 
     /// Shows the ring for a window we are about to focus, at the frame it will have, without waiting for the
     /// focus notification. Used when switching workspaces so ring and windows appear in the same frame.

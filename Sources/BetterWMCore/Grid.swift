@@ -322,7 +322,14 @@ public struct GridGeometry {
         }
     }
 
+    /// Slots shrunk by the ring gap, except the ones waiting aside: those are placed by position only.
     public func windowFrames() -> [(WindowID, CGRect)] {
+        let inset = config.tileInset
+        guard inset > 0 else { return slotFrames() }
+        return slotFrames().map { w, f in (w, waitsAside(f) ? f : f.insetBy(dx: inset, dy: inset)) }
+    }
+
+    private func slotFrames() -> [(WindowID, CGRect)] {
         if grid.mode == .stacked { return stackedFrames() }
         var out: [(WindowID, CGRect)] = []
         for (c, cf) in zip(grid.columns, columnFrames()) {

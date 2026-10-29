@@ -586,7 +586,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             ]),
             group("Shape", [
                 row("Thickness", nil, [ringWidth, ringWidthLabel]),
-                row("Gap to the window", "Space between the window's edge and the ring.", [ringPadding, ringPaddingLabel]),
+                row("Gap to the window", "Tiled windows shrink inside their slot by this much; the ring stays on the slot's edge.", [ringPadding, ringPaddingLabel]),
                 row("Match each window's corners", "Measures the window's own corner radius.", [ringAutoRadius]),
                 row("Fallback corner radius", "Used when a window's corners cannot be measured.", [ringRadius, ringRadiusLabel]),
             ]),
