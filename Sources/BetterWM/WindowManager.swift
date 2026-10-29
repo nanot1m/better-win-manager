@@ -1539,11 +1539,19 @@ final class WindowManager {
             tabStrips.append(s)
         }
         let focused = focusRing.currentWindowID ?? system.focused?.windowID
+        // A floating window holding the focus leaves a stack without an active tab; its front window (first in
+        // z-order) then takes the tab and a grey ring, so the stack still reads.
+        var secondary: WindowID?
         for (i, s) in tabStrips.enumerated() {
             guard i < needed.count else { s.hide(); continue }
             let (frame, items, side) = needed[i]
-            s.show(frame: frame, items: items, focused: focused, inactive: focusRing.isInactive, clearance: focusRing.cornerRadius, side: side, config: config)
+            let ids = Set(items.map(\.id))
+            let front = focused.flatMap { ids.contains($0) ? $0 : nil } ?? zOrder.first(where: ids.contains)
+            if front != focused { secondary = secondary ?? front }
+            s.show(frame: frame, items: items, focused: front, inactive: focusRing.isInactive || front != focused,
+                   clearance: focusRing.cornerRadius, side: side, config: config)
         }
+        focusRing.showSecondary(secondary)
     }
 
     private func refreshHandles() {

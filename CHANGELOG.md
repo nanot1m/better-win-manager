@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Changed
+- While a floating window has the focus, a tabbed stack keeps its front window marked: its tab in grey and a grey ring around it.
+
 ### Fixed
 - The first tab starts past the focus ring's rounded corner instead of hanging over the curve.
 - The ring gap setting is the visible gap: the part of the ring that lies inside the slot no longer eats a point or two of it.

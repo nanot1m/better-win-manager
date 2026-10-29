@@ -45,22 +45,34 @@ final class FocusRing {
         }
     }
 
-    init(config: Config) {
-        self.config = config
-        window = UnconstrainedWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: false)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        window.hasShadow = false
-        window.ignoresMouseEvents = true
-        window.animationBehavior = .none
+    /// A second, grey ring around a tabbed stack's front window while a floating window holds the focus, so the
+    /// stack still shows which window is in front.
+    private let secondary: UnconstrainedWindow
+    private let secondaryLayer = CALayer()
+    private var secondaryID: CGWindowID?
+
+    private static func makeWindow(_ layer: CALayer) -> UnconstrainedWindow {
+        let w = UnconstrainedWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: false)
+        w.isOpaque = false
+        w.backgroundColor = .clear
+        w.hasShadow = false
+        w.ignoresMouseEvents = true
+        w.animationBehavior = .none
         // Bound to the current desktop so it slides away with it during a switch instead of floating over the transition.
-        window.collectionBehavior = [.moveToActiveSpace, .stationary, .ignoresCycle]
+        w.collectionBehavior = [.moveToActiveSpace, .stationary, .ignoresCycle]
         let view = NSView()
         view.wantsLayer = true
         view.layer = layer
         layer.actions = ["bounds": NSNull(), "position": NSNull(), "borderColor": NSNull(), "backgroundColor": NSNull(),
                          "cornerRadius": NSNull(), "borderWidth": NSNull(), "hidden": NSNull()]
-        window.contentView = view
+        w.contentView = view
+        return w
+    }
+
+    init(config: Config) {
+        self.config = config
+        window = Self.makeWindow(layer)
+        secondary = Self.makeWindow(secondaryLayer)
 
         events.onEvent = { [weak self] event, wid in
             guard let self else { return }
@@ -146,6 +158,7 @@ final class FocusRing {
         guard !suspended, !hiddenForSystemReveal, config.focusRing else {
             current = nil
             window.orderOut(nil)
+            showSecondary(nil)
             return
         }
         guard let w = focusedWindow() else {
@@ -160,6 +173,7 @@ final class FocusRing {
             }
             current = nil
             window.orderOut(nil)
+            showSecondary(nil)
             return
         }
         // An app can report a window it keeps alive after closing (ChatGPT) as focused; ring only what is visible.
@@ -169,6 +183,7 @@ final class FocusRing {
               !NSScreen.screens.contains(where: Spaces.showsFullscreen) else {
             current = nil
             window.orderOut(nil)
+            showSecondary(nil)
             return
         }
         present(id: id, frame: WindowServerEvents.bounds(of: id) ?? w.frame, floating: !isTiled(w))
@@ -181,6 +196,7 @@ final class FocusRing {
         if current != id {
             current = id
             events.watch([id])
+            if secondaryID == id { showSecondary(nil) }
         }
         isInactive = inactive
         if targetChanged { onFocusChange?() }
@@ -199,6 +215,28 @@ final class FocusRing {
         if wasHidden || targetChanged {
             window.orderFrontRegardless()
             onReorder?()
+        }
+    }
+
+    /// Grey ring around `id` (a stack's front window) unless the main ring is already there; nil hides it.
+    func showSecondary(_ id: CGWindowID?) {
+        guard let id, id != current, config.focusRing, !suspended, !hiddenForSystemReveal,
+              CGWindowInfo.isOnScreen(id), let f = WindowServerEvents.bounds(of: id) else {
+            secondaryID = nil
+            secondary.orderOut(nil)
+            return
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        secondaryLayer.cornerRadius = radius(for: id) + pad
+        secondaryLayer.borderWidth = config.focusRingWidth
+        secondaryLayer.borderColor = Self.inactiveColor.cgColor
+        CATransaction.commit()
+        secondary.setFrame(f.insetBy(dx: -pad, dy: -pad).toCocoa(), display: false)
+        secondary.level = .floating
+        if secondaryID != id || !secondary.isVisible {
+            secondaryID = id
+            secondary.orderFrontRegardless()
         }
     }
 
