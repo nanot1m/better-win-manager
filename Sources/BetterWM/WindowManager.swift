@@ -1542,7 +1542,7 @@ final class WindowManager {
         for (i, s) in tabStrips.enumerated() {
             guard i < needed.count else { s.hide(); continue }
             let (frame, items, side) = needed[i]
-            s.show(frame: frame, items: items, focused: focused, inactive: focusRing.isInactive, side: side, config: config)
+            s.show(frame: frame, items: items, focused: focused, inactive: focusRing.isInactive, clearance: focusRing.cornerRadius, side: side, config: config)
         }
     }
 

@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Fixed
+- The first tab starts past the focus ring's rounded corner instead of hanging over the curve.
+
 ## [0.27.0] - 2026-10-29
 
 ### Added

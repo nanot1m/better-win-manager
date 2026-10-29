@@ -12,6 +12,8 @@ final class FocusRing {
     /// The window the ring is on; the bar outlines it. Electron apps report no focused window for a moment
     /// after a switch, so readers prefer this over asking Accessibility again.
     var currentWindowID: CGWindowID? { current }
+    /// The ring's outer corner radius as drawn; nothing should hang over the curve.
+    var cornerRadius: CGFloat { window.isVisible ? layer.cornerRadius : 0 }
     /// The ring is on the window focus will come back to, greyed: no window has focus right now.
     private(set) var isInactive = false
     static let inactiveColor = NSColor(white: 0.55, alpha: 1)

@@ -32,10 +32,11 @@ final class TabStripWindow {
     }
 
     /// `frame` in AX coordinates.
-    /// `inactive`: the front window has no focus; its tab is greyed like the ring.
-    func show(frame: CGRect, items: [Item], focused: WindowID?, inactive: Bool, side: Side, config: Config) {
+    /// `inactive`: the front window has no focus; its tab is greyed like the ring. `clearance`: how far the
+    /// first tab stays from the strip's start, at least the ring's corner radius so it does not hang over the curve.
+    func show(frame: CGRect, items: [Item], focused: WindowID?, inactive: Bool, clearance: CGFloat, side: Side, config: Config) {
         panel.setFrame(frame.toCocoa(), display: false)
-        view.configure(items: items, focused: focused, inactive: inactive, side: side, config: config)
+        view.configure(items: items, focused: focused, inactive: inactive, clearance: clearance, side: side, config: config)
         if !panel.isVisible { panel.orderBack(nil) }
     }
 
@@ -55,6 +56,7 @@ private final class TabStripView: NSView {
     private var settling: ReorderDrag?
     private var tabs: [TabView] = []
     private var items: [TabStripWindow.Item] = []
+    private var pad: CGFloat = 16
     private var side = TabStripWindow.Side.top
     private var activeIndex: Int?
     private var maxLength: CGFloat = 240
@@ -67,9 +69,10 @@ private final class TabStripView: NSView {
     override var isFlipped: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    func configure(items: [TabStripWindow.Item], focused: WindowID?, inactive: Bool, side: TabStripWindow.Side, config: Config) {
+    func configure(items: [TabStripWindow.Item], focused: WindowID?, inactive: Bool, clearance: CGFloat, side: TabStripWindow.Side, config: Config) {
         self.items = items
         self.side = side
+        pad = max(16, clearance)
         maxLength = config.tabWidth
         while tabs.count < items.count {
             let t = TabView()
@@ -141,7 +144,7 @@ private final class TabStripView: NSView {
     /// Tabs share the strip, with a cap so a lone tab does not span the screen. Every tab gets the full height; an
     /// inactive one sits a little lower, which is the tab's own business so it can animate the change.
     private func layoutTabs() {
-        let n = CGFloat(max(1, items.count)), pad: CGFloat = 16, gap: CGFloat = 4
+        let n = CGFloat(max(1, items.count)), gap: CGFloat = 4
         if side != .top {
             // Sideways tabs: as long along the strip as a top tab is wide, as thick as the strip. On the left they
             // read bottom to top, so the deck runs that way too; on the right, top to bottom.
