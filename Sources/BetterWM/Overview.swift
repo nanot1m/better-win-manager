@@ -208,8 +208,9 @@ final class Overview {
             func rank(_ w: AXWindow) -> Int { let id = w.windowID ?? 0; return id == top ? -1 : (depth[id] ?? .max) }
             let windows = (byDesktop[d] ?? []).sorted { rank($0) < rank($1) }.compactMap { w -> OverviewModel.Window? in
                 guard let id = w.windowID else { return nil }
-                // The current desktop shows windows where they are; others where they would be when shown.
-                let frame = d == current ? w.frame : (manager.layoutFrame(of: w) ?? w.frame)
+                // The current desktop shows windows where they are, except a tabbed stack's hidden tabs, which wait
+                // at an off-screen corner: those take the frame they have in front. Other desktops show their layout.
+                let frame = d == current && !manager.waitsAside(w) ? w.frame : (manager.layoutFrame(of: w) ?? w.frame)
                 let app = NSRunningApplication(processIdentifier: w.pid)
                 var item = OverviewModel.Window(window: w, id: id, desktop: d, frame: frame, title: w.title,
                                                 icon: app?.icon, thumbnail: Thumbnails.cached(id))
