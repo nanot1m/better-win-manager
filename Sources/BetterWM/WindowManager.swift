@@ -213,10 +213,8 @@ final class WindowManager {
 
     /// A hidden tab of a tabbed stack, parked at the corner its layout keeps for them.
     func waitsAside(_ w: AXWindow) -> Bool {
-        guard let id = id(w), state.isTiled(id), let space = state.space(containing: id), let geo = geometry(for: space),
-              let target = geo.frame(of: id), geo.waitsAside(target) else { return false }
-        // macOS clamps the parked position a little; the reconciler allows the same slack.
-        return abs(w.frame.minX - target.minX) <= 100 && abs(w.frame.minY - target.minY) <= 100
+        guard let id = id(w), state.isTiled(id), let space = state.space(containing: id), let geo = geometry(for: space) else { return false }
+        return geo.isWaitingAside(w.frame)
     }
 
     /// Where a window sits on its own desktop: its grid slot if tiled, its remembered frame if parked, else as is.

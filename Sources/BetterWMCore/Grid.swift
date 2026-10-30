@@ -366,6 +366,12 @@ public struct GridGeometry {
         grid.mode == .stacked && config.stackStyle != .cascade && frame.minX == area.maxX - 2 && frame.minY == area.maxY - 2
     }
 
+    /// Whether a real frame sits at the waiting corner, give or take the clamping macOS applies to it.
+    public func isWaitingAside(_ frame: CGRect, tolerance: CGFloat = 100) -> Bool {
+        grid.mode == .stacked && config.stackStyle != .cascade
+            && abs(frame.minX - (area.maxX - 2)) <= tolerance && abs(frame.minY - (area.maxY - 2)) <= tolerance
+    }
+
     /// Tabs: every window fills what the strip leaves, plus room for the focus ring between the two.
     private var tabbedArea: CGRect {
         let t = config.tabHeight + config.focusRingOutset
