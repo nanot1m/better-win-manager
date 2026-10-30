@@ -6,6 +6,8 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.27.3] - 2026-10-30
+
 ### Changed
 - The getting-started guide and the landing page show the three macOS settings panes to adjust, with the target state visible.
 
