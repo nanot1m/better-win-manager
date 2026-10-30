@@ -6,6 +6,8 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.27.4] - 2026-10-30
+
 ### Fixed
 - After clicking the wallpaper (macOS's "click to reveal desktop"), the focus ring was gone until a window was focused again: stepping aside for the reveal made the ring forget its window. It now comes back in grey on the window focus will return to, as it does when nothing has focus.
 
