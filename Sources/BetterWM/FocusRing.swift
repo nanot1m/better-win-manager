@@ -156,7 +156,9 @@ final class FocusRing {
 
     func update() {
         guard !suspended, !hiddenForSystemReveal, config.focusRing else {
-            current = nil
+            // Stepping aside (Show Desktop, a drag) keeps the window in mind: when the windows come back with no
+            // focus anywhere, the grey ring goes back on it. Only a disabled ring forgets.
+            if !config.focusRing { current = nil }
             window.orderOut(nil)
             showSecondary(nil)
             return
@@ -167,7 +169,9 @@ final class FocusRing {
                NSWorkspace.shared.frontmostApplication?.processIdentifier == owner.pid { return }
             // Nothing has focus (the desktop, an app without windows): keep the ring on the last window, greyed,
             // so a tabbed stack still shows which window is in front.
-            if let id = current, CGWindowInfo.isOnScreen(id), let f = WindowServerEvents.bounds(of: id) {
+            // Only a window really on a screen: a parked one keeps two points on screen at a corner.
+            if let id = current, CGWindowInfo.isOnScreen(id), let f = WindowServerEvents.bounds(of: id),
+               NSScreen.screens.contains(where: { $0.frame.toCocoa().contains(CGPoint(x: f.midX, y: f.midY)) }) {
                 present(id: id, frame: f, inactive: true)
                 return
             }
