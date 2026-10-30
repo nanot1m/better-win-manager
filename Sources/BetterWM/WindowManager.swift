@@ -476,7 +476,8 @@ final class WindowManager {
               let target = screen(ofDesktop: ws), let i = NSScreen.screens.firstIndex(of: target) else { return nil }
         let screens = system.screens()
         guard i < screens.count else { return nil }
-        return reconciler.geometry(state.grid(for: space), ScreenInfo(space: space, area: screens[i].area)).frame(of: id)
+        // As the front window of its stack: a hidden tab's slot is the corner it waits at, which is nowhere to show it.
+        return reconciler.geometry(state.grid(for: space), ScreenInfo(space: space, area: screens[i].area), front: id).frame(of: id)
     }
 
     /// After a workspace switch: show the ring on the window we are about to raise, in the same pass, then raise it.

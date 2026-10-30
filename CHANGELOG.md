@@ -10,6 +10,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 - The getting-started guide and the landing page show the three macOS settings panes to adjust, with the target state visible.
 
 ### Fixed
+- The overview drew a stray window below a desktop's thumbnail: a hidden tab of a tabbed stack was placed at the off-screen corner it waits at. Every window now shows at the frame it has when in front.
 - Dragging a resize handle lagged behind the pointer with slow apps (Finder takes about 100 ms per frame change): every mouse move queued a full batch of frame changes. Only the newest batch is carried out now.
 - The grey ring on a stack's front window drew over the floating window that had the focus; it now sits right above its own window, below everything in front.
 
