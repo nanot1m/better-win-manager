@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Fixed
+- Crash when a tiled slot was narrower than twice the ring gap (several Finder windows in columns): the inset produced an infinite frame and the focus ring asked AppKit for it. The inset now stops at a point of size, and the ring refuses non-finite frames.
+
 ## [0.27.1] - 2026-10-29
 
 ### Changed

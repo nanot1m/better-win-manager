@@ -251,7 +251,9 @@ final class FocusRing {
     private func place(frame: CGRect) {
         let padded = frame.insetBy(dx: -pad, dy: -pad)
         let target = padded.toCocoa()
-        guard window.frame != target else { return }
+        // AppKit throws on a frame that is not finite; the layout never means one, but never crash over it.
+        guard !target.isNull, !target.isInfinite, target.width.isFinite, target.height.isFinite, target.origin.x.isFinite, target.origin.y.isFinite,
+              window.frame != target else { return }
         if window.frame.size == target.size, window.isVisible,
            WindowServerEvents.move(CGWindowID(window.windowNumber), to: padded.origin) {
             return
