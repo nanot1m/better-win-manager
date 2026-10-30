@@ -144,6 +144,8 @@
   .setup-head h2 { font-size: 26px; margin-bottom: 8px; }
   .setup-head .sub { margin-bottom: 20px; }
   .setup .card p { line-height: 1.55; }
+  .setup .card a.shot { display: block; margin-top: 14px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #0f1116; }
+  .setup .card a.shot img { display: block; width: 100%; height: auto; }
   .setup .path { display: block; margin-top: 10px; font-size: 13px; color: var(--text); }
 
   footer { margin-top: 110px; border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 14px; }
@@ -248,9 +250,9 @@
       <p class="sub">BetterWM takes over what Mission Control did. Three settings keep the two from fighting.</p>
     </div>
     <div class="setup">
-      <div class="card"><div class="ico">▣</div><h3>Keep one native desktop</h3><p>BetterWM's desktops replace macOS Spaces: they switch instantly, keep their layouts, and follow their display. Extra native desktops only add a second, slower set of places for windows to hide.</p><span class="path">Mission Control: close every desktop but the first on each display.</span></div>
-      <div class="card"><div class="ico">⌃</div><h3>Free the Mission Control shortcuts</h3><p>macOS claims <kbd>⌃←</kbd> <kbd>⌃→</kbd> and <kbd>⌃1</kbd>–<kbd>⌃9</kbd> for its own desktops, so they never reach BetterWM until you turn them off.</p><span class="path">System Settings › Keyboard › Keyboard Shortcuts › Mission Control</span></div>
-      <div class="card"><div class="ico">⇆</div><h3>Hand over the gestures and F3</h3><p>Turn off the Mission Control swipe and let BetterWM's three- or four-finger swipe move between its desktops instead. The Mission Control key then opens BetterWM's overview.</p><span class="path">System Settings › Trackpad › More Gestures</span></div>
+      <div class="card"><div class="ico">▣</div><h3>Keep one native desktop</h3><p>BetterWM's desktops replace macOS Spaces: they switch instantly, keep their layouts, and follow their display. Extra native desktops only add a second, slower set of places for windows to hide.</p><span class="path">Mission Control: close every desktop but the first on each display. Keep "Displays have separate Spaces" on.</span><a class="shot" href="setup/desktop-dock.png" target="_blank" rel="noopener"><img src="setup/desktop-dock.png" alt="System Settings › Desktop &amp; Dock, Mission Control section" loading="lazy"></a></div>
+      <div class="card"><div class="ico">⌃</div><h3>Free the Mission Control shortcuts</h3><p>macOS claims <kbd>⌃←</kbd> <kbd>⌃→</kbd> and <kbd>⌃1</kbd>–<kbd>⌃9</kbd> for its own desktops, so they never reach BetterWM until you turn them off.</p><span class="path">System Settings › Keyboard › Keyboard Shortcuts › Mission Control: untick both Mission Control rows and Application windows.</span><a class="shot" href="setup/shortcuts.png" target="_blank" rel="noopener"><img src="setup/shortcuts.png" alt="Keyboard Shortcuts › Mission Control with the Mission Control rows unticked" loading="lazy"></a></div>
+      <div class="card"><div class="ico">⇆</div><h3>Hand over the gestures and F3</h3><p>Turn off the Mission Control swipe and let BetterWM's three- or four-finger swipe move between its desktops instead. The Mission Control key then opens BetterWM's overview.</p><span class="path">System Settings › Trackpad › More Gestures: Mission Control, App Exposé and Swipe between full-screen applications set to Off.</span><a class="shot" href="setup/trackpad.png" target="_blank" rel="noopener"><img src="setup/trackpad.png" alt="Trackpad › More Gestures with Mission Control gestures off" loading="lazy"></a></div>
     </div>
   </div>
 </section>

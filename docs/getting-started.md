@@ -32,6 +32,22 @@ On first launch, while Accessibility is missing, a welcome window lists both per
 
 The windows open when a desktop is first seen are tiled left to right. Turn that off with "Tile existing windows" in Settings › General if you would rather start from a clean slate.
 
+## Set up macOS once
+
+BetterWM takes over what Mission Control did; three settings keep the two from fighting.
+
+1. **Keep one native desktop per display.** BetterWM's desktops replace macOS Spaces: they switch instantly, keep their layouts and follow their display. Extra native desktops only add a second, slower set of places for windows to hide. In Mission Control, close every desktop but the first on each display. Leave "Displays have separate Spaces" on.
+
+   ![Desktop & Dock, Mission Control section](images/desktop-dock.png)
+
+2. **Free the Mission Control shortcuts.** macOS claims ⌃← ⌃→ and ⌃1–⌃9 for its own desktops, so they never reach BetterWM until you turn them off: System Settings › Keyboard › Keyboard Shortcuts › Mission Control, untick both Mission Control rows and Application windows.
+
+   ![Keyboard Shortcuts, Mission Control](images/shortcuts.png)
+
+3. **Hand over the gestures and F3.** System Settings › Trackpad › More Gestures: set Mission Control, App Exposé and "Swipe between full-screen applications" to Off, then BetterWM's three- or four-finger swipe moves between its desktops and the Mission Control key opens its overview.
+
+   ![Trackpad, More Gestures](images/trackpad.png)
+
 ## Where things are
 
 - Settings: the menu, or `~/.config/betterwm/config.conf` plus Reload Config.
