@@ -232,11 +232,11 @@ final class FocusRing {
         secondaryLayer.borderColor = Self.inactiveColor.cgColor
         CATransaction.commit()
         secondary.setFrame(f.insetBy(dx: -pad, dy: -pad).toCocoa(), display: false)
-        secondary.level = .floating
-        if secondaryID != id || !secondary.isVisible {
-            secondaryID = id
-            secondary.orderFrontRegardless()
-        }
+        // Right above its own window and so below the floating one that has the focus: a grey ring is a mark on
+        // the stack, not an outline over everything.
+        secondary.level = .normal
+        secondaryID = id
+        secondary.order(.above, relativeTo: Int(id))
     }
 
     private func radius(for id: CGWindowID) -> CGFloat {

@@ -1018,7 +1018,7 @@ final class WindowManager {
         let cmds = reconciler.commands(for: state, snap)
         for case let .setFrame(w, f) in cmds { state.requested[w] = f }
         anticipateRing(cmds, snap.focused)
-        system.execute(cmds)
+        if interacting { system.executeLatest(cmds) } else { system.execute(cmds) }
         if let full = pendingSnapshot { scheduleSave(full) }
         refreshChrome()
     }

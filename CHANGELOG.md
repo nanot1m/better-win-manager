@@ -6,6 +6,10 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Fixed
+- Dragging a resize handle lagged behind the pointer with slow apps (Finder takes about 100 ms per frame change): every mouse move queued a full batch of frame changes. Only the newest batch is carried out now.
+- The grey ring on a stack's front window drew over the floating window that had the focus; it now sits right above its own window, below everything in front.
+
 ## [0.27.2] - 2026-10-30
 
 ### Fixed

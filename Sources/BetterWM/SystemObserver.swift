@@ -219,13 +219,34 @@ final class SystemObserver {
     // MARK: Commands
 
     func execute(_ commands: [Command]) {
-        AX.queue.async {
-            for c in commands {
-                switch c {
-                case let .setFrame(id, f): self.ax[id]?.frame = f
-                case let .raise(id): self.ax[id]?.raise()
-                }
+        AX.queue.async { self.run(commands) }
+    }
+
+    private func run(_ commands: [Command]) {
+        for c in commands {
+            switch c {
+            case let .setFrame(id, f): self.ax[id]?.frame = f
+            case let .raise(id): self.ax[id]?.raise()
             }
+        }
+    }
+
+    private let liveLock = NSLock()
+    private var liveGeneration = 0
+
+    /// For a live gesture (a handle drag): only the newest batch is worth carrying out. Some apps take a hundred
+    /// milliseconds per frame change, so queuing every mouse move would leave the windows trailing the pointer
+    /// long after it stopped.
+    func executeLatest(_ commands: [Command]) {
+        liveLock.lock()
+        liveGeneration += 1
+        let generation = liveGeneration
+        liveLock.unlock()
+        AX.queue.async {
+            self.liveLock.lock()
+            let stale = generation != self.liveGeneration
+            self.liveLock.unlock()
+            if !stale { self.run(commands) }
         }
     }
 
