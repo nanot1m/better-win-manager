@@ -28,6 +28,8 @@ final class SystemObserver {
 
     /// Space to keep free at the top of each screen (the status bar), in points.
     var topInset: (NSScreen) -> CGFloat = { _ in 0 }
+    /// Space to keep free at the bottom (the resting hand), in points.
+    var bottomInset: (NSScreen) -> CGFloat = { _ in 0 }
     /// Model Space of a screen / of a window: the virtual workspace ids the manager assigns.
     var spaceOf: (NSScreen) -> SpaceID = { Spaces.current(for: $0) }
     var spacesOfWindow: (WindowID) -> [SpaceID] = { Spaces.spaces(of: $0) }
@@ -59,6 +61,8 @@ final class SystemObserver {
                 area.size.height -= barBottom - area.minY
                 area.origin.y = barBottom
             }
+            let handTop = s.frame.toCocoa().maxY - bottomInset(s)
+            if bottomInset(s) > 0, area.maxY > handTop { area.size.height -= area.maxY - handTop }
             return ScreenInfo(space: spaceOf(s), area: area)
         }
     }

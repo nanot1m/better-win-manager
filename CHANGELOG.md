@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Added
+- The hand (`hand`, Settings › Other): a separate mode where windows can be held off the table as cards in a fan along the bottom of each screen, the way a card game shows a hand. ⌥-drag a window and it is sucked into a card, genie style; drop the card in the fan to hold it, or on the table to play it: with ⌥ still held it is tiled into the zone under the pointer, otherwise it floats where it was dropped. Click a card to tile it into a new column. Each card shows the app's icon and name, the window's title, and three gems: cost (memory in GB, times ten), attack (CPU %) and health (the app's window count). The fan is liquid glass, peeks above the edge and rises on hover; cards overlap in an arc, the hovered one lifts, and a carried card hovers above the table with a long shadow. Actions `holdWindow`, `holdAll` and `toggleHand`. Per desktop, saved with the layout; the layout keeps the resting fan's height free at the bottom of the screen.
+
 ## [0.27.3] - 2026-10-30
 
 ### Changed

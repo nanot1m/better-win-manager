@@ -18,6 +18,12 @@ How a stacked screen looks is `stackStyle`, tabs along the top by default: a **c
 
 Windows float when you untile them, when their app is on the ignore list, when they are smaller than `smallWindowSize` (dialogs), or when auto-tiling is off. A window you untile by hand stays floating until you tile it again, even across workspace switches and relaunches. Toggling tiling off puts the window back where it floated before, and a drag or resize by hand that ends untiled settles a new floating spot.
 
+## The hand
+
+With `hand` on, every screen has a fan of cards peeking above its bottom edge, like a hand in a card game; move the pointer there and it rises. Each card is a window of the current desktop held off the table: parked out of sight like windows of other desktops. The card shows the app's icon and name, the window's title, and three gems: cost, the app's memory in GB times ten; attack, its CPU use in percent; health, how many windows the app has.
+
+Hold ⌥ and drag a window to pick it up: a snapshot of it is sucked into a card under the pointer while the window itself is parked. Drop the card in the fan to hold it. Drop it on the table to play it: with ⌥ still held it is tiled into the drop zone under the pointer, without ⌥ it floats where it was dropped. Clicking a card tiles it into a new column. The hand is per desktop and saved with the layout.
+
 ## Workspaces
 
 Workspaces are numbered across all screens, and each lives on one display: every screen shows one of its own at a time, and each screen's bar lists the ones living there. ⌃1…⌃9 always mean the same workspace; switching to one shows it on its screen. ⌃→ and ⌃← move through the workspaces of the current screen. "Send this desktop to the next screen" moves the current workspace, windows and all, to the next display.

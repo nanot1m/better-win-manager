@@ -181,6 +181,9 @@ extension AppDelegate {
         add("Shrink Window", #selector(shrinkWindow), action: "shrink")
         add("Equalize Sizes", #selector(equalize), action: "equalize")
         add("Toggle Stacked Layout", #selector(toggleStack), action: "toggleStack")
+        add("Hold Focused Window in Hand", #selector(holdFocused), action: "holdWindow")
+        add("Hold All Windows in Hand", #selector(holdAll), action: "holdAll")
+        add("Show / Hide Hand", #selector(toggleHand), action: "toggleHand")
 
         section("Desktops")
         let desktops = NSMenuItem(title: "Switch to Desktop", action: nil, keyEquivalent: "")
@@ -274,6 +277,9 @@ extension AppDelegate {
             "toggleTile": { [weak self] in self?.resumeForTiling(); self?.manager.toggleFocused() },
             "retile": { [weak self] in self?.resumeForTiling(); self?.manager.retileCurrentScreen() },
             "toggleStack": { [weak self] in self?.manager.toggleStackedLayout() },
+            "holdWindow": { [weak self] in self?.manager.holdFocused() },
+            "holdAll": { [weak self] in self?.manager.holdAllOnCurrentDesktop() },
+            "toggleHand": { [weak self] in self?.manager.toggleHand() },
             "refreshRing": { [weak self] in self?.manager.focusRing.remeasureCorners() },
             "equalize": { [weak self] in self?.manager.equalize() },
             "grow": { [weak self] in self?.manager.resizeFocused(grow: true) },
@@ -366,6 +372,9 @@ extension AppDelegate {
     }
     @objc func menuSendDesktopToNextScreen(_ s: NSMenuItem) { if let d = desktop(of: s) { manager.sendDesktopToNextScreen(d) } }
     @objc func toggleStack() { manager.toggleStackedLayout() }
+    @objc func holdFocused() { manager.holdFocused() }
+    @objc func holdAll() { manager.holdAllOnCurrentDesktop() }
+    @objc func toggleHand() { manager.toggleHand() }
     @objc func equalize() { manager.equalize() }
     @objc func reloadConfig() {
         manager.reloadConfig()

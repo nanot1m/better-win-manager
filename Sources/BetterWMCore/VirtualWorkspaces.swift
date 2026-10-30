@@ -14,6 +14,8 @@ public final class VirtualWorkspaces {
     /// Real frames of floating windows while parked, restored when their workspace returns.
     private var parkedFrames: [WindowID: CGRect] = [:]
     private var parked: Set<WindowID> = []
+    /// Windows held in the hand: they belong to a shown desktop yet stay parked until played back onto the table.
+    public private(set) var hand: Set<WindowID> = []
     /// Apps hidden with the native Hide because every window they have lives on an inactive workspace. Windows
     /// already parked stay in the corner while hidden: moving them back would race the unhide later.
     private var hiddenByPid: [pid_t: Set<WindowID>] = [:]
@@ -131,7 +133,17 @@ public final class VirtualWorkspaces {
     public func rememberHomes(_ windows: [WindowInfo]) {
         for w in windows { if let ws = membership[w.id] { homeByPid[w.pid] = ws } }
     }
-    public func forget(_ w: WindowID) { membership[w] = nil; parkedFrames[w] = nil; parked.remove(w) }
+    public func forget(_ w: WindowID) { membership[w] = nil; parkedFrames[w] = nil; parked.remove(w); hand.remove(w) }
+    public func isInHand(_ w: WindowID) -> Bool { hand.contains(w) }
+    /// Takes `w` into the hand; the next `apply` parks it. With `parkedAt`, the caller has already moved the
+    /// window to the corner and this is the frame to come back to.
+    public func hold(_ w: WindowID, parkedAt frame: CGRect? = nil) {
+        adopt(w)
+        hand.insert(w)
+        if let frame { parkedFrames[w] = frame; parked.insert(w) }
+    }
+    /// Lets `w` out of the hand; the next `apply` unparks it (to its remembered frame) unless a layout claims it first.
+    public func release(_ w: WindowID) { hand.remove(w) }
     /// A saved layout may name a workspace beyond the configured count (created on demand last time); it comes back.
     public func move(_ w: WindowID, to ws: Int) {
         if ws >= count { setCount(ws + 1) }
@@ -161,6 +173,7 @@ public final class VirtualWorkspaces {
         membership[w] = ws ?? active
         parked.remove(w)
         parkedFrames[w] = nil
+        hand.remove(w)
     }
 
     /// Shows `ws` on its display and makes it the active desktop.
@@ -235,7 +248,7 @@ public final class VirtualWorkspaces {
                 log("unhide app \(p)")
             }
             for w in group {
-                let shouldPark = !shown.contains(workspace(of: w))
+                let shouldPark = !shown.contains(workspace(of: w)) || hand.contains(w)
                 if shouldPark, !parked.contains(w), let f = frame(w) {
                     if !isTiled(w) { parkedFrames[w] = f }
                     setFrame(w, CGRect(origin: parkOrigin(w, f), size: f.size))

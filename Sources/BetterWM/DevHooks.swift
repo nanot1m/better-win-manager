@@ -86,6 +86,13 @@ extension AppDelegate {
                 Tween.run(duration: seconds, linear: true, step: { x in overview?.gestureChanged(x) })
             }
         }
+        // Dev aid: holds the focused window after 3 s and plays it back 4 s later, to watch the card animations.
+        if CommandLine.arguments.contains("--hand-demo") || CommandLine.arguments.contains("--hand-hold") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [manager] in manager.holdFirstOnTable() }
+        }
+        if CommandLine.arguments.contains("--hand-demo") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 7) { [manager] in manager.playFirstCard() }
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--snapshot-switcher"), i + 1 < CommandLine.arguments.count {
             let path = CommandLine.arguments[i + 1]
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [switcher] in switcher?.snapshot(to: path) }

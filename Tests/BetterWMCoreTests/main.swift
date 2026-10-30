@@ -584,6 +584,30 @@ struct ReconcilerTests {
         return v
     }
 
+    func testHandParksOnShownDesktop() {
+        let v = desktops(2)
+        let screen = FakeScreen()
+        let home = CGRect(x: 100, y: 100, width: 800, height: 600)
+        screen.frames[1] = home
+        v.adopt(1)
+        screen.park(v, now: Date())
+        expect(!v.isParked(1) && screen.frames[1] == home, #function, #line)
+        // Held: parked although its desktop is shown; released: back where it was.
+        v.hold(1)
+        screen.park(v, now: Date())
+        expect(v.isParked(1) && v.isInHand(1) && screen.frames[1]?.origin == screen.corner, #function, #line)
+        v.release(1)
+        screen.park(v, now: Date())
+        expect(!v.isParked(1) && !v.isInHand(1) && screen.frames[1] == home, #function, #line)
+        // Claimed by a layout (played onto the table): no longer in the hand, and nothing is restored.
+        v.hold(1)
+        screen.park(v, now: Date())
+        v.claim(1)
+        expect(!v.isInHand(1) && !v.isParked(1), #function, #line)
+        screen.park(v, now: Date())
+        expect(screen.frames[1]?.origin == screen.corner, #function, #line)
+    }
+
     func testDesktopsLiveOnDisplays() {
         let v = desktops(3)
         expect(v.desktops(on: "A") == [0, 1, 2] && v.shown == [0], #function, #line)
@@ -784,6 +808,7 @@ let tests: [(String, () -> Void)] = [
     ("mainDisplayChangeKeepsDesktops", t.testMainDisplayChangeKeepsDesktops),
     ("sendingLastDesktopLeavesANewOne", t.testSendingLastDesktopLeavesANewOne),
     ("directionalFocusInGrid", t.testDirectionalFocusInGrid),
+    ("handParksOnShownDesktop", t.testHandParksOnShownDesktop),
 ]
 for (name, run) in tests {
     let before = failures

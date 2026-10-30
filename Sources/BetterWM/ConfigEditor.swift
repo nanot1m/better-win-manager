@@ -56,6 +56,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var stackNarrowField: NSTextField!
     private var switcherThumbsSwitch: NSSwitch!
     private var overviewSwitch: NSSwitch!
+    private var handSwitch: NSSwitch!
     private var overviewKeySwitch: NSSwitch!
     private var overviewGestureSwitch: NSSwitch!
     private var desktopSwipeSwitch: NSSwitch!
@@ -461,6 +462,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         switcherSwitch = toggle(#selector(switcherChanged))
         switcherThumbsSwitch = toggle()
         overviewSwitch = toggle(#selector(overviewChanged))
+        handSwitch = toggle()
         overviewKeySwitch = toggle()
         overviewGestureSwitch = toggle()
         desktopSwipeSwitch = toggle()
@@ -482,6 +484,9 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             group("Switcher", [
                 row("⌥Tab window switcher", "Windows grouped by desktop; the hotkey is on the Hotkeys page.", [switcherSwitch]),
                 row("Show window previews", "Needs Screen Recording permission; otherwise app icons are shown.", [switcherThumbsSwitch]),
+            ]),
+            group("The hand", [
+                row("Hand of cards", "Windows can be held off the table as cards in a fan along the bottom of the screen. Hold ⌥ and drag a window to pick it up as a card: drop it in the fan to hold it, or on the table to play it, tiled if ⌥ is still held, floating otherwise. Click a card to tile it. Cost is the app's memory in GB times ten, attack its CPU use, health its window count. Needs Screen Recording for the pick-up animation.", [handSwitch]),
             ]),
             group("Desktop overview", [
                 row("Desktop overview", "Mission Control for BetterWM desktops: a strip of every desktop and the current one's windows spread out. Click to switch or focus, drag a window onto a desktop to move it. The hotkey is on the Hotkeys page.", [overviewSwitch]),
@@ -789,6 +794,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 "moveLeft", "moveRight", "moveUp", "moveDown",
                 "mergeLeft", "mergeRight",
                 "toggleTile", "grow", "shrink", "toggleStack", "retile", "equalize",
+                "holdWindow", "holdAll", "toggleHand",
                 "pause", "refreshRing",
             ]),
             ("Actions & Overview", [
@@ -910,6 +916,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         on(switcherSwitch, config.switcher)
         switcherChanged()
         on(overviewSwitch, config.overview)
+        on(handSwitch, config.hand)
         on(overviewKeySwitch, config.overviewKey)
         on(overviewGestureSwitch, config.overviewGesture)
         on(desktopSwipeSwitch, config.desktopSwipe)
@@ -998,6 +1005,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.switcherThumbnails = isOn(switcherThumbsSwitch)
         config.switcher = isOn(switcherSwitch)
         config.overview = isOn(overviewSwitch)
+        config.hand = isOn(handSwitch)
         config.overviewKey = isOn(overviewKeySwitch)
         config.overviewGesture = isOn(overviewGestureSwitch)
         config.desktopSwipe = isOn(desktopSwipeSwitch)

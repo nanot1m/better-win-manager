@@ -11,8 +11,21 @@ public struct SavedLayout: Codable, Equatable {
         /// The window's id when saved; stable for as long as the app keeps the window open, so a BetterWM
         /// relaunch puts every window back exactly, whatever its title has become.
         public var id: WindowID?
-        public init(bundleID: String?, title: String, frame: CGRect, heightWeight: CGFloat, id: WindowID? = nil) {
-            self.bundleID = bundleID; self.title = title; self.frame = frame; self.heightWeight = heightWeight; self.id = id
+        /// A floating window held in the hand (parked on its own desktop until played).
+        public var inHand: Bool = false
+        public init(bundleID: String?, title: String, frame: CGRect, heightWeight: CGFloat, id: WindowID? = nil, inHand: Bool = false) {
+            self.bundleID = bundleID; self.title = title; self.frame = frame; self.heightWeight = heightWeight; self.id = id; self.inHand = inHand
+        }
+
+        enum CodingKeys: String, CodingKey { case bundleID, title, frame, heightWeight, id, inHand }
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            bundleID = try c.decodeIfPresent(String.self, forKey: .bundleID)
+            title = try c.decode(String.self, forKey: .title)
+            frame = try c.decode(CGRect.self, forKey: .frame)
+            heightWeight = try c.decode(CGFloat.self, forKey: .heightWeight)
+            id = try c.decodeIfPresent(WindowID.self, forKey: .id)
+            inHand = try c.decodeIfPresent(Bool.self, forKey: .inHand) ?? false
         }
     }
     public struct Column: Codable, Equatable {
@@ -110,7 +123,8 @@ public struct SavedLayout: Codable, Equatable {
 
     /// Captures every non-empty grid in `state`, describing windows with what `snapshot` knows about them.
     /// `floatingSpace` names the space an untiled window belongs to; nil leaves it out.
-    public static func capture(_ state: DesiredState, _ snapshot: Snapshot, floatingSpace: (WindowInfo) -> SpaceID? = { _ in nil }) -> SavedLayout {
+    public static func capture(_ state: DesiredState, _ snapshot: Snapshot, floatingSpace: (WindowInfo) -> SpaceID? = { _ in nil },
+                               floatingFrame: (WindowInfo) -> CGRect = { $0.frame }, inHand: (WindowID) -> Bool = { _ in false }) -> SavedLayout {
         var out = SavedLayout()
         // Empty grids are still worth saving when their mode isn't the default.
         for (space, grid) in state.grids.sorted(by: { $0.key < $1.key }) where !grid.isEmpty || grid.mode != .columns {
@@ -125,7 +139,7 @@ public struct SavedLayout: Codable, Equatable {
         }
         for w in snapshot.windows where !state.isTiled(w.id) {
             guard let space = floatingSpace(w) else { continue }
-            let slot = Window(bundleID: w.bundleID, title: w.title, frame: w.frame, heightWeight: 1, id: w.id)
+            let slot = Window(bundleID: w.bundleID, title: w.title, frame: floatingFrame(w), heightWeight: 1, id: w.id, inHand: inHand(w.id))
             if let i = out.spaces.firstIndex(where: { $0.id == space }) { out.spaces[i].floating.append(slot) }
             else { out.spaces.append(Space(id: space, columns: [], floating: [slot])) }
         }
@@ -136,16 +150,16 @@ public struct SavedLayout: Codable, Equatable {
     /// Pairs saved floating windows of `space` with `candidates` (same app and title, else nearest frame) and
     /// returns each match with the frame to put it back at.
     /// With `exactTitle`, only a window with the slot's exact title qualifies (no nearest-frame fallback).
-    public func restoreFloating(space: SpaceID, candidates: [WindowInfo], exactTitle: Bool = false) -> [(id: WindowID, frame: CGRect)] {
+    public func restoreFloating(space: SpaceID, candidates: [WindowInfo], exactTitle: Bool = false) -> [(id: WindowID, frame: CGRect, inHand: Bool)] {
         guard let saved = spaces.first(where: { $0.id == space }), !saved.floating.isEmpty else { return [] }
         var pool = candidates
-        var out: [(WindowID, CGRect)] = []
+        var out: [(WindowID, CGRect, Bool)] = []
         for slot in saved.floating {
             let sameApp = pool.indices.filter { pool[$0].bundleID == slot.bundleID }
             guard !sameApp.isEmpty else { continue }
             let exact = sameApp.first { pool[$0].id == slot.id } ?? sameApp.first { pool[$0].title == slot.title }
             guard let pick = exact ?? (exactTitle ? nil : sameApp.min { distance(pool[$0].frame, slot.frame) < distance(pool[$1].frame, slot.frame) }) else { continue }
-            out.append((pool.remove(at: pick).id, slot.frame))
+            out.append((pool.remove(at: pick).id, slot.frame, slot.inHand))
         }
         return out
     }

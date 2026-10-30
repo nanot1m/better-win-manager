@@ -68,6 +68,9 @@ public struct Config {
     public var switcher: Bool = true
     /// Show live window previews, or just app icons.
     public var switcherThumbnails: Bool = true
+    /// The hand: a fan of cards along the bottom of each screen, one per window held off the table. Drop a card
+    /// on the table to tile its window there; drag a window into the fan to hold it.
+    public var hand: Bool = false
     /// Desktop overview: every desktop in a strip and the current one's windows spread out, Mission Control style.
     public var overview: Bool = true
     /// Take over the Mission Control key (F3 on Apple keyboards) to open the overview.
@@ -226,6 +229,7 @@ public struct Config {
         ("mergeLeft", "Merge into left column"), ("mergeRight", "Merge into right column"),
         ("toggleTile", "Tile / untile focused window"), ("grow", "Grow focused window"), ("shrink", "Shrink focused window"),
         ("toggleStack", "Toggle stacked layout on this screen"),
+        ("holdWindow", "Hold the focused window in the hand"), ("holdAll", "Hold every window of this desktop in the hand"), ("toggleHand", "Show / hide the hand"),
         ("retile", "Retile current screen"),
         ("equalize", "Equalize sizes"), ("pause", "Pause / resume tiling"), ("refreshRing", "Re-measure window corners for the focus ring"),
         ("desktopNext", "Next desktop"), ("desktopPrevious", "Previous desktop"),
@@ -268,6 +272,8 @@ public struct Config {
         # ⌥Tab window switcher grouped by desktop; previews need Screen Recording permission, otherwise icons only.
         switcher = \(switcher)
         switcherThumbnails = \(switcherThumbnails)
+        # The hand: a fan of cards along the bottom of the screen for windows held off the table.
+        hand = \(hand)
         # Desktop overview (Mission Control style). overviewKey takes over the Mission Control key (F3);
         # overviewGesture drives it with a four-finger swipe (turn the native gesture off in System Settings).
         overview = \(overview)
@@ -428,6 +434,7 @@ public struct Config {
             case "switcher": cfg.switcher = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "switcherThumbnails": cfg.switcherThumbnails = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "overview": cfg.overview = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "hand": cfg.hand = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "overviewKey": cfg.overviewKey = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "overviewGesture": cfg.overviewGesture = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "gestureFingers": cfg.gestureFingers = Int(value) == 3 ? 3 : 4

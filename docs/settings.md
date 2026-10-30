@@ -86,6 +86,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | --- | --- | --- |
 | `switcher` | true | ⌥Tab window switcher |
 | `switcherThumbnails` | true | Window previews in the switcher; needs Screen Recording, otherwise icons |
+| `hand` | false | The hand: a fan of cards along the bottom of each screen for windows held off the table (see [concepts](concepts.md#the-hand)) |
 | `overview` | true | Desktop overview (see [actions](actions.md)); previews need Screen Recording, otherwise app icons |
 | `overviewKey` | true | The Mission Control key (F3) opens the overview instead of Mission Control |
 | `gestureFingers` | 4 | Fingers for both swipe gestures: 3 or 4 |

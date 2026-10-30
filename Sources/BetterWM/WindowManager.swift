@@ -136,6 +136,7 @@ final class WindowManager {
 
     /// The observer reports model Spaces: the virtual workspace a screen shows and the one a window belongs to.
     private func installSpaceModel() {
+        system.bottomInset = { [unowned self] _ in self.config.hand ? HandWindow.peek : 0 }
         system.spaceOf = { [unowned self] screen in
             VirtualWorkspaces.spaceID(self.desktops.shownDesktop(on: Self.displayID(screen)) ?? self.desktops.active)
         }
@@ -146,6 +147,8 @@ final class WindowManager {
     func prepareForQuit() {
         saveWork?.cancel()
         saveNow()
+        // Unparking below puts every window at a frame that is not where it belongs; nothing after this may be saved.
+        suppressSaves = true
         // Parked tiled windows have no remembered frame; their grid slot is where they go.
         for id in desktops.parkedWindows where state.isTiled(id) {
             if let f = targetFrame(of: id) { system.execute([.setFrame(id, f)]) }
@@ -841,6 +844,7 @@ final class WindowManager {
                 state.forget(id)
                 floatingFrames[id] = nil
                 adoptedInBackground[id] = nil
+                handOrder.removeAll { $0 == id }
                 Thumbnails.forget(id)
                 lastFocusedByWorkspace = lastFocusedByWorkspace.filter { $0.value != id }
             }
@@ -894,12 +898,21 @@ final class WindowManager {
                 guard let ws = VirtualWorkspaces.workspace(of: savedSpace.id) else { continue }
                 if !atLaunch, desktops.isShown(ws) { continue }
                 let candidates = pool.filter { eligible($0) }
-                for (id, frame) in layout.restoreFloating(space: savedSpace.id, candidates: candidates, exactTitle: !atLaunch) {
+                for (id, frame, inHand) in layout.restoreFloating(space: savedSpace.id, candidates: candidates, exactTitle: !atLaunch) {
                     desktops.move(id, to: ws)
                     state.floating.insert(id)
-                    system.execute([.setFrame(id, fit(frame, toDesktopOf: id))])
+                    let fitted = fit(frame, toDesktopOf: id)
+                    if inHand {
+                        // Straight to the corner, remembering the fitted frame: no flash of the window on its way in.
+                        let corner = Parking.origin(for: fitted, home: screen(ofDesktop: ws)?.frame.toCocoa(), screens: NSScreen.screens.map { $0.frame.toCocoa() })
+                        desktops.hold(id, parkedAt: fitted)
+                        system.execute([.setFrame(id, CGRect(origin: corner, size: fitted.size))])
+                        handOrder.append(id)
+                    } else {
+                        system.execute([.setFrame(id, fitted)])
+                    }
                     pool.removeAll { $0.id == id }
-                    Log.write("restore", "\(describe(id)) floats on workspace \(ws + 1) at \(frame)")
+                    Log.write("restore", "\(describe(id)) \(inHand ? "is held in the hand" : "floats") on workspace \(ws + 1) at \(frame)")
                     placed = true
                 }
             }
@@ -1000,7 +1013,7 @@ final class WindowManager {
         }
         var layout = SavedLayout.capture(state, snap, floatingSpace: { w in
             self.desktops.isKnown(w.id) ? VirtualWorkspaces.spaceID(self.desktops.workspace(of: w.id)) : nil
-        })
+        }, inHand: desktops.isInHand)
         // Desktops not active right now keep what was saved for them before.
         let activeSpaces = Set(snap.screens.map(\.space))
         let captured = Set(layout.spaces.map(\.id))
@@ -1075,6 +1088,7 @@ final class WindowManager {
     private func refreshChrome() {
         refreshHandles()
         refreshTabStrips()
+        refreshHands()
         focusRing.update()
         stackHandles()
     }
@@ -1559,6 +1573,192 @@ final class WindowManager {
                    clearance: focusRing.cornerRadius, side: side, config: config)
         }
         focusRing.showSecondary(secondary)
+    }
+
+    // MARK: The hand
+
+    private var hands: [HandWindow] = []
+    /// Cards in the order they were taken; a played card leaves, a new one goes last.
+    private var handOrder: [WindowID] = []
+
+    private func handItem(_ id: WindowID) -> HandWindow.Item? {
+        guard let pid = system.pid(of: id) else { return nil }
+        let app = NSRunningApplication(processIdentifier: pid)
+        let title = system.axWindow(id)?.title ?? ""
+        let windows = desktops.knownWindows.filter { system.pid(of: $0) == pid }.count
+        return HandWindow.Item(id: id, pid: pid, app: app?.localizedName ?? "", title: title.isEmpty ? (app?.localizedName ?? "") : title,
+                               icon: app?.icon, cost: Int((ProcessStats.gigabytes(pid) * 10).rounded()),
+                               attack: Int(ProcessStats.cpuPercent(pid).rounded()), health: max(1, windows))
+    }
+
+    private func handItems(onDesktop d: Int) -> [HandWindow.Item] {
+        let held = desktops.hand.filter { desktops.workspace(of: $0) == d }
+        handOrder += held.filter { !handOrder.contains($0) }
+        return handOrder.filter(held.contains).compactMap(handItem)
+    }
+
+    private func refreshHands() {
+        guard config.hand else { hands.forEach { $0.hide() }; return }
+        let screens = NSScreen.screens.filter { !Spaces.showsFullscreen($0) }
+        while hands.count < screens.count {
+            let h = HandWindow(screen: screens[hands.count])
+            h.onPlay = { [weak self] id, p, alt, flight in self?.play(id, at: p, alt: alt, flight: flight) }
+            h.onDragMoved = { [weak self] id, p, alt in
+                guard let self else { return }
+                if p.x < 0 || !alt { self.overlay.hide() } else { self.overlay.show(zone: self.zone(at: p, draggingID: id)?.1) }
+            }
+            hands.append(h)
+        }
+        for (i, h) in hands.enumerated() {
+            guard i < screens.count else { h.hide(); continue }
+            let screen = screens[i]
+            guard let d = desktops.shownDesktop(on: Self.displayID(screen)) else { h.hide(); continue }
+            h.show(items: handItems(onDesktop: d), on: screen)
+        }
+    }
+
+    /// The fan under `p` (AX coordinates), if any: a drop target for a window being carried.
+    func hand(at p: CGPoint) -> HandWindow? { hands.first { $0.isVisible && $0.dropFrame.contains(p) } }
+    func highlightHand(_ h: HandWindow?) { for hand in hands { hand.setDropTarget(hand === h) } }
+    func toggleHand() { hands.filter(\.isVisible).forEach { $0.togglePinned() } }
+
+    /// Takes a window off the table: a snapshot of it stands in while the window itself is parked at once. The
+    /// snapshot comes back as a card in flight, for the caller to morph and carry or to land in the fan.
+    @discardableResult
+    func pickUp(_ w: AXWindow) -> CardFlight? {
+        guard let id = id(w), !desktops.isInHand(id), !desktops.isParked(id), let item = handItem(id) else { return nil }
+        Log.write("hand", "pick up \(describe(w))")
+        Thumbnails.captureNow([id])
+        let frame = w.frame
+        let flight = CardFlight(window: Thumbnails.cached(id), frame: frame.toCocoa(), card: HandWindow.render(item))
+        if state.isTiled(id) { state.untile(id) }
+        state.floating.insert(id)
+        // Parked right here rather than by the next tick: during a drag, ticks wait for the mouse to go up.
+        let corner = Parking.origin(for: frame, home: screen(ofDesktop: desktops.workspace(of: id))?.frame.toCocoa(),
+                                    screens: NSScreen.screens.map { $0.frame.toCocoa() })
+        desktops.hold(id, parkedAt: frame)
+        system.execute([.setFrame(id, CGRect(origin: corner, size: frame.size))])
+        if !handOrder.contains(id) { handOrder.append(id) }
+        hands.forEach { $0.hideCard(id) }
+        tick()
+        return flight
+    }
+
+    /// Takes a window into the hand: it is sucked into its card, which then settles in the fan.
+    func hold(_ w: AXWindow) {
+        guard let id = id(w), let flight = pickUp(w) else { return }
+        let centre = CGPoint(x: w.frame.midX, y: w.frame.midY).toAX()
+        flight.morph(toCardAt: centre) { [weak self] in self?.land(id, flight: flight) }
+    }
+
+    /// A card in flight settles into the fan.
+    func land(_ id: WindowID, flight: CardFlight) {
+        overlay.hide()
+        interacting = false
+        tick { [weak self] in
+            guard let self else { return flight.fade() }
+            self.refreshHands()
+            guard let hand = self.hands.first(where: { $0.cardFrame(of: id) != nil }), let target = hand.cardFrame(of: id) else {
+                self.hands.forEach { $0.revealCard(id) }
+                return flight.fade()
+            }
+            flight.setDown()
+            flight.fly(to: target.toCocoa(), duration: 0.3) {
+                hand.revealCard(id)
+                flight.dismiss()
+            }
+        }
+    }
+
+    /// Plays a card. With `alt` (or a click, `p` off screen) the window is tiled: into the zone under `p`, or a new
+    /// column. Without, it floats where it was dropped. The card grows into place first, then the window takes
+    /// over and the card fades.
+    func play(_ id: WindowID, at p: CGPoint, alt: Bool, flight: CardFlight) {
+        overlay.hide()
+        interacting = false
+        guard let w = system.axWindow(id) else { return flight.fade() }
+        let click = p.x < 0
+        guard click || alt else { return playFloating(id, w, at: p, flight: flight) }
+        let screen = (click ? nil : screen(at: p)) ?? screen(ofDesktop: desktops.workspace(of: id)).flatMap { s in
+            screens().first { $0.area.contains(CGPoint(x: s.frame.toCocoa().midX, y: s.frame.toCocoa().midY)) }
+        }
+        guard let screen else { return flight.fade() }
+        var grid = state.grid(for: screen.space)
+        let zone = (click ? nil : zone(at: p, draggingID: id)?.0) ?? .newColumn(index: grid.columns.count)
+        Log.write("hand", "play \(describe(w)) into \(zone) on space \(screen.space)")
+        desktops.claim(id, for: desktopShown(at: CGPoint(x: screen.area.midX, y: screen.area.midY)))
+        state.floating.remove(id)
+        for space in state.grids.keys where space != screen.space { state.grids[space]?.remove(id) }
+        grid.apply(zone, to: id)
+        state.grids[screen.space] = grid
+        state.seen[screen.space, default: []].insert(id)
+        handOrder.removeAll { $0 == id }
+        let target = reconciler.geometry(grid, screen, front: id).frame(of: id) ?? screen.area
+        flight.drop(onto: target.toCocoa()) { [weak self] in
+            self?.tick { [weak self] in
+                w.raise()
+                self?.focusRing.update()
+                flight.fade(duration: 0.2)
+            }
+        }
+    }
+
+    /// The window floats again, centred under the drop point at the size it had, kept on its screen.
+    private func playFloating(_ id: WindowID, _ w: AXWindow, at p: CGPoint, flight: CardFlight) {
+        let size = desktops.parkedFrame(of: id)?.size ?? CGSize(width: 900, height: 600)
+        var frame = CGRect(x: p.x - size.width / 2, y: p.y - size.height / 2, width: size.width, height: size.height)
+        if let area = screen(at: p)?.area {
+            frame.origin.x = min(max(frame.minX, area.minX), max(area.minX, area.maxX - frame.width))
+            frame.origin.y = min(max(frame.minY, area.minY), max(area.minY, area.maxY - frame.height))
+        }
+        Log.write("hand", "play \(describe(w)) floating at \(frame)")
+        desktops.claim(id, for: desktopShown(at: p))
+        state.floating.insert(id)
+        handOrder.removeAll { $0 == id }
+        floatingFrames[id] = frame
+        system.execute([.setFrame(id, frame)])
+        flight.drop(onto: frame.toCocoa()) { [weak self] in
+            self?.tick { [weak self] in
+                w.raise()
+                self?.focusRing.update()
+                flight.fade(duration: 0.2)
+            }
+        }
+    }
+
+    /// The hotkey: the focused window goes into the hand.
+    func holdFocused() {
+        guard let w = system.focused else { return }
+        hold(w)
+    }
+
+    /// Every window on the active desktop goes into the hand, one after another so the cards are seen flying in.
+    func holdAllOnCurrentDesktop() {
+        let d = desktops.active
+        let ids = windowsByDesktop().first { $0.desktop == d }?.windows.compactMap(id) ?? []
+        let eligible = ids.filter { !desktops.isInHand($0) && !desktops.isParked($0) }
+        Log.write("hand", "hold all: \(eligible.count) window(s) on desktop \(d + 1)")
+        for (i, id) in eligible.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12 * Double(i)) { [weak self] in
+                guard let self, let w = self.system.axWindow(id) else { return }
+                self.hold(w)
+            }
+        }
+    }
+
+    /// Dev aid: holds the first tiled window of the active desktop.
+    func holdFirstOnTable() {
+        let space = VirtualWorkspaces.spaceID(desktops.active)
+        guard let id = state.grid(for: space).windows.first, let w = system.axWindow(id) else { return }
+        hold(w)
+    }
+
+    /// Dev aid: plays the first card of the active desktop as a click on it would.
+    func playFirstCard() {
+        guard let hand = hands.first(where: \.isVisible), let id = handOrder.first(where: desktops.isInHand),
+              let item = handItem(id), let frame = hand.cardFrame(of: id) else { return }
+        hand.hideCard(id)
+        play(id, at: CGPoint(x: -1, y: -1), alt: true, flight: CardFlight(card: HandWindow.render(item), frame: frame.toCocoa()))
     }
 
     private func refreshHandles() {

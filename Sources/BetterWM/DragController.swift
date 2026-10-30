@@ -35,7 +35,16 @@ final class DragController {
         var dragFlags: CGEventFlags = []
         var overviewKey = false
         var recording = false
+        /// A window is being carried as a card: the app's own drag ended, the pointer's moves are ours alone.
+        var carrying = false
     }
+    /// The card standing in for the window being carried, and that window.
+    private var carry: (id: WindowID, window: AXWindow, flight: CardFlight)?
+    /// Where the pointer was when the window became a card: the app's own drag is frozen there and ended there.
+    private var carryStart = CGPoint.zero
+    private var handTarget: HandWindow?
+    /// Marks the mouse-up we post ourselves to end an app's drag, so the tap lets it through untouched.
+    private static let ownEventMarker: Int64 = 0xB3_77E2
     private var tapState = TapState()
     private var lock = os_unfair_lock()
     /// Tap-thread state: a scroll sequence that started while swallowing stays swallowed through its momentum,
@@ -55,7 +64,7 @@ final class DragController {
         let s = TapState(swallowScroll: swallowScrolling(), dragging: dragged != nil,
                          dragFlags: HotKey.eventFlags(manager.config.dragModifiers),
                          overviewKey: manager.config.overview && manager.config.overviewKey,
-                         recording: KeyRecorderView.active != nil)
+                         recording: KeyRecorderView.active != nil, carrying: carry != nil)
         os_unfair_lock_lock(&lock)
         tapState = s
         os_unfair_lock_unlock(&lock)
@@ -71,6 +80,7 @@ final class DragController {
         let mask: CGEventMask = (1 << CGEventType.leftMouseDown.rawValue)
             | (1 << CGEventType.leftMouseDragged.rawValue)
             | (1 << CGEventType.leftMouseUp.rawValue)
+            | (1 << CGEventType.mouseMoved.rawValue)
             | (1 << CGEventType.scrollWheel.rawValue)
             | (1 << 29) | (1 << 30) | (1 << 31)
             | (1 << CGEventType.keyDown.rawValue)
@@ -129,8 +139,15 @@ final class DragController {
             forward(type, event)
             return (code == 160 && s.overviewKey) || s.recording ? nil : Unmanaged.passUnretained(event)
         case .leftMouseDown, .leftMouseDragged, .leftMouseUp:
+            if event.getIntegerValueField(.eventSourceUserData) == Self.ownEventMarker { return Unmanaged.passUnretained(event) }
             forward(type, event)
-            return Unmanaged.passUnretained(event)
+            return s.carrying && type != .leftMouseDown ? nil : Unmanaged.passUnretained(event)
+        case .mouseMoved:
+            // After the mouse-up we post to end the app's drag, the system reports the rest of the physical drag
+            // as plain motion; while carrying, that motion is ours.
+            guard s.carrying else { return Unmanaged.passUnretained(event) }
+            forward(type, event)
+            return nil
         default:
             return Unmanaged.passUnretained(event)
         }
@@ -147,6 +164,21 @@ final class DragController {
     // MARK: Main thread
 
     /// The window's frame right now, from WindowServer; the handle itself only knows what the last snapshot saw.
+    /// The carried card follows the pointer; over the fan the fan lights up, elsewhere ⌥ previews the tile
+    /// (without ⌥ the drop floats, so there is nothing to preview).
+    private func carryMoved(_ carry: (id: WindowID, window: AXWindow, flight: CardFlight), to p: CGPoint, alt: Bool) {
+        carry.flight.carry(center: p.toAX())
+        let hand = manager.hand(at: p)
+        if hand !== handTarget { handTarget = hand; manager.highlightHand(hand) }
+        if hand == nil, alt {
+            currentZone = manager.zone(at: p, draggingID: carry.id)
+            manager.overlay.show(zone: currentZone?.1)
+        } else {
+            currentZone = nil
+            manager.overlay.hide()
+        }
+    }
+
     private func liveFrame(_ w: AXWindow) -> CGRect {
         (draggedID ?? w.windowID).flatMap(WindowServerEvents.bounds(of:)) ?? w.frame
     }
@@ -180,7 +212,8 @@ final class DragController {
         case .leftMouseDown:
             dragStart = p
             dropArmed = false
-            guard manager.enabled else { return }
+            // A press on the fan is the fan's business (a card click or drag), not a window drag.
+            guard manager.enabled, manager.hand(at: p) == nil else { return }
             let press = Date()
             pressedAt = press
             hitTestPending = true
@@ -195,6 +228,9 @@ final class DragController {
                 self.currentZone = nil
                 self.windowMoved = false
             }
+        case .mouseMoved:
+            guard let carry else { return }
+            carryMoved(carry, to: p, alt: alt)
         case .leftMouseDragged:
             if dragged == nil, !hitTestPending, alt, manager.enabled, let w = manager.system.focused {
                 // Hit-testing failed on mouse-down; the window being dragged is the frontmost app's focused one.
@@ -212,6 +248,22 @@ final class DragController {
                 lastMoveCheck = Date()
                 let f = liveFrame(w)
                 windowMoved = hypot(f.minX - originalFrame.minX, f.minY - originalFrame.minY) >= 4
+            }
+            // Hand mode: the first time ⌥ is held, or the pointer reaches the fan, the window becomes a card, and
+            // stays one until the drop. Its snapshot is sucked into the card while the window is parked. From here
+            // the tap swallows the drag, so the app's own drag freezes where it is; the drop ends it there.
+            if manager.config.hand {
+                let hand = manager.hand(at: p)
+                if carry == nil, alt || hand != nil, let id = draggedID, let flight = manager.pickUp(w) {
+                    carry = (id, w, flight)
+                    carryStart = p
+                    refreshState()
+                    flight.morph(toCardAt: p.toAX())
+                }
+                if let carry {
+                    carryMoved(carry, to: p, alt: alt)
+                    return
+                }
             }
             // A chip is a drop target for a window being carried, not for a click that strays onto the bar: it needs
             // the same travel that makes a drag count as a hand move, once per press.
@@ -231,6 +283,23 @@ final class DragController {
         case .leftMouseUp:
             pressedAt = nil
             hitTestPending = false
+            if let c = carry {
+                carry = nil
+                dragged = nil
+                manager.overlay.hide()
+                let hand = handTarget
+                handTarget = nil
+                manager.highlightHand(nil)
+                manager.interacting = false
+                // The real release was swallowed; the app's frozen drag ends with a release where it froze, so the
+                // app has no move to apply. Marked, so the tap lets it through untouched.
+                if let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: carryStart, mouseButton: .left) {
+                    up.setIntegerValueField(.eventSourceUserData, value: Self.ownEventMarker)
+                    up.post(tap: .cghidEventTap)
+                }
+                if hand != nil { manager.land(c.id, flight: c.flight) } else { manager.play(c.id, at: p, alt: alt, flight: c.flight) }
+                return
+            }
             let w = dragged
             dragged = nil
             manager.overlay.hide()

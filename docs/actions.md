@@ -26,6 +26,9 @@ Hotkeys are registered globally with Carbon. A combination macOS already uses, s
 | `retile` | ⌃⌥R | Start the screen's grid afresh and tile every window on it, hand-floated ones included; keeps the layout mode |
 | `equalize` | ⌃⌥E | Reset all column widths and row heights to equal weights |
 | `toggleStack` | ⌃⌥S | Switch the screen between columns and stacked layout |
+| `holdWindow` | unbound | Hold the focused window in the hand (needs `hand`): it is sucked into a card in the fan at the bottom of the screen |
+| `holdAll` | unbound | Hold every window of the current desktop in the hand, one after another |
+| `toggleHand` | unbound | Keep the hand raised, or let it rest again |
 | `pause` | unbound | Stop reconciling until pressed again; windows stay where they are |
 | `refreshRing` | unbound | Re-measure window corner radii for the focus ring |
 
