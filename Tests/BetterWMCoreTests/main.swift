@@ -578,19 +578,25 @@ struct ReconcilerTests {
         expect(state.isTiled(2), #function, #line)
     }
 
+    /// Windows on a screen that take the frames they are given, except the ones that ignore moves; parking's asks
+    /// go through an executor as they do in the app.
     final class FakeScreen {
         var frames: [WindowID: CGRect] = [:]
         var hidden: Set<pid_t> = []
         var ignoresMoves: Set<WindowID> = []
+        var executor = Executor()
         let corner = CGPoint(x: 1598, y: 998)
         func park(_ v: VirtualWorkspaces, now: Date, hideable: Bool = false, countRefusals: Bool = true) {
-            v.apply(windows: Array(frames.keys).sorted(), pid: { pid_t($0) }, hideable: { _ in hideable },
-                    isTiled: { _ in false }, frame: { self.frames[$0] },
-                    setFrame: { w, f in if !self.ignoresMoves.contains(w) { self.frames[w] = f } },
-                    parkOrigin: { _, _ in self.corner },
-                    isInCorner: { _, f in abs(f.minX - self.corner.x) <= 100 && abs(f.minY - self.corner.y) <= 100 },
-                    fit: { $1 }, hide: { self.hidden.insert($0) }, unhide: { self.hidden.remove($0) },
-                    countRefusals: countRefusals, now: now)
+            executor.observe(actual: { self.frames[$0] }, now: now)
+            let plan = v.apply(windows: Array(frames.keys).sorted(), pid: { pid_t($0) }, hideable: { _ in hideable },
+                               isTiled: { _ in false }, frame: { self.frames[$0] },
+                               parkOrigin: { _, _ in self.corner },
+                               isInCorner: { _, f in abs(f.minX - self.corner.x) <= 100 && abs(f.minY - self.corner.y) <= 100 },
+                               fit: { $1 }, hide: { self.hidden.insert($0) }, unhide: { self.hidden.remove($0) },
+                               refusals: { self.executor.refused[$0]?.count ?? 0 }, claimAllowed: countRefusals)
+            for op in executor.submit(plan, actual: { self.frames[$0] }, now: now).ops where !ignoresMoves.contains(op.window) {
+                frames[op.window] = op.frame
+            }
         }
     }
 

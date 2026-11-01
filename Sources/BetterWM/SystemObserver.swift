@@ -247,7 +247,7 @@ final class SystemObserver {
     /// The window under `point`, resolved on the queue; `completion` runs on the main thread.
     func hitTest(_ point: CGPoint, _ completion: @escaping (AXWindow?) -> Void) {
         AX.queue.async {
-            let w = AXWindow.at(point: point)
+            let w = AXWindow.at(point: point, known: { self.standardKnown.contains($0) ? self.ax[$0] : nil })
             if let w, let id = w.windowID { self.ax[id] = w }
             DispatchQueue.main.async {
                 if let w, let id = w.windowID { self.axMain[id] = w }

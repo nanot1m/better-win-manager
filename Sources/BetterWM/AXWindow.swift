@@ -240,15 +240,21 @@ final class AXWindow: Hashable {
     }
 
     /// Queue only. Top-left-origin global coordinates, matching what AX uses.
-    static func at(point: CGPoint) -> AXWindow? {
-        let w = axHitTest(point) ?? windowListHitTest(point)
+    /// `known` answers the handle for a window id the observer has already matched, so the fallback needs no
+    /// Accessibility enumeration.
+    static func at(point: CGPoint, known: (CGWindowID) -> AXWindow? = { _ in nil }) -> AXWindow? {
+        let w = axHitTest(point) ?? windowListHitTest(point, known: known)
         w?.warm()
         return w
     }
 
-    /// Some apps (Telegram among them) fail AX hit-testing on custom views; fall back to the window list.
-    private static func windowListHitTest(_ point: CGPoint) -> AXWindow? {
-        Spaces.visibleWindows().first { $0.frame.contains(point) }
+    /// Some apps (Telegram among them) fail AX hit-testing on custom views; fall back to the window list: the
+    /// topmost ordinary window under the point, through the mirror's handle for it.
+    private static func windowListHitTest(_ point: CGPoint, known: (CGWindowID) -> AXWindow?) -> AXWindow? {
+        for info in CGWindowInfo.list([.optionOnScreenOnly, .excludeDesktopElements]) where info.isOrdinaryOtherApp && info.bounds.contains(point) {
+            if let w = known(info.id) { return w }
+        }
+        return Spaces.visibleWindows().first { $0.frame.contains(point) }
     }
 
     private static func axHitTest(_ point: CGPoint) -> AXWindow? {

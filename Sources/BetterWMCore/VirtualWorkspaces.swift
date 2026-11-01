@@ -17,11 +17,6 @@ public final class VirtualWorkspaces {
     /// Apps hidden with the native Hide because every window they have lives on an inactive workspace. Windows
     /// already parked stay in the corner while hidden: moving them back would race the unhide later.
     private var hiddenByPid: [pid_t: Set<WindowID>] = [:]
-    /// Consecutive re-parks a window ignored outright, with the frame seen before the last one and its time.
-    private var reparkAttempts: [WindowID: (refused: Int, at: Date, seen: CGPoint)] = [:]
-    /// Ignored re-parks in a row before a window is taken to belong where it is.
-    public static let maxRefusals = 5
-    public func forgetReparkAttempts() { reparkAttempts.removeAll() }
     public var knownWindows: [WindowID] { Array(membership.keys) }
     public var hiddenPids: [pid_t] { Array(hiddenByPid.keys) }
     /// Last workspace each app had a window in, kept after the window is gone: an app that recreates its only
@@ -197,15 +192,18 @@ public final class VirtualWorkspaces {
         parked.removeAll()
     }
 
-    /// Park/unpark according to membership. An app whose windows are all on desktops not shown (and nowhere
-    /// else, per `hideable`) is hidden natively; otherwise those windows go to the corner. `frame(of:)` reads the
-    /// current frame; `setFrame` writes one. `parkOrigin` and `fit` place a window for its desktop's display.
+    /// Park/unpark according to membership, as a plan for the executor. An app whose windows are all on desktops
+    /// not shown (and nowhere else, per `hideable`) is hidden natively; otherwise those windows go to the corner.
+    /// `frame(of:)` reads the current frame; `parkOrigin` and `fit` place a window for its desktop's display.
+    /// `refusals` is how often the executor saw a window ignore its park; one that will not leave the screen is
+    /// claimed for the active desktop when `claimAllowed` (not while macOS is waking or rearranging displays).
     /// Tiled windows are not restored here: their grid is laid out by the reconciler once the desktop shows.
     public func apply(windows: [WindowID], pid: (WindowID) -> pid_t?, hideable: (pid_t) -> Bool,
-               isTiled: (WindowID) -> Bool, frame: (WindowID) -> CGRect?,
-               setFrame: (WindowID, CGRect) -> Void, parkOrigin: (WindowID, CGRect) -> CGPoint, isInCorner: (WindowID, CGRect) -> Bool,
-               fit: (WindowID, CGRect) -> CGRect, hide: (pid_t) -> Void, unhide: (pid_t) -> Void,
-               countRefusals: Bool, now: Date) {
+                      isTiled: (WindowID) -> Bool, frame: (WindowID) -> CGRect?,
+                      parkOrigin: (WindowID, CGRect) -> CGPoint, isInCorner: (WindowID, CGRect) -> Bool,
+                      fit: (WindowID, CGRect) -> CGRect, hide: (pid_t) -> Void, unhide: (pid_t) -> Void,
+                      refusals: (WindowID) -> Int, claimAllowed: Bool) -> Plan {
+        var plan = Plan()
         for w in windows { adopt(w) }
         let shown = self.shown
         // Hidden apps come back as soon as one of their windows is on a shown desktop, whether or not that
@@ -238,36 +236,28 @@ public final class VirtualWorkspaces {
                 let shouldPark = !shown.contains(workspace(of: w))
                 if shouldPark, !parked.contains(w), let f = frame(w) {
                     if !isTiled(w) { parkedFrames[w] = f }
-                    setFrame(w, CGRect(origin: parkOrigin(w, f), size: f.size))
+                    plan.ops.append(Op(window: w, frame: CGRect(origin: parkOrigin(w, f), size: f.size), intent: .park))
                     parked.insert(w)
-                    reparkAttempts[w] = nil
                     log("park #\(w) (desktop \(workspace(of: w) + 1), shown \(shown.sorted().map { $0 + 1 }))")
                 } else if !shouldPark, parked.contains(w) {
                     parked.remove(w)
                     log("unpark #\(w)")
-                    reparkAttempts[w] = nil
                     // Frames remembered on another display, or one that is gone, are fitted to the desktop's display.
-                    if let f = parkedFrames.removeValue(forKey: w) { setFrame(w, fit(w, f)) }
+                    if let f = parkedFrames.removeValue(forKey: w) { plan.ops.append(Op(window: w, frame: fit(w, f), intent: .unpark)) }
                 } else if shouldPark, parked.contains(w), let f = frame(w), !isInCorner(w, f) {
                     // Already parked but not in the corner: the move was lost (the app was mid-unhide, or it
-                    // repositioned itself). Park again, spaced out. Only a window that ignored the move outright
-                    // counts as refusing; after `maxRefusals` it is visible anyway, so it joins the active desktop.
-                    let last = reparkAttempts[w]
-                    if let last, now.timeIntervalSince(last.at) < 0.5 { continue }
-                    let refused = countRefusals ? (last.map { $0.seen == f.origin ? $0.refused + 1 : 0 } ?? 0) : 0
-                    if refused >= Self.maxRefusals {
+                    // repositioned itself). Ask again; the executor spaces the asks and counts the ones ignored
+                    // outright. A window that keeps refusing is visible anyway, so it joins the active desktop.
+                    if claimAllowed, refusals(w) >= Executor.maxAttempts {
                         claim(w)
-                        reparkAttempts[w] = nil
                         log("#\(w) will not leave the screen; it now belongs to desktop \(active + 1)")
                         continue
                     }
                     if !isTiled(w), parkedFrames[w] == nil { parkedFrames[w] = f }
-                    let target = parkOrigin(w, f)
-                    reparkAttempts[w] = (refused, now, f.origin)
-                    setFrame(w, CGRect(origin: target, size: f.size))
-                    log("re-park #\(w) (was at \(Int(f.minX)),\(Int(f.minY)); corner \(Int(target.x)),\(Int(target.y)); refused \(refused))")
+                    plan.ops.append(Op(window: w, frame: CGRect(origin: parkOrigin(w, f), size: f.size), intent: .park))
                 }
             }
         }
+        return plan
     }
 }

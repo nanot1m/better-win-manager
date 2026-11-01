@@ -551,20 +551,20 @@ final class WindowManager {
     }
 
     /// Parks windows of inactive workspaces and restores returning floating ones; tiled ones follow their grid.
-    private func applyVirtualParking(_ snap: Snapshot) {
+    /// Parking's asks, judged by the same executor as the layout's; returns what to carry out now.
+    private func applyVirtualParking(_ snap: Snapshot) -> Plan {
         let v = desktops
         let screenFrames = NSScreen.screens.map { $0.frame.toCocoa() }
         func corner(_ id: WindowID, _ f: CGRect) -> CGPoint {
             Parking.origin(for: f, home: screen(ofDesktop: v.workspace(of: id))?.frame.toCocoa(), screens: screenFrames)
         }
-        v.apply(windows: snap.windows.map(\.id).filter { !snap.away.contains($0) },
+        let plan = v.apply(windows: snap.windows.map(\.id).filter { !snap.away.contains($0) },
                 pid: { snap.window($0)?.pid },
                 hideable: { p in
                     guard self.config.hideApps, let app = NSRunningApplication(processIdentifier: p) else { return false }
                     return app.activationPolicy == .regular
                 },
                 isTiled: { self.state.isTiled($0) }, frame: { snap.window($0)?.frame },
-                setFrame: { self.system.execute([.setFrame($0, $1)]) },
                 parkOrigin: corner,
                 // At the corner that would be chosen now: a display connected beside the old one makes it re-park.
                 isInCorner: { id, f in
@@ -586,10 +586,15 @@ final class WindowManager {
                     // Frames set while an app is still unhiding can be lost; look again shortly after.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self?.scheduleTick(); self?.focusRing.reorder() }
                 },
+                refusals: { self.state.executor.refused[$0]?.count ?? 0 },
                 // Moves ignored while macOS is waking or rearranging displays say nothing about the window.
-                countRefusals: snap.now >= claimsSuspendedUntil, now: snap.now)
+                claimAllowed: snap.now >= claimsSuspendedUntil)
+        let actual = { (w: WindowID) -> CGRect? in snap.away.contains(w) ? nil : snap.window(w)?.frame }
+        let accepted = state.executor.submit(plan, actual: actual, now: snap.now)
+        for op in accepted.ops { Log.write("plan", "\(describe(op.window)) -> \(op.intent.rawValue) \(Int(op.frame.minX)),\(Int(op.frame.minY))") }
         wsEvents.watch(Array(v.parkedWindows.subtracting(watchedParked)))
         watchedParked = v.parkedWindows
+        return accepted
     }
 
     private var watchedParked: Set<WindowID> = []
@@ -811,7 +816,7 @@ final class WindowManager {
                 self.desktops.rememberHomes(snap.windows)
                 self.restoreSavedModes(snap)
                 let before = self.state
-                let (next, plan) = self.reconciler.reconcile(self.state, snap)
+                var (next, plan) = self.reconciler.reconcile(self.state, snap)
                 self.state = next
                 self.watchTracked()
                 self.logReconcileChanges(from: before, to: next, plan: plan)
@@ -819,7 +824,7 @@ final class WindowManager {
                 if ids != self.lastWindowIDs { self.lastWindowIDs = ids; self.onWindowsChange?() }
                 self.scheduleSave(snap)
                 let t1 = Date()
-                self.applyVirtualParking(snap)
+                plan.ops += self.applyVirtualParking(snap).ops
                 timing.append("park \(Int(Date().timeIntervalSince(t1) * 1000))")
                 if !plan.isEmpty {
                     self.anticipateRing(plan, snap.focused)
@@ -990,7 +995,6 @@ final class WindowManager {
     private func suspendClaims(until date: Date) {
         claimsSuspendedUntil = date
         state.executor.reset()
-        desktops.forgetReparkAttempts()
         Log.write("park", claimsSuspendedUntil == .distantFuture ? "pausing the refusal rule (sleep or lock)" : "refusal rule resumes in \(Int(claimsSuspendedUntil.timeIntervalSinceNow)) s")
     }
 

@@ -7,6 +7,10 @@ public enum Intent: String, Equatable {
     case slot
     /// A hidden tab of a tabbed stack waiting past the screen corner.
     case aside
+    /// A window of a desktop not shown, kept past the screen corner.
+    case park
+    /// Back from the corner to the frame it had, its desktop showing again.
+    case unpark
 }
 
 /// One frame change the reconciler wants.
