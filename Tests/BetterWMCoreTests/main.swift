@@ -704,6 +704,23 @@ struct ReconcilerTests {
         expect(VirtualWorkspaces.workspace(of: VirtualWorkspaces.spaceID(2)) == 2, #function, #line)
     }
 
+    func testTiledTabsLeaveRoomAboveEachWindow() {
+        var c = config
+        c.tiledTabs = true
+        c.focusRing = false
+        var g = Grid()
+        g.columns = [Column([1, 2]), Column([3])]
+        let geo = GridGeometry(grid: g, area: area, config: c)
+        let frames = Dictionary(uniqueKeysWithValues: geo.windowFrames())
+        let tabs = Dictionary(uniqueKeysWithValues: geo.tiledTabFrames())
+        expect(tabs.count == 3, #function, #line)
+        expect(tabs[1]!.minY == area.minY && tabs[1]!.height == c.tabHeight, #function, #line)
+        expect(frames[1]!.minY == area.minY + c.tabHeight, #function, #line)
+        expect(tabs[2]!.minY == frames[1]!.maxY, #function, #line)
+        expect(frames[2]!.maxY == area.maxY, #function, #line)
+        expect(frames[3]!.height == area.height - c.tabHeight, #function, #line)
+    }
+
     func testDirectionalFocusInGrid() {
         var g = Grid()
         g.columns = [Column([1, 2]), Column([3, 4])]
@@ -807,6 +824,7 @@ let tests: [(String, () -> Void)] = [
     ("mainDisplayChangeKeepsDesktops", t.testMainDisplayChangeKeepsDesktops),
     ("sendingLastDesktopLeavesANewOne", t.testSendingLastDesktopLeavesANewOne),
     ("directionalFocusInGrid", t.testDirectionalFocusInGrid),
+    ("tiledTabsLeaveRoomAboveEachWindow", t.testTiledTabsLeaveRoomAboveEachWindow),
 ]
 for (name, run) in tests {
     let before = failures

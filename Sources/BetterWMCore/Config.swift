@@ -50,6 +50,20 @@ public struct Config {
     public var tabWidth: CGFloat = 240
     /// Tab label; {app} and {title} are replaced.
     public var tabTitleFormat: String = "{app} — {title}"
+    /// A tab above every tiled window too, so renamed tabs and titles read outside the stacked layout.
+    public var tiledTabs: Bool = false
+    /// What ties a tab strip to its window while that window is not the focused one: a grey ring around the
+    /// window, or the strip moved over the ring's gap to touch the window.
+    public enum UnfocusedTabs: String, CaseIterable {
+        case ring, attached
+        public var title: String {
+            switch self {
+            case .ring: return "Grey ring around the window"
+            case .attached: return "Tabs touch the window"
+            }
+        }
+    }
+    public var unfocusedTabs: UnfocusedTabs = .ring
     /// How much the grow and shrink actions change a window, in points.
     public var resizeStep: CGFloat = 40
     /// Screens narrower than this start in stacked mode (0 = never). Handy for a laptop panel next to a big display.
@@ -100,6 +114,8 @@ public struct Config {
     public var focusRingRadius: CGFloat = 24
     /// Small icon buttons for common actions on the ring's top edge.
     public var focusRingActions: Bool = true
+    /// The ring, tab strips and action buttons fade in and out instead of popping.
+    public var fadeAnimations: Bool = true
     /// Which actions the ring buttons run, in order; keys from `actions`.
     public var focusRingActionKeys: [String] = Config.defaultRingActionKeys
     public static let defaultRingActionKeys = ["toggleTile", "toggleStack", "sendToNextDesktop", "popup"]
@@ -297,6 +313,10 @@ public struct Config {
         tabHeight = \(num(tabHeight))
         tabWidth = \(num(tabWidth))
         tabTitleFormat = \(tabTitleFormat)
+        # Also a tab above every tiled window (in the columns layout), to see titles and renamed tabs.
+        tiledTabs = \(tiledTabs)
+        # Tabs of a window that is not focused: ring (a grey ring around the window) or attached (tabs touch it).
+        unfocusedTabs = \(unfocusedTabs.rawValue)
         # How much the grow and shrink actions change the focused window, in points.
         resizeStep = \(num(resizeStep))
 
@@ -321,6 +341,8 @@ public struct Config {
         # Icon buttons (tile, stack, send to next desktop, actions) inside the ring's top-right corner.
         focusRingActions = \(focusRingActions)
         focusRingActionKeys = \(focusRingActionKeys.joined(separator: ", "))
+        # Fade the ring, tabs and buttons in and out instead of popping them.
+        fadeAnimations = \(fadeAnimations)
         focusRingRadius = \(num(focusRingRadius))
         # Colours are hex RRGGBB or RRGGBBAA without a leading #.
         focusRingColor = \(focusRingColor)
@@ -453,6 +475,8 @@ public struct Config {
             case "tabHeight": cfg.tabHeight = Double(value).map { CGFloat($0) } ?? cfg.tabHeight
             case "tabWidth": cfg.tabWidth = Double(value).map { CGFloat($0) } ?? cfg.tabWidth
             case "tabTitleFormat": cfg.tabTitleFormat = value
+            case "tiledTabs": cfg.tiledTabs = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "unfocusedTabs": cfg.unfocusedTabs = UnfocusedTabs(rawValue: value) ?? cfg.unfocusedTabs
             case "resizeStep": cfg.resizeStep = Double(value).map { CGFloat($0) } ?? cfg.resizeStep
             case "stackScreensNarrowerThan": cfg.stackScreensNarrowerThan = Double(value).map { CGFloat($0) } ?? cfg.stackScreensNarrowerThan
             case "animateLayout": break  // removed: Accessibility-driven frame animation was too laggy
@@ -467,6 +491,7 @@ public struct Config {
             case "focusRingPadding": cfg.focusRingPadding = Double(value).map { CGFloat($0) } ?? cfg.focusRingPadding
             case "focusRingAutoRadius": cfg.focusRingAutoRadius = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRingActions": cfg.focusRingActions = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "fadeAnimations": cfg.fadeAnimations = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRingActionKeys": cfg.focusRingActionKeys = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             case "focusRingRadius": cfg.focusRingRadius = Double(value).map { CGFloat($0) } ?? cfg.focusRingRadius
             case "focusRingColor": cfg.focusRingColor = value

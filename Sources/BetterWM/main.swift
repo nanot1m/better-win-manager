@@ -56,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func boot() {
         handleSigterm()
         let config = Config.load()
+        Fade.enabled = config.fadeAnimations
         manager = WindowManager(config: config)
         updater = Updater(config: config)
         popup = ActionPopup(manager: manager)
@@ -65,7 +66,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.focusRing.onChange = { [weak self] frame, inactive, inset, width, color in
             guard let self else { return }
             self.ringActions.configure(keys: self.manager.config.focusRingActionKeys)
-            self.ringActions.follow(ring: inactive ? nil : frame, inset: inset, ringWidth: width, color: color, enabled: self.manager.config.focusRingActions)
+            // No window actions for our own windows (Settings) or a dialog: the actions act on a standard app window.
+            let own = NSApp.isActive && NSApp.keyWindow?.styleMask.contains(.titled) == true
+            let dialog = self.manager.system.focused == nil
+            self.ringActions.follow(ring: inactive || own || dialog ? nil : frame, inset: inset, ringWidth: width, color: color, enabled: self.manager.config.focusRingActions)
         }
         switcher = WindowSwitcher(manager: manager)
         overview = Overview(manager: manager)
@@ -553,6 +557,7 @@ extension AppDelegate {
         configWindow.show(config: manager.config) { [weak self] cfg in
             guard let self else { return }
             self.manager.config = cfg
+            Fade.enabled = cfg.fadeAnimations
             self.updater.config = cfg
             self.drag.refreshState()
             self.bar.apply(cfg)

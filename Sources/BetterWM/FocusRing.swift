@@ -3,8 +3,10 @@ import Cocoa
 import QuartzCore
 
 final class FocusRing {
-    private let window: UnconstrainedWindow
-    private let layer = CALayer()
+    private var window: UnconstrainedWindow
+    private var layer: CALayer
+    /// Ring windows that faded out at a previous target and can be used again.
+    private var spareRings: [(window: UnconstrainedWindow, layer: CALayer)] = []
     private var config: Config
     private var timer: Timer?
     private let events = WindowServerEvents()
@@ -16,9 +18,22 @@ final class FocusRing {
     /// and how far its inner edge is from the frame.
     var onChange: ((NSRect?, Bool, CGFloat, CGFloat, NSColor) -> Void)?
     private var currentColor = NSColor.controlAccentColor
-    private func notify() { onChange?(window.isVisible ? window.frame : nil, isInactive, pad, config.focusRingWidth, currentColor) }
+    private func notify() { onChange?(shown ? placedFrame : nil, isInactive, pad, config.focusRingWidth, currentColor) }
+    /// Whether the ring is meant to be on screen; `window.isVisible` lingers through a fade-out.
+    private var shown = false
+    private func hideRing() { shown = false; Fade.hide(window) }
+    private func retireRing() {
+        let old = (window: window, layer: layer)
+        Fade.hide(old.window) { [weak self] in self?.spareRings.append(old) }
+        if let spare = spareRings.popLast() { (window, layer) = spare } else { layer = CALayer(); window = Self.makeWindow(layer) }
+        shown = false
+        placedFrame = .zero
+    }
+    private func showRing() { shown = true; Fade.show(window) { window.orderFrontRegardless() } }
+    /// The frame the ring was last put at. A WindowServer move leaves AppKit's `window.frame` stale.
+    private var placedFrame: NSRect = .zero
     /// The ring's outer corner radius as drawn; nothing should hang over the curve.
-    var cornerRadius: CGFloat { window.isVisible ? layer.cornerRadius : 0 }
+    var cornerRadius: CGFloat { shown ? layer.cornerRadius : 0 }
     /// The ring is on the window focus will come back to, greyed: no window has focus right now.
     private(set) var isInactive = false
     static let inactiveColor = NSColor(white: 0.55, alpha: 1)
@@ -32,13 +47,13 @@ final class FocusRing {
     var onReorder: (() -> Void)?
     /// Fired when the ringed window changes, including between windows of one app.
     var onFocusChange: (() -> Void)?
-    var windowNumber: Int? { window.isVisible ? window.windowNumber : nil }
+    var windowNumber: Int? { shown ? window.windowNumber : nil }
 
     /// Show Desktop is active: stay hidden until it ends.
     var hiddenForSystemReveal = false {
         didSet {
             guard hiddenForSystemReveal != oldValue else { return }
-            if hiddenForSystemReveal { window.orderOut(nil); notify() } else { update() }
+            if hiddenForSystemReveal { hideRing(); notify() } else { update() }
         }
     }
 
@@ -46,15 +61,14 @@ final class FocusRing {
     var suspended = false {
         didSet {
             guard suspended != oldValue else { return }
-            if suspended { window.orderOut(nil); notify() } else { update() }
+            if suspended { hideRing(); notify() } else { update() }
         }
     }
 
-    /// A second, grey ring around a tabbed stack's front window while a floating window holds the focus, so the
-    /// stack still shows which window is in front.
-    private let secondary: UnconstrainedWindow
-    private let secondaryLayer = CALayer()
-    private var secondaryID: CGWindowID?
+    /// Grey rings around windows whose tab strip would otherwise hang loose: a stack's front window while a
+    /// floating window holds the focus, or tiled windows with tabs that are not the focused one.
+    private var secondaries: [(window: UnconstrainedWindow, layer: CALayer)] = []
+    private var secondaryIDs: [CGWindowID] = []
 
     private static func makeWindow(_ layer: CALayer) -> UnconstrainedWindow {
         let w = UnconstrainedWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: false)
@@ -76,8 +90,8 @@ final class FocusRing {
 
     init(config: Config) {
         self.config = config
+        layer = CALayer()
         window = Self.makeWindow(layer)
-        secondary = Self.makeWindow(secondaryLayer)
 
         events.onEvent = { [weak self] event, wid in
             guard let self else { return }
@@ -99,7 +113,7 @@ final class FocusRing {
                 if let wid, wid == self.current { self.reorder() }
                 self.scheduleUpdate()
             case .spaceChange:
-                self.window.orderOut(nil)
+                self.hideRing()
                 self.notify()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.update() }
             default:
@@ -108,6 +122,13 @@ final class FocusRing {
         }
         let nc = NSWorkspace.shared.notificationCenter
         nc.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in self?.update() }
+        // Our own titled windows are followed through AppKit, since Accessibility is never asked about them.
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification, NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] n in
+                guard let w = n.object as? NSWindow, w.styleMask.contains(.titled) else { return }
+                self?.update()
+            }
+        }
         // Safety net only; WindowServer events do the real work.
         timer = Timer.scheduledTimer(withTimeInterval: WindowServerEvents.available ? 5.0 : 0.1, repeats: true) { [weak self] _ in self?.update() }
         update()
@@ -153,21 +174,29 @@ final class FocusRing {
 
     /// Brings the ring back to the front of its level after anything that could have slipped a window above it.
     func reorder() {
-        guard current != nil, window.isVisible, !suspended else { return }
+        guard current != nil, shown, !suspended else { return }
         window.orderFrontRegardless()
     }
 
     /// The focused window as the last snapshot saw it; the ring never asks Accessibility itself.
     var focusedWindow: () -> AXWindow? = { nil }
+    /// Whether a window's desktop is on a screen. After a desktop switch the previous app stays frontmost until
+    /// macOS grants the new one activation, so the snapshot's focused window sits parked at a corner for a moment.
+    var isShown: (CGWindowID) -> Bool = { _ in true }
 
     func update() {
         guard !suspended, !hiddenForSystemReveal, config.focusRing else {
             // Stepping aside (Show Desktop, a drag) keeps the window in mind: when the windows come back with no
             // focus anywhere, the grey ring goes back on it. Only a disabled ring forgets.
             if !config.focusRing { current = nil }
-            window.orderOut(nil)
-            showSecondary(nil)
+            hideRing()
+            showSecondary([])
             notify()
+            return
+        }
+        // Our own windows (Settings, Welcome) are never asked through Accessibility; AppKit knows them directly.
+        if NSApp.isActive, let own = NSApp.keyWindow, own.styleMask.contains(.titled), own.isVisible {
+            present(id: CGWindowID(own.windowNumber), frame: own.frame.toCocoa(), floating: true)
             return
         }
         guard let w = focusedWindow() else {
@@ -183,17 +212,18 @@ final class FocusRing {
                 return
             }
             current = nil
-            window.orderOut(nil)
+            hideRing()
             notify()
             return
         }
+        if let id = w.windowID, !isShown(id) { return }
         // An app can report a window it keeps alive after closing (ChatGPT) as focused; ring only what is visible.
         // A window on no Space is mid-transition to or from fullscreen.
         guard config.focusRingFloating || isTiled(w), let id = w.windowID, CGWindowInfo.isOnScreen(id),
               case let spaces = Spaces.spaces(of: id), !spaces.isEmpty, spaces.allSatisfy(Spaces.isDesktop),
               !NSScreen.screens.contains(where: Spaces.showsFullscreen) else {
             current = nil
-            window.orderOut(nil)
+            hideRing()
             notify()
             return
         }
@@ -202,12 +232,15 @@ final class FocusRing {
 
     private func present(id: CGWindowID, frame: CGRect, floating: Bool? = nil, inactive: Bool = false) {
         let floating = floating ?? !isTiledID(id)
-        let wasHidden = !window.isVisible
+        // A new target elsewhere gets a ring of its own: the old one fades out where it is, the new one fades in.
+        // Tabs of a stack share one frame; the ring simply stays.
+        if current != id, shown, Fade.enabled, !placedFrame.approximatelyEquals(frame.insetBy(dx: -pad, dy: -pad).toCocoa(), tolerance: 1) { retireRing() }
+        let wasHidden = !shown
         let targetChanged = current != id || isInactive != inactive
         if current != id {
             current = id
             events.watch([id])
-            if secondaryID == id { showSecondary(nil) }
+            if secondaryIDs.contains(id) { showSecondary(secondaryIDs) }
         }
         isInactive = inactive
         if targetChanged { onFocusChange?() }
@@ -225,33 +258,40 @@ final class FocusRing {
         // the window itself, and it never has to chase the window's depth through raises and unhides.
         window.level = .floating
         if wasHidden || targetChanged {
-            window.orderFrontRegardless()
+            showRing()
             onReorder?()
         }
         notify()
     }
 
-    /// Grey ring around `id` (a stack's front window) unless the main ring is already there; nil hides it. The
-    /// manager owns it through the tab strips; the main ring only takes it down when it is itself switched off.
-    func showSecondary(_ id: CGWindowID?) {
-        guard let id, id != current, config.focusRing, !suspended, !hiddenForSystemReveal,
-              CGWindowInfo.isOnScreen(id), let f = WindowServerEvents.bounds(of: id) else {
-            secondaryID = nil
-            secondary.orderOut(nil)
-            return
+    /// Grey rings around `ids`, skipping the one the main ring is on; empty hides them all. The manager owns
+    /// them through the tab strips; the main ring only takes them down when it is itself switched off.
+    func showSecondary(_ ids: [CGWindowID]) {
+        secondaryIDs = ids
+        let shown: [(CGWindowID, CGRect)] = config.focusRing && !suspended && !hiddenForSystemReveal
+            ? ids.compactMap { id in
+                guard id != current, CGWindowInfo.isOnScreen(id), let f = WindowServerEvents.bounds(of: id) else { return nil }
+                return (id, f)
+            } : []
+        while secondaries.count < shown.count {
+            let layer = CALayer()
+            secondaries.append((Self.makeWindow(layer), layer))
         }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        secondaryLayer.cornerRadius = radius(for: id) + pad
-        secondaryLayer.borderWidth = config.focusRingWidth
-        secondaryLayer.borderColor = Self.inactiveColor.cgColor
-        CATransaction.commit()
-        secondary.setFrame(f.insetBy(dx: -pad, dy: -pad).toCocoa(), display: false)
-        // Right above its own window and so below the floating one that has the focus: a grey ring is a mark on
-        // the stack, not an outline over everything.
-        secondary.level = .normal
-        secondaryID = id
-        secondary.order(.above, relativeTo: Int(id))
+        for (i, s) in secondaries.enumerated() {
+            guard i < shown.count else { Fade.hide(s.window); continue }
+            let (id, f) = shown[i]
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            s.layer.cornerRadius = radius(for: id) + pad
+            s.layer.borderWidth = config.focusRingWidth
+            s.layer.borderColor = Self.inactiveColor.cgColor
+            CATransaction.commit()
+            s.window.setFrame(f.insetBy(dx: -pad, dy: -pad).toCocoa(), display: false)
+            // Right above its own window and so below the one that has the focus: a grey ring is a mark on the
+            // window, not an outline over everything.
+            s.window.level = .normal
+            Fade.show(s.window) { s.window.order(.above, relativeTo: Int(id)) }
+        }
     }
 
     private func radius(for id: CGWindowID) -> CGFloat {
@@ -268,11 +308,11 @@ final class FocusRing {
         let target = padded.toCocoa()
         // AppKit throws on a frame that is not finite; the layout never means one, but never crash over it.
         guard !target.isNull, !target.isInfinite, target.width.isFinite, target.height.isFinite, target.origin.x.isFinite, target.origin.y.isFinite,
-              window.frame != target else { return }
-        if window.frame.size == target.size, window.isVisible,
+              placedFrame != target else { return }
+        placedFrame = target
+        if window.frame.size == target.size, shown,
            WindowServerEvents.move(CGWindowID(window.windowNumber), to: padded.origin) {
-            // Moved behind AppKit's back: its idea of the frame is stale, so report the one we know.
-            onChange?(target, isInactive, pad, config.focusRingWidth, currentColor)
+            notify()
             return
         }
         window.setFrame(target, display: false, animate: false)
@@ -281,7 +321,7 @@ final class FocusRing {
 
     /// Called by the layout right as it moves the focused window, so the ring lands with the window, not after it.
     func anticipate(windowID: CGWindowID, frame: CGRect) {
-        guard !suspended, config.focusRing, current == windowID, window.isVisible else { return }
+        guard !suspended, config.focusRing, current == windowID, shown else { return }
         place(frame: frame)
     }
 }

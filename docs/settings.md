@@ -28,6 +28,8 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `stackStyle` | tabsTop | How a stacked screen looks: `cascade`, `tabsTop` (every window full size under a row of tabs), `tabsLeft` or `tabsRight` (sideways tabs down that edge) |
 | `tabHeight` / `tabWidth` | 30 / 240 | Thickness of the tab strip (its height on top, its width on the left, where tabs read sideways), and the longest a tab gets; the windows get the rest |
 | `tabTitleFormat` | `{app} — {title}` | Tab label; `{app}` and `{title}` are replaced |
+| `tiledTabs` | false | A tab above every window in the columns layout too, showing its title or the name given to it |
+| `unfocusedTabs` | ring | Tabs of a window that is not focused, in either layout: `ring` puts a grey ring around the window, `attached` moves the tabs over the ring's gap to touch it |
 | `resizeStep` | 40 | Points the `grow` / `shrink` actions resize the focused window by |
 | `stackScreensNarrowerThan` | 0 | Screens narrower than this start in stacked layout; 0 never |
 | `ignoreApps` | System Settings, Calculator, Activity Monitor, Installer, Passwords, App Store, 1Password, Karabiner settings and about twenty other utilities | Bundle identifiers never tiled automatically; dragging them into a column still works |
@@ -46,6 +48,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `focusRingPadding` | 0 | Gap between a window and its ring; tiled windows shrink inside their slot by it, the ring stays put |
 | `focusRingAutoRadius` | true | Measure each window's own corner radius |
 | `focusRingActions` | true | Small icon buttons on the ring's top edge near the right corner |
+| `fadeAnimations` | true | The ring, tab strips and action buttons fade in and out instead of popping |
 | `focusRingActionKeys` | toggleTile, toggleStack, sendToNextDesktop, popup | Which actions the buttons run, left to right; any of toggleTile, toggleStack, grow, shrink, equalize, retile, sendToPreviousDesktop, sendToNextDesktop, overview, popup |
 | `focusRingRadius` | 24 | Corner radius when measuring is not possible |
 

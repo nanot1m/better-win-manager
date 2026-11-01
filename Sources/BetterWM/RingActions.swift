@@ -66,17 +66,17 @@ final class RingActions {
     /// edge is from it. The pill grows out of the ring's top edge near the right corner, in the ring's colour,
     /// above the window so it never covers an app's own toolbar. Nil hides the pill.
     func follow(ring: NSRect?, inset: CGFloat, ringWidth: CGFloat, color: NSColor, enabled: Bool) {
-        guard enabled, !keys.isEmpty, let ring else { panel.orderOut(nil); return }
+        guard enabled, !keys.isEmpty, let ring else { Fade.hide(panel); return }
         view.setColor(color)
         let size = panel.frame.size
         // Standing on the ring line: its bottom edge meets the line's inner edge, so pill and ring read as one
         // shape, and nothing of the pill hangs over the window.
         let origin = NSPoint(x: ring.maxX - inset - 10 - size.width, y: ring.maxY - ringWidth)
         if panel.frame.origin != origin { panel.setFrameOrigin(origin) }
-        if !panel.isVisible { panel.orderFrontRegardless() }
+        Fade.show(panel) { if !panel.isVisible { panel.orderFrontRegardless() } }
     }
 
-    func hide() { panel.orderOut(nil); tip.hide() }
+    func hide() { Fade.hide(panel); tip.hide() }
 }
 
 /// A small dark label under a pill button.

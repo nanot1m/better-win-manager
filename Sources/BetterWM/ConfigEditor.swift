@@ -50,6 +50,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var stackOffsetField: NSTextField!
     private var stackStylePopup: NSPopUpButton!
     private var tabHeightField: NSTextField!
+    private var tiledTabsSwitch: NSSwitch!
+    private var unfocusedTabsPopup: NSPopUpButton!
     private var tabWidthField: NSTextField!
     private var tabTitleField: NSTextField!
     private var resizeStepField: NSTextField!
@@ -81,6 +83,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var ringAutoRadius: NSSwitch!
     private var ringFloating: NSSwitch!
     private var ringActions: NSSwitch!
+    private var fadeSwitch: NSSwitch!
     private var ringActionChecks: [(key: String, box: NSButton)] = []
     private var barSwitch: NSSwitch!
     private var barHeightField: NSTextField!
@@ -530,6 +533,12 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             stackStylePopup.lastItem?.representedObject = st.rawValue
         }
         tabHeightField = numberField("30")
+        tiledTabsSwitch = toggle()
+        unfocusedTabsPopup = NSPopUpButton()
+        for u in Config.UnfocusedTabs.allCases {
+            unfocusedTabsPopup.addItem(withTitle: u.title)
+            unfocusedTabsPopup.lastItem?.representedObject = u.rawValue
+        }
         tabWidthField = numberField("240")
         tabTitleField = NSTextField(string: "")
         tabTitleField.widthAnchor.constraint(equalToConstant: 200).isActive = true
@@ -550,6 +559,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 row("Cascade offset", "Windows cascade by this much so the ones behind stay visible.", [stackOffsetField, unit("pt")]),
                 row("Tab strip thickness / max tab length", "The strip's height on top or width on the left, where tabs read sideways; and the longest a tab gets.", [tabHeightField, unit("pt"), tabWidthField, unit("pt")]),
                 row("Tab title", "{app} and {title} are replaced.", [tabTitleField]),
+                row("Tabs on tiled windows too", "A tab above every window in the columns layout, to see titles and renamed tabs there.", [tiledTabsSwitch]),
+                row("Tabs of an unfocused window", "The focus ring's gap would leave them hanging: ring the window in grey, or move the tabs down to touch it.", [unfocusedTabsPopup]),
                 row("Start stacked on narrow screens", "Screens narrower than this begin in stacked layout; 0 never.", [stackNarrowField, unit("pt")]),
             ]),
         ]
@@ -559,6 +570,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         ringSwitch = toggle()
         ringFloating = toggle()
         ringActions = toggle(#selector(ringActionsChanged))
+        fadeSwitch = toggle()
         ringActionChecks = Config.ringActionChoices.map { key in
             let b = NSButton(checkboxWithTitle: Config.actions.first { $0.key == key }?.title ?? key, target: nil, action: nil)
             b.controlSize = .small
@@ -593,6 +605,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 row("Highlight the focused window", nil, [ringSwitch]),
                 row("Also highlight floating windows", "Untiled windows get the ring too.", [ringFloating]),
                 row("Action buttons on the ring", "Small buttons on the ring's top edge near the right corner. Hovering one shows its name and hotkey.", [ringActions]),
+                row("Fade in and out", "The ring, tabs and buttons fade when they appear or go instead of popping.", [fadeSwitch]),
                 row("Buttons", "In this order, left to right.", [checks]),
             ]),
             group("Colour", [
@@ -918,6 +931,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         stackOffsetField.stringValue = String(Int(config.stackOffset))
         stackStylePopup.selectItem(at: Config.StackStyle.allCases.firstIndex(of: config.stackStyle) ?? 0)
         tabHeightField.stringValue = String(Int(config.tabHeight))
+        on(tiledTabsSwitch, config.tiledTabs)
+        unfocusedTabsPopup.selectItem(at: Config.UnfocusedTabs.allCases.firstIndex(of: config.unfocusedTabs) ?? 0)
         tabWidthField.stringValue = String(Int(config.tabWidth))
         tabTitleField.stringValue = config.tabTitleFormat
         resizeStepField.stringValue = String(Int(config.resizeStep))
@@ -947,6 +962,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         ringRadius.doubleValue = Double(config.focusRingRadius)
         on(ringAutoRadius, config.focusRingAutoRadius)
         on(ringActions, config.focusRingActions)
+        on(fadeSwitch, config.fadeAnimations)
         for (key, box) in ringActionChecks { box.state = config.focusRingActionKeys.contains(key) ? .on : .off }
         ringActionsChanged()
         autoRadiusChanged()
@@ -1010,6 +1026,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.stackOffset = number(stackOffsetField, or: defaults.stackOffset)
         if let raw = stackStylePopup.selectedItem?.representedObject as? String, let st = Config.StackStyle(rawValue: raw) { config.stackStyle = st }
         config.tabHeight = max(16, number(tabHeightField, or: defaults.tabHeight))
+        config.tiledTabs = isOn(tiledTabsSwitch)
+        if let raw = unfocusedTabsPopup.selectedItem?.representedObject as? String, let u = Config.UnfocusedTabs(rawValue: raw) { config.unfocusedTabs = u }
         config.tabWidth = max(60, number(tabWidthField, or: defaults.tabWidth))
         config.tabTitleFormat = tabTitleField.stringValue.isEmpty ? defaults.tabTitleFormat : tabTitleField.stringValue
         config.resizeStep = max(1, number(resizeStepField, or: defaults.resizeStep))
@@ -1037,6 +1055,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.focusRingRadius = CGFloat(ringRadius.doubleValue.rounded())
         config.focusRingAutoRadius = isOn(ringAutoRadius)
         config.focusRingActions = isOn(ringActions)
+        config.fadeAnimations = isOn(fadeSwitch)
         config.focusRingActionKeys = ringActionChecks.filter { $0.box.state == .on }.map(\.key)
         config.bar = isOn(barSwitch)
         config.barHeight = number(barHeightField, or: defaults.barHeight)

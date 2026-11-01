@@ -529,7 +529,8 @@ final class WindowManager {
         } else {
             focusRing.suspended = false
         }
-        system.execute([.raise(id)])
+        // A hidden tab of a stack waits at the corner; raised alone it would carry the ring there until a later pass.
+        bringForwardInTabbedStack(id, raise: true)
         // The raise and the unhides that follow a switch change depths asynchronously; settle the ring after them.
         for delay in [0.1, 0.4] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.focusRing.reorder() }
@@ -618,7 +619,8 @@ final class WindowManager {
         overlay = ZoneOverlay(screen: primaryScreen)
         focusRing.isTiled = { [unowned self] w in self.isTiled(w) }
         focusRing.isTiledID = { [unowned self] id in self.state.isTiled(id) }
-        focusRing.focusedWindow = { [unowned self] in self.system.focused }
+        focusRing.isShown = { [unowned self] id in self.desktops.isShown(self.desktops.workspace(of: id)) }
+        focusRing.focusedWindow = { [unowned self] in self.system.focused ?? self.system.focusedDialog }
         focusRing.onReorder = { [unowned self] in self.stackHandles() }
         if config.restoreLayouts, let data = try? Data(contentsOf: Config.statePath),
            let layout = try? JSONDecoder().decode(SavedLayout.self, from: data) {
@@ -688,7 +690,7 @@ final class WindowManager {
         // WindowServer reports a new front window before Accessibility does; stacked screens re-fan on it.
         wsEvents.onEvent = { [weak self] event, wid in
             switch event {
-            case .frontChange, .windowReorder: self?.refanStackedScreens()
+            case .frontChange, .windowReorder: self?.refanStackedScreens(); self?.refreshTabStrips()
             case .windowCreate, .windowDestroy: self?.scheduleTick()
             case .spaceChange: self?.stepAsideFromFullscreen()
             case .windowMove, .windowResize:
@@ -710,6 +712,7 @@ final class WindowManager {
                                             self?.refanStackedScreens()
                                             self?.scheduleFocusFollow()
                                             self?.focusRing.update()
+                                            self?.refreshTabStrips()
                                             self?.onFocusChange?()
                                         }
                                     },
@@ -1564,18 +1567,22 @@ final class WindowManager {
     }
 
     private func refreshTabStrips() {
-        var needed: [(CGRect, [TabStripWindow.Item], TabStripWindow.Side)] = []
-        if config.stackStyle != .cascade {
-            for (space, geo) in activeGeometries() {
-                guard let frame = geo.tabStripFrame() else { continue }
-                // A fullscreen app on that screen covers everything; the strip would show through on top of it.
-                if let ws = VirtualWorkspaces.workspace(of: space), let s = screen(ofDesktop: ws), Spaces.showsFullscreen(s) { continue }
-                let items = state.grid(for: space).windows.compactMap { id -> TabStripWindow.Item? in
-                    guard let pid = system.pid(of: id) else { return nil }
-                    return TabStripWindow.Item(id: id, app: NSRunningApplication(processIdentifier: pid)?.localizedName ?? "",
-                                               title: system.axWindow(id)?.title ?? "", label: tabLabels[id])
-                }
-                needed.append((frame, items, config.stackStyle == .tabsLeft ? .left : config.stackStyle == .tabsRight ? .right : .top))
+        var needed: [(frame: CGRect, items: [TabStripWindow.Item], side: TabStripWindow.Side, stacked: Bool)] = []
+        func item(_ id: WindowID) -> TabStripWindow.Item? {
+            guard let pid = system.pid(of: id) else { return nil }
+            return TabStripWindow.Item(id: id, app: NSRunningApplication(processIdentifier: pid)?.localizedName ?? "",
+                                       title: system.axWindow(id)?.title ?? "", label: tabLabels[id])
+        }
+        for (space, geo) in activeGeometries() {
+            // A fullscreen app on that screen covers everything; the strip would show through on top of it.
+            if let ws = VirtualWorkspaces.workspace(of: space), let s = screen(ofDesktop: ws), Spaces.showsFullscreen(s) { continue }
+            if config.stackStyle != .cascade, let frame = geo.tabStripFrame() {
+                let items = state.grid(for: space).windows.compactMap(item)
+                needed.append((frame, items, config.stackStyle == .tabsLeft ? .left : config.stackStyle == .tabsRight ? .right : .top, true))
+            }
+            for (id, frame) in geo.tiledTabFrames() {
+                guard let it = item(id) else { continue }
+                needed.append((frame, [it], .top, false))
             }
         }
         while tabStrips.count < needed.count {
@@ -1588,19 +1595,31 @@ final class WindowManager {
             tabStrips.append(s)
         }
         let focused = focusRing.currentWindowID ?? system.focused?.windowID
-        // A floating window holding the focus leaves a stack without an active tab; its front window (first in
-        // z-order) then takes the tab and a grey ring, so the stack still reads.
-        var secondary: WindowID?
+        // A strip whose window is not the focused one (a floating window holds the focus, or another tiled
+        // window does) would hang loose: its window gets a grey ring, or the strip moves over the ring's gap to
+        // touch it, as configured. A stack's front window is the first in z-order.
+        var secondaries: [WindowID] = []
         for (i, s) in tabStrips.enumerated() {
             guard i < needed.count else { s.hide(); continue }
-            let (frame, items, side) = needed[i]
+            var (frame, items, side, _) = needed[i]
             let ids = Set(items.map(\.id))
             let front = focused.flatMap { ids.contains($0) ? $0 : nil } ?? zOrder.first(where: ids.contains)
-            if front != focused { secondary = secondary ?? front }
+            if let front, front != focused {
+                switch config.unfocusedTabs {
+                case .ring: secondaries.append(front)
+                case .attached:
+                    let d = config.focusRingOutset + config.tileInset
+                    switch side {
+                    case .top: frame.origin.y += d
+                    case .left: frame.origin.x += d
+                    case .right: frame.origin.x -= d
+                    }
+                }
+            }
             s.show(frame: frame, items: items, focused: front, inactive: focusRing.isInactive || front != focused,
                    clearance: focusRing.cornerRadius, side: side, config: config)
         }
-        focusRing.showSecondary(secondary)
+        focusRing.showSecondary(secondaries)
     }
 
     private func refreshHandles() {

@@ -6,6 +6,18 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Added
+- `tiledTabs` (Settings › Stacked layout › Tabs on tiled windows too): a tab above every window in the columns layout, showing its title or the name given to the tab, so renamed tabs read outside the stacked layout. Windows shrink by the strip; the resize handles stay between whole slots.
+- `unfocusedTabs` (Settings › Stacked layout › Tabs of an unfocused window): what ties tabs to a window that is not the focused one, in both layouts. `ring` (default) puts a grey ring around the window, as a stack's front window already got while a floating window had the focus; `attached` moves the tabs over the ring's gap to touch the window instead.
+
+- `fadeAnimations` (Settings › Focus ring › Fade in and out, on by default): the ring, grey rings, tab strips and action buttons fade in and out over 150 ms instead of popping. When the focus moves to another window the ring fades out there and a new one fades in on the new window, rather than jumping.
+
+### Fixed
+- The action buttons follow the ring to a newly focused window at once. After the ring was moved through the WindowServer it reported AppKit's stale frame, sending the buttons back to the previous window until the next pass.
+- After a desktop switch the ring no longer jumps to the parked corner for a second or two: the previous app stays frontmost until macOS grants activation, and its parked window was taken for the focused one. Windows of desktops not shown are never ringed. The window a switch raises is brought forward in its stack in the same command when it was a hidden tab.
+- Tab strips follow a focus change at once on columns desktops too; they used to wait for the next pass.
+- BetterWM's own windows (Settings, Welcome) and dialogs of other apps (file pickers, alerts, sheets) get the focus ring too, in the floating colour; before, they left the ring grey on the window behind, since the ring only knew standard windows and never asked about BetterWM itself.
+
 ### Changed
 - Reconciliation has an intermediate representation: the reconciler emits a plan (frames with their intent, windows to raise) and an executor judges every ask from the window's real frame afterwards, confirming it, counting a refusal, or learning a minimum size from a window that held a larger size. Settle passes are gone; one look after the settle time, or sooner when the window moves, replaces them. The snapshot keeps a mirror: frames from the window server, titles re-read only when an app announces a change, Accessibility asked only about windows never seen before. A snapshot pass went from about 20 ms to 2 ms; tracked windows' moves and resizes bring a pass within 50 ms. Parking's park and unpark asks go through the same executor, which also decides when a window that will not leave the screen is claimed for the active desktop. The Accessibility hit-test fallback uses the mirror's handles. Every ask and every verdict (taken, ignored with its count, minimum learned, went elsewhere) is logged as a `[plan]` line.
 

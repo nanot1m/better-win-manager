@@ -235,12 +235,17 @@ public final class VirtualWorkspaces {
                 let shouldPark = !shown.contains(workspace(of: w))
                 if shouldPark, !parked.contains(w), let f = frame(w) {
                     if !isTiled(w) { parkedFrames[w] = f }
-                    plan.ops.append(Op(window: w, frame: CGRect(origin: parkOrigin(w, f), size: f.size), intent: .park))
                     parked.insert(w)
+                    // A hidden tab of a stack already waits at the corner: parking it is a matter of record only.
+                    if isInCorner(w, f) {
+                        log("park #\(w) (desktop \(workspace(of: w) + 1), shown \(shown.sorted().map { $0 + 1 })): already at the corner")
+                        continue
+                    }
+                    plan.ops.append(Op(window: w, frame: CGRect(origin: parkOrigin(w, f), size: f.size), intent: .park))
                     log("park #\(w) (desktop \(workspace(of: w) + 1), shown \(shown.sorted().map { $0 + 1 }))")
                 } else if !shouldPark, parked.contains(w) {
                     parked.remove(w)
-                    log("unpark #\(w)")
+                    log(isTiled(w) ? "unpark #\(w): the layout places it" : "unpark #\(w)")
                     // Frames remembered on another display, or one that is gone, are fitted to the desktop's display.
                     if let f = parkedFrames.removeValue(forKey: w) { plan.ops.append(Op(window: w, frame: fit(w, f), intent: .unpark)) }
                 } else if shouldPark, parked.contains(w), let f = frame(w), !isInCorner(w, f) {

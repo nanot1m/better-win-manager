@@ -336,6 +336,19 @@ public struct GridGeometry {
 
     private func slotFrames() -> [(WindowID, CGRect)] {
         if grid.mode == .stacked { return stackedFrames() }
+        guard config.tiledTabs else { return tiledSlots() }
+        let t = config.tabHeight + config.focusRingOutset
+        return tiledSlots().map { w, f in (w, CGRect(x: f.minX, y: f.minY + min(t, f.height - 1), width: f.width, height: max(1, f.height - t))) }
+    }
+
+    /// The strips above tiled windows, one tab each; empty unless `tiledTabs` is on.
+    public func tiledTabFrames() -> [(WindowID, CGRect)] {
+        guard grid.mode == .columns, config.tiledTabs else { return [] }
+        return tiledSlots().map { w, f in (w, CGRect(x: f.minX, y: f.minY, width: f.width, height: config.tabHeight)) }
+    }
+
+    /// The columns layout's slots, tab strips included.
+    private func tiledSlots() -> [(WindowID, CGRect)] {
         var out: [(WindowID, CGRect)] = []
         for (c, cf) in zip(grid.columns, columnFrames()) {
             let usable = cf.height - config.gap * CGFloat(c.windows.count - 1)
@@ -417,7 +430,7 @@ public struct GridGeometry {
             let midX = (cf[i].maxX + cf[i + 1].minX) / 2
             out.append((.column(i), CGRect(x: midX - config.handleWidth / 2, y: inner.minY, width: config.handleWidth, height: inner.height)))
         }
-        let wf = windowFrames()
+        let wf = tiledSlots()
         var k = 0
         for (ci, c) in grid.columns.enumerated() {
             for i in 0..<max(0, c.windows.count - 1) {

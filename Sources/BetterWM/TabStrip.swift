@@ -55,10 +55,10 @@ final class TabStripWindow {
     func show(frame: CGRect, items: [Item], focused: WindowID?, inactive: Bool, clearance: CGFloat, side: Side, config: Config) {
         panel.setFrame(frame.toCocoa(), display: false)
         view.configure(items: items, focused: focused, inactive: inactive, clearance: clearance, side: side, config: config)
-        if !panel.isVisible { panel.orderBack(nil) }
+        Fade.show(panel) { if !panel.isVisible { panel.orderBack(nil) } }
     }
 
-    func hide() { panel.orderOut(nil) }
+    func hide() { Fade.hide(panel) }
 
     func snapshot(to path: String) {
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
