@@ -520,7 +520,9 @@ final class WindowManager {
         let v = desktops
         let onActive: (WindowID) -> Bool = { v.workspace(of: $0) == v.active }
         let remembered = lastFocusedByWorkspace[VirtualWorkspaces.spaceID(v.active)].flatMap { r in system.axWindow(r)?.isValid == true && onActive(r) ? r : nil }
-        guard let id = remembered ?? zOrder.first(where: onActive) else {
+        // A window that came along (floating on every desktop) keeps the focus it had.
+        let cameAlong = lastFocusedID.flatMap { follows($0) && onActive($0) ? $0 : nil }
+        guard let id = cameAlong ?? remembered ?? zOrder.first(where: onActive) else {
             focusRing.suspended = false
             return
         }
@@ -589,7 +591,8 @@ final class WindowManager {
                 },
                 refusals: { self.state.executor.refused[$0]?.count ?? 0 },
                 // Moves ignored while macOS is waking or rearranging displays say nothing about the window.
-                claimAllowed: snap.now >= claimsSuspendedUntil)
+                claimAllowed: snap.now >= claimsSuspendedUntil,
+                follows: { self.follows($0) })
         return state.executor.submit(plan, actual: snap.ownFrame(of:), now: snap.now)
     }
 
@@ -1195,6 +1198,9 @@ final class WindowManager {
         state.seen[screen.space, default: []].insert(id)
         apply()
     }
+
+    /// Whether a window goes along to whichever desktop shows: a floating one, when configured.
+    func follows(_ id: WindowID) -> Bool { config.floatingOnAllDesktops && !state.isTiled(id) }
 
     func toggleFocused() {
         guard let w = system.focused else { return }

@@ -197,14 +197,22 @@ public final class VirtualWorkspaces {
     /// `refusals` is how often the executor saw a window ignore its park; one that will not leave the screen is
     /// claimed for the active desktop when `claimAllowed` (not while macOS is waking or rearranging displays).
     /// Tiled windows are not restored here: their grid is laid out by the reconciler once the desktop shows.
+    /// A `follows` window belongs to whichever desktop its display shows and is never parked.
     public func apply(windows: [WindowID], pid: (WindowID) -> pid_t?, hideable: (pid_t) -> Bool,
                       isTiled: (WindowID) -> Bool, frame: (WindowID) -> CGRect?,
                       parkOrigin: (WindowID, CGRect) -> CGPoint, isInCorner: (WindowID, CGRect) -> Bool,
                       fit: (WindowID, CGRect) -> CGRect, hide: (pid_t) -> Void, unhide: (pid_t) -> Void,
-                      refusals: (WindowID) -> Int, claimAllowed: Bool) -> Plan {
+                      refusals: (WindowID) -> Int, claimAllowed: Bool, follows: (WindowID) -> Bool = { _ in false }) -> Plan {
         var plan = Plan()
         for w in windows { adopt(w) }
         let shown = self.shown
+        for w in windows where follows(w) && !shown.contains(workspace(of: w)) {
+            guard let d = display(of: workspace(of: w)), let target = shownDesktop(on: d) else { continue }
+            log("#\(w) floats along to desktop \(target + 1)")
+            membership[w] = target
+            // Parked before the option was on: back to where it was.
+            if parked.remove(w) != nil, let f = parkedFrames.removeValue(forKey: w) { plan.ops.append(Op(window: w, frame: fit(w, f), intent: .unpark)) }
+        }
         // Hidden apps come back as soon as one of their windows is on a shown desktop, whether or not that
         // window is in this snapshot (floating windows of a hidden app are not on screen).
         for (p, ws) in hiddenByPid where ws.contains(where: { shown.contains(workspace(of: $0)) }) {

@@ -44,6 +44,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var tileOnStartSwitch: NSSwitch!
     private var restoreSwitch: NSSwitch!
     private var hideAppsSwitch: NSSwitch!
+    private var floatingFollowsSwitch: NSSwitch!
     private var debugLogSwitch: NSSwitch!
     private var checkUpdatesSwitch: NSSwitch!
     private var autoUpdateSwitch: NSSwitch!
@@ -460,6 +461,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         tileOnStartSwitch = toggle()
         restoreSwitch = toggle()
         hideAppsSwitch = toggle()
+        floatingFollowsSwitch = toggle()
         debugLogSwitch = toggle()
         checkUpdatesSwitch = toggle()
         autoUpdateSwitch = toggle()
@@ -483,6 +485,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             ]),
             group("Other desktops", [
                 row("Hide apps", "An app whose windows are all on other desktops is hidden. Off parks every window in the screen corner instead: a sliver stays visible, but the overview can keep their previews live.", [hideAppsSwitch]),
+                row("Floating windows on every desktop", "An untiled window follows to whichever desktop you switch to instead of staying on one.", [floatingFollowsSwitch]),
             ]),
             group("Switcher", [
                 row("⌥Tab window switcher", "Windows grouped by desktop; the hotkey is on the Hotkeys page.", [switcherSwitch]),
@@ -925,6 +928,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         on(tileOnStartSwitch, config.tileExistingOnStart)
         on(restoreSwitch, config.restoreLayouts)
         on(hideAppsSwitch, config.hideApps)
+        on(floatingFollowsSwitch, config.floatingOnAllDesktops)
         on(debugLogSwitch, config.debugLog)
         on(checkUpdatesSwitch, config.checkForUpdates)
         on(autoUpdateSwitch, config.autoUpdate)
@@ -1020,6 +1024,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.tileExistingOnStart = isOn(tileOnStartSwitch)
         config.restoreLayouts = isOn(restoreSwitch)
         config.hideApps = isOn(hideAppsSwitch)
+        config.floatingOnAllDesktops = isOn(floatingFollowsSwitch)
         config.debugLog = isOn(debugLogSwitch)
         config.checkForUpdates = isOn(checkUpdatesSwitch)
         config.autoUpdate = isOn(autoUpdateSwitch)

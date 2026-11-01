@@ -586,6 +586,7 @@ struct ReconcilerTests {
         var ignoresMoves: Set<WindowID> = []
         var executor = Executor()
         let corner = CGPoint(x: 1598, y: 998)
+        var follows: Set<WindowID> = []
         func park(_ v: VirtualWorkspaces, now: Date, hideable: Bool = false, countRefusals: Bool = true) {
             executor.observe(actual: { self.frames[$0] }, now: now)
             let plan = v.apply(windows: Array(frames.keys).sorted(), pid: { pid_t($0) }, hideable: { _ in hideable },
@@ -593,7 +594,8 @@ struct ReconcilerTests {
                                parkOrigin: { _, _ in self.corner },
                                isInCorner: { _, f in abs(f.minX - self.corner.x) <= 100 && abs(f.minY - self.corner.y) <= 100 },
                                fit: { $1 }, hide: { self.hidden.insert($0) }, unhide: { self.hidden.remove($0) },
-                               refusals: { self.executor.refused[$0]?.count ?? 0 }, claimAllowed: countRefusals)
+                               refusals: { self.executor.refused[$0]?.count ?? 0 }, claimAllowed: countRefusals,
+                               follows: { self.follows.contains($0) })
             for op in executor.submit(plan, actual: { self.frames[$0] }, now: now).ops where !ignoresMoves.contains(op.window) {
                 frames[op.window] = op.frame
             }
@@ -669,6 +671,23 @@ struct ReconcilerTests {
         v.switchTo(1)
         screen.park(v, now: Date(timeIntervalSinceReferenceDate: 0), hideable: true)
         expect(screen.hidden.isEmpty && v.hiddenPids.isEmpty, #function, #line)
+    }
+
+    func testFollowingWindowMovesToShownDesktopInsteadOfParking() {
+        let v = desktops(2)
+        let screen = FakeScreen()
+        let home = CGRect(x: 100, y: 100, width: 300, height: 300)
+        screen.frames = [5: home, 6: home]
+        v.move(5, to: 1); v.move(6, to: 1)
+        screen.follows = [5]
+        let now = Date(timeIntervalSinceReferenceDate: 0)
+        screen.park(v, now: now)
+        expect(v.workspace(of: 5) == 0 && screen.frames[5] == home && !v.isParked(5), #function, #line)
+        expect(v.workspace(of: 6) == 1 && v.isParked(6), #function, #line)
+        // Turned on for a window already parked: it comes back where it was.
+        screen.follows = [5, 6]
+        screen.park(v, now: now + 1)
+        expect(v.workspace(of: 6) == 0 && screen.frames[6] == home && !v.isParked(6), #function, #line)
     }
 
     func testWindowRefusingToParkJoinsActiveWorkspace() {
@@ -818,6 +837,7 @@ let tests: [(String, () -> Void)] = [
     ("parkingFollowsActiveWorkspace", t.testParkingFollowsActiveWorkspace),
     ("hideableAppIsHiddenNotParked", t.testHideableAppIsHiddenNotParked),
     ("windowRefusingToParkJoinsActiveWorkspace", t.testWindowRefusingToParkJoinsActiveWorkspace),
+    ("followingWindowMovesToShownDesktopInsteadOfParking", t.testFollowingWindowMovesToShownDesktopInsteadOfParking),
     ("refusalsDoNotCountWhileSuspended", t.testRefusalsDoNotCountWhileSuspended),
     ("moveWorkspaceRemapsAndTrims", t.testMoveWorkspaceRemapsAndTrims),
     ("desktopsLiveOnDisplays", t.testDesktopsLiveOnDisplays),

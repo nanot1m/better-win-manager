@@ -6,6 +6,8 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-11-01
+
 ### Added
 - `tiledTabs` (Settings › Stacked layout › Tabs on tiled windows too): a tab above every window in the columns layout, showing its title or the name given to the tab, so renamed tabs read outside the stacked layout. Windows shrink by the strip; the resize handles stay between whole slots.
 - `unfocusedTabs` (Settings › Stacked layout › Tabs of an unfocused window): what ties tabs to a window that is not the focused one, in both layouts. `ring` (default) puts a grey ring around the window, as a stack's front window already got while a floating window had the focus; `attached` moves the tabs over the ring's gap to touch the window instead.
@@ -413,6 +415,8 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 ### Changed
 - Cats use the whole sprite pack: five sleeping poses picked per nap (lazy cats sprawl), paw licking and both grooming swipes, a standing tail-wag for watching things, paw swipes at the pointer when they catch it and at a portal before poking into it, rearing up on hind legs when the pointer hovers right over them, a meow on the first pet, a happy jump on the third, a hiss when fed up or cornered in a chase, a yawn on waking, a leap through the notch portals, scratching when bored, and a meal by the battery icon when the charger goes in after the battery ran low. Frame counts are read from the sheet, and a sheet missing an extra animation falls back to the nearest core one.
 - Cats notice the bar: when you switch desktops the awake ones glance at the new chip and a playful one trots toward it; a low battery makes them huddle by the battery icon; a busy machine makes them sit and stare at the gauges. Before visiting another cat, a cat now stops and looks at it first. With three or more cats one sometimes leads the others in a line. Playful cats poke their head into a notch portal and back a few times before going through. They are sleepier after lunch and livelier in the morning.
+
+- `floatingOnAllDesktops` (Settings › Desktops › Floating windows on every desktop): an untiled window follows to whichever desktop you switch to instead of staying parked on one. Tiling it pins it to the current desktop again. A following window that had the focus keeps it across the switch.
 
 ### Fixed
 - After a desktop switch the focus ring could end up beneath other windows: it was ordered under its window before that window was raised and before hidden apps came back. The ring is re-ordered once those settle.

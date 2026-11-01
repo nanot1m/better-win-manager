@@ -73,6 +73,8 @@ public struct Config {
     /// Hide an app natively when all its windows are on inactive desktops; off parks every window in the corner
     /// instead, which keeps it on screen for previews at the cost of a sliver showing in the corner.
     public var hideApps: Bool = true
+    /// Floating windows belong to no desktop: they follow to whichever desktop shows instead of being parked.
+    public var floatingOnAllDesktops: Bool = false
     /// Action log at ~/.config/betterwm/log.txt (menu: Open Log File / Copy Diagnostics Report).
     public var debugLog: Bool = true
     /// Ask GitHub once a day whether a newer release exists; `autoUpdate` installs it without asking.
@@ -289,6 +291,8 @@ public struct Config {
         restoreLayouts = \(restoreLayouts)
         # Hide an app whose windows are all on other desktops (otherwise park every window in the screen corner).
         hideApps = \(hideApps)
+        # Floating (untiled) windows follow to whichever desktop is shown instead of staying on one.
+        floatingOnAllDesktops = \(floatingOnAllDesktops)
         # ⌥Tab window switcher grouped by desktop; previews need Screen Recording permission, otherwise icons only.
         switcher = \(switcher)
         switcherThumbnails = \(switcherThumbnails)
@@ -470,6 +474,7 @@ public struct Config {
             case "autoUpdate": cfg.autoUpdate = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "restoreLayouts": cfg.restoreLayouts = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "hideApps": cfg.hideApps = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "floatingOnAllDesktops": cfg.floatingOnAllDesktops = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "stackOffset": cfg.stackOffset = Double(value).map { CGFloat($0) } ?? cfg.stackOffset
             case "stackStyle": cfg.stackStyle = StackStyle(rawValue: value) ?? cfg.stackStyle
             case "tabHeight": cfg.tabHeight = Double(value).map { CGFloat($0) } ?? cfg.tabHeight
