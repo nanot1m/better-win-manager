@@ -6,14 +6,11 @@ final class WindowObserver {
     private var observers: [pid_t: AXObserver] = [:]
     private let onNewWindow: (AXWindow) -> Void
     private let onFocusChange: () -> Void
-    private let onGeometryChange: () -> Void
     private let onTitleChange: (pid_t) -> Void
 
-    init(onNewWindow: @escaping (AXWindow) -> Void, onFocusChange: @escaping () -> Void,
-         onGeometryChange: @escaping () -> Void, onTitleChange: @escaping (pid_t) -> Void) {
+    init(onNewWindow: @escaping (AXWindow) -> Void, onFocusChange: @escaping () -> Void, onTitleChange: @escaping (pid_t) -> Void) {
         self.onNewWindow = onNewWindow
         self.onFocusChange = onFocusChange
-        self.onGeometryChange = onGeometryChange
         self.onTitleChange = onTitleChange
         for app in NSWorkspace.shared.runningApplications { observe(app) }
         let nc = NSWorkspace.shared.notificationCenter
@@ -47,10 +44,8 @@ final class WindowObserver {
         var obs: AXObserver?
         let cb: AXObserverCallback = { _, element, notification, refcon in
             let me = Unmanaged<WindowObserver>.fromOpaque(refcon!).takeUnretainedValue()
-            // Moves and resizes arrive for every frame of a drag; they must not cost a focus lookup each.
             switch notification as String {
             case kAXWindowCreatedNotification: break
-            case kAXWindowMovedNotification, kAXWindowResizedNotification: me.onGeometryChange(); return
             case kAXTitleChangedNotification:
                 var pid: pid_t = 0
                 AXUIElementGetPid(element, &pid)
@@ -68,8 +63,9 @@ final class WindowObserver {
         let appEl = AXResponsiveness.application(pid)
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         AXObserverAddNotification(obs, appEl, kAXWindowCreatedNotification as CFString, refcon)
-        for n in [kAXFocusedWindowChangedNotification, kAXWindowMovedNotification, kAXWindowResizedNotification,
-                  kAXWindowMiniaturizedNotification, kAXUIElementDestroyedNotification, kAXTitleChangedNotification] {
+        // Moves and resizes come from the window server for every tracked window; Accessibility only tells what
+        // the window server cannot: creation, focus, titles, minimizing, destruction.
+        for n in [kAXFocusedWindowChangedNotification, kAXWindowMiniaturizedNotification, kAXUIElementDestroyedNotification, kAXTitleChangedNotification] {
             AXObserverAddNotification(obs, appEl, n as CFString, refcon)
         }
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .commonModes)

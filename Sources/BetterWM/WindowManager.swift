@@ -605,8 +605,12 @@ final class WindowManager {
         let o = Parking.origin(for: f, home: screen(ofDesktop: desktops.workspace(of: id))?.frame.toCocoa(),
                                screens: NSScreen.screens.map { $0.frame.toCocoa() })
         guard abs(o.x - f.minX) > 100 || abs(o.y - f.minY) > 100 else { return }
+        // Through the executor like any other ask, so a window that keeps coming back is seen refusing.
+        let op = Op(window: id, frame: CGRect(origin: o, size: f.size), intent: .park)
+        let accepted = state.executor.submit(Plan(ops: [op]), actual: { _ in f }, now: Date())
+        guard !accepted.isEmpty else { return }
         Log.write("park", "#\(id) pushed on screen to \(Int(f.minX)),\(Int(f.minY)); back to the corner")
-        system.execute([.setFrame(id, CGRect(origin: o, size: f.size))])
+        system.execute(accepted.commands)
     }
 
     var enabled: Bool {
@@ -717,11 +721,7 @@ final class WindowManager {
                                             self?.onFocusChange?()
                                         }
                                     },
-                                    onGeometryChange: { [weak self] in
-                                        guard let self, !self.interacting else { return }
-                                        self.focusRing.scheduleUpdate()
-                                        self.scheduleTick()
-                                    },
+
                                     onTitleChange: { [weak self] pid in
                                         self?.system.titlesChanged(for: pid)
                                         self?.system.refreshFocused { self?.onFocusChange?() }
