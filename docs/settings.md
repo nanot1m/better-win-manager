@@ -45,6 +45,8 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `focusRingWidth` | 6 | Thickness |
 | `focusRingPadding` | 0 | Gap between a window and its ring; tiled windows shrink inside their slot by it, the ring stays put |
 | `focusRingAutoRadius` | true | Measure each window's own corner radius |
+| `focusRingActions` | true | Small icon buttons on the ring's top edge near the right corner |
+| `focusRingActionKeys` | toggleTile, toggleStack, sendToNextDesktop, popup | Which actions the buttons run, left to right; any of toggleTile, toggleStack, grow, shrink, equalize, retile, sendToPreviousDesktop, sendToNextDesktop, overview, popup |
 | `focusRingRadius` | 24 | Corner radius when measuring is not possible |
 
 ## Status bar

@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var pauseItem: NSMenuItem?
     var autoTileItem: NSMenuItem?
     var popup: ActionPopup!
+    var ringActions: RingActions!
     var hotKeys: [HotKey] = []
     let hud = ActionHUD()
     var bar: StatusBar!
@@ -58,6 +59,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager = WindowManager(config: config)
         updater = Updater(config: config)
         popup = ActionPopup(manager: manager)
+        ringActions = RingActions()
+        ringActions.perform = { [weak self] key in self?.actionTable()[key]?() }
+        ringActions.hotkeyLabel = { [weak self] key in self?.manager.config.hotkeys[key].map(KeyRecorderView.pretty) }
+        manager.focusRing.onChange = { [weak self] frame, inactive, inset, width, color in
+            guard let self else { return }
+            self.ringActions.configure(keys: self.manager.config.focusRingActionKeys)
+            self.ringActions.follow(ring: inactive ? nil : frame, inset: inset, ringWidth: width, color: color, enabled: self.manager.config.focusRingActions)
+        }
         switcher = WindowSwitcher(manager: manager)
         overview = Overview(manager: manager)
         slide = DesktopSlide(manager: manager)

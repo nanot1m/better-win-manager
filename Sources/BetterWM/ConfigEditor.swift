@@ -80,6 +80,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var ringRadiusLabel: NSTextField!
     private var ringAutoRadius: NSSwitch!
     private var ringFloating: NSSwitch!
+    private var ringActions: NSSwitch!
+    private var ringActionChecks: [(key: String, box: NSButton)] = []
     private var barSwitch: NSSwitch!
     private var barHeightField: NSTextField!
     private var barClockField: NSTextField!
@@ -556,6 +558,17 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private func ringGroups() -> [NSView] {
         ringSwitch = toggle()
         ringFloating = toggle()
+        ringActions = toggle(#selector(ringActionsChanged))
+        ringActionChecks = Config.ringActionChoices.map { key in
+            let b = NSButton(checkboxWithTitle: Config.actions.first { $0.key == key }?.title ?? key, target: nil, action: nil)
+            b.controlSize = .small
+            b.font = .systemFont(ofSize: 11)
+            return (key, b)
+        }
+        let checks = NSStackView(views: ringActionChecks.map(\.box))
+        checks.orientation = .vertical
+        checks.alignment = .leading
+        checks.spacing = 2
         ringColor = well()
         ringFloatingMode = choice(["Same as tiled", "Custom colour"], #selector(floatingColorModeChanged))
         ringFloatingColor = well()
@@ -579,6 +592,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             group(nil, [
                 row("Highlight the focused window", nil, [ringSwitch]),
                 row("Also highlight floating windows", "Untiled windows get the ring too.", [ringFloating]),
+                row("Action buttons on the ring", "Small buttons on the ring's top edge near the right corner. Hovering one shows its name and hotkey.", [ringActions]),
+                row("Buttons", "In this order, left to right.", [checks]),
             ]),
             group("Colour", [
                 row("Tiled windows", nil, [ringColor]),
@@ -838,6 +853,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         overviewGestureSwitch.isEnabled = overviewSwitch.state == .on
         desktopSwipeSwitch.isEnabled = overviewSwitch.state == .on
     }
+    @objc private func ringActionsChanged() { for (_, box) in ringActionChecks { box.isEnabled = ringActions.state == .on } }
     @objc private func autoRadiusChanged() { ringRadius.isEnabled = ringAutoRadius.state == .off }
     @objc private func floatingColorModeChanged() { ringFloatingColor.isEnabled = ringFloatingMode.indexOfSelectedItem == 1 }
     @objc private func ringSliderChanged(_ s: NSSlider) {
@@ -930,6 +946,9 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         ringPadding.doubleValue = Double(config.focusRingPadding)
         ringRadius.doubleValue = Double(config.focusRingRadius)
         on(ringAutoRadius, config.focusRingAutoRadius)
+        on(ringActions, config.focusRingActions)
+        for (key, box) in ringActionChecks { box.state = config.focusRingActionKeys.contains(key) ? .on : .off }
+        ringActionsChanged()
         autoRadiusChanged()
         ringSliderChanged(ringWidth)
         ringSliderChanged(ringPadding)
@@ -1017,6 +1036,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.focusRingPadding = CGFloat(ringPadding.doubleValue.rounded())
         config.focusRingRadius = CGFloat(ringRadius.doubleValue.rounded())
         config.focusRingAutoRadius = isOn(ringAutoRadius)
+        config.focusRingActions = isOn(ringActions)
+        config.focusRingActionKeys = ringActionChecks.filter { $0.box.state == .on }.map(\.key)
         config.bar = isOn(barSwitch)
         config.barHeight = number(barHeightField, or: defaults.barHeight)
         config.barClockFormat = barClockField.stringValue.isEmpty ? defaults.barClockFormat : barClockField.stringValue

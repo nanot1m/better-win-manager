@@ -98,6 +98,14 @@ public struct Config {
         return focusRingPadding + max(0, focusRingWidth - focusRingOutset)
     }
     public var focusRingRadius: CGFloat = 24
+    /// Small icon buttons for common actions on the ring's top edge.
+    public var focusRingActions: Bool = true
+    /// Which actions the ring buttons run, in order; keys from `actions`.
+    public var focusRingActionKeys: [String] = Config.defaultRingActionKeys
+    public static let defaultRingActionKeys = ["toggleTile", "toggleStack", "sendToNextDesktop", "popup"]
+    /// Actions that make sense as a ring button, in the order they appear.
+    public static let ringActionChoices = ["toggleTile", "toggleStack", "grow", "shrink", "equalize", "retile",
+                                           "sendToPreviousDesktop", "sendToNextDesktop", "overview", "popup"]
     /// Measure each window's real corner radius once and match it; `focusRingRadius` is the fallback.
     public var focusRingAutoRadius: Bool = true
     public var focusRingColor: String = "FF9300"
@@ -310,6 +318,9 @@ public struct Config {
         focusRingPadding = \(num(focusRingPadding))
         # Match each window's own corner radius (measured once per window); the radius below is the fallback.
         focusRingAutoRadius = \(focusRingAutoRadius)
+        # Icon buttons (tile, stack, send to next desktop, actions) inside the ring's top-right corner.
+        focusRingActions = \(focusRingActions)
+        focusRingActionKeys = \(focusRingActionKeys.joined(separator: ", "))
         focusRingRadius = \(num(focusRingRadius))
         # Colours are hex RRGGBB or RRGGBBAA without a leading #.
         focusRingColor = \(focusRingColor)
@@ -455,6 +466,8 @@ public struct Config {
             case "focusRingWidth": cfg.focusRingWidth = Double(value).map { CGFloat($0) } ?? cfg.focusRingWidth
             case "focusRingPadding": cfg.focusRingPadding = Double(value).map { CGFloat($0) } ?? cfg.focusRingPadding
             case "focusRingAutoRadius": cfg.focusRingAutoRadius = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "focusRingActions": cfg.focusRingActions = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "focusRingActionKeys": cfg.focusRingActionKeys = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             case "focusRingRadius": cfg.focusRingRadius = Double(value).map { CGFloat($0) } ?? cfg.focusRingRadius
             case "focusRingColor": cfg.focusRingColor = value
             case "focusRingFloatingColor": cfg.focusRingFloatingColor = value
