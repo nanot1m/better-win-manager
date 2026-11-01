@@ -12,11 +12,6 @@ final class FocusRing {
     /// The window the ring is on; the bar outlines it. Electron apps report no focused window for a moment
     /// after a switch, so readers prefer this over asking Accessibility again.
     var currentWindowID: CGWindowID? { current }
-    /// Called whenever the ring shows, moves or hides: its frame (Cocoa coordinates) or nil, whether it is grey,
-    /// and how far its inner edge is from the frame.
-    var onChange: ((NSRect?, Bool, CGFloat, CGFloat, NSColor) -> Void)?
-    private var currentColor = NSColor.controlAccentColor
-    private func notify() { onChange?(window.isVisible ? window.frame : nil, isInactive, pad, config.focusRingWidth, currentColor) }
     /// The ring's outer corner radius as drawn; nothing should hang over the curve.
     var cornerRadius: CGFloat { window.isVisible ? layer.cornerRadius : 0 }
     /// The ring is on the window focus will come back to, greyed: no window has focus right now.
@@ -38,7 +33,7 @@ final class FocusRing {
     var hiddenForSystemReveal = false {
         didSet {
             guard hiddenForSystemReveal != oldValue else { return }
-            if hiddenForSystemReveal { window.orderOut(nil); notify() } else { update() }
+            if hiddenForSystemReveal { window.orderOut(nil) } else { update() }
         }
     }
 
@@ -46,7 +41,7 @@ final class FocusRing {
     var suspended = false {
         didSet {
             guard suspended != oldValue else { return }
-            if suspended { window.orderOut(nil); notify() } else { update() }
+            if suspended { window.orderOut(nil) } else { update() }
         }
     }
 
@@ -100,7 +95,6 @@ final class FocusRing {
                 self.scheduleUpdate()
             case .spaceChange:
                 self.window.orderOut(nil)
-                self.notify()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.update() }
             default:
                 self.scheduleUpdate()
@@ -167,7 +161,6 @@ final class FocusRing {
             if !config.focusRing { current = nil }
             window.orderOut(nil)
             showSecondary(nil)
-            notify()
             return
         }
         guard let w = focusedWindow() else {
@@ -184,7 +177,6 @@ final class FocusRing {
             }
             current = nil
             window.orderOut(nil)
-            notify()
             return
         }
         // An app can report a window it keeps alive after closing (ChatGPT) as focused; ring only what is visible.
@@ -194,7 +186,6 @@ final class FocusRing {
               !NSScreen.screens.contains(where: Spaces.showsFullscreen) else {
             current = nil
             window.orderOut(nil)
-            notify()
             return
         }
         present(id: id, frame: WindowServerEvents.bounds(of: id) ?? w.frame, floating: !isTiled(w))
@@ -212,7 +203,6 @@ final class FocusRing {
         isInactive = inactive
         if targetChanged { onFocusChange?() }
         let color = inactive ? Self.inactiveColor : config.ringColor(floating: floating)
-        currentColor = color
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         layer.cornerRadius = radius(for: id) + pad
@@ -228,7 +218,6 @@ final class FocusRing {
             window.orderFrontRegardless()
             onReorder?()
         }
-        notify()
     }
 
     /// Grey ring around `id` (a stack's front window) unless the main ring is already there; nil hides it. The
@@ -271,12 +260,9 @@ final class FocusRing {
               window.frame != target else { return }
         if window.frame.size == target.size, window.isVisible,
            WindowServerEvents.move(CGWindowID(window.windowNumber), to: padded.origin) {
-            // Moved behind AppKit's back: its idea of the frame is stale, so report the one we know.
-            onChange?(target, isInactive, pad, config.focusRingWidth, currentColor)
             return
         }
         window.setFrame(target, display: false, animate: false)
-        notify()
     }
 
     /// Called by the layout right as it moves the focused window, so the ring lands with the window, not after it.
