@@ -1068,6 +1068,14 @@ final class WindowManager {
 
     private func logReconcileChanges(from a: DesiredState, to b: DesiredState, plan: Plan) {
         guard Log.enabled else { return }
+        for v in plan.verdicts {
+            switch v {
+            case let .confirmed(w): Log.write("plan", "\(describe(w)) took its frame")
+            case let .refused(w, count): Log.write("plan", "\(describe(w)) ignored its frame (\(count))")
+            case let .learnedMinimum(w, size): Log.write("plan", "\(describe(w)) goes no smaller than \(Int(size.width))x\(Int(size.height))")
+            case let .superseded(w): Log.write("plan", "\(describe(w)) went elsewhere; asking again")
+            }
+        }
         for op in plan.ops { Log.write("plan", "\(describe(op.window)) -> \(op.intent.rawValue) \(Int(op.frame.minX)),\(Int(op.frame.minY)) \(Int(op.frame.width))x\(Int(op.frame.height))") }
         for space in Set(a.grids.keys).union(b.grids.keys) {
             let was = Set(a.grid(for: space).windows), now = Set(b.grid(for: space).windows)

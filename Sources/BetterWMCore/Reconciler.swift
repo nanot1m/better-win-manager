@@ -70,13 +70,14 @@ public struct Reconciler {
         var state = state
         // Verdicts first: a window that kept a larger size than asked has a minimum size to lay out around.
         let actual = { (w: WindowID) -> CGRect? in snapshot.away.contains(w) ? nil : snapshot.window(w)?.frame }
-        for learned in state.executor.observe(actual: actual, now: snapshot.now) {
-            guard let space = state.space(containing: learned.window) else { continue }
+        let verdicts = state.executor.observe(actual: actual, now: snapshot.now)
+        for case let .learnedMinimum(w, size) in verdicts {
+            guard let space = state.space(containing: w) else { continue }
             state.mutate(space) { grid in
-                var m = grid.minSizes[learned.window] ?? .zero
-                m.width = max(m.width, learned.minSize.width)
-                m.height = max(m.height, learned.minSize.height)
-                grid.minSizes[learned.window] = m
+                var m = grid.minSizes[w] ?? .zero
+                m.width = max(m.width, size.width)
+                m.height = max(m.height, size.height)
+                grid.minSizes[w] = m
             }
         }
         for screen in snapshot.screens {
@@ -117,7 +118,9 @@ public struct Reconciler {
             state.floating.subtract(grid.windows)
             state.retileRequested.remove(space)
         }
-        let accepted = state.executor.submit(plan(for: state, snapshot), actual: actual, now: snapshot.now)
+        var wanted = plan(for: state, snapshot)
+        wanted.verdicts = verdicts
+        let accepted = state.executor.submit(wanted, actual: actual, now: snapshot.now)
         return (state, accepted)
     }
 

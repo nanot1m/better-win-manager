@@ -23,12 +23,23 @@ public struct Op: Equatable {
     }
 }
 
-/// What one reconciliation wants done: the frames to set and the windows to raise. Pure data, so a pass can be
-/// logged, compared and tested without touching the system.
+/// What became of an earlier ask, as judged from the window's real frame.
+public enum Verdict: Equatable {
+    case confirmed(WindowID)
+    case refused(WindowID, count: Int)
+    case learnedMinimum(WindowID, CGSize)
+    /// The window went somewhere else meanwhile; nothing can be said about the ask.
+    case superseded(WindowID)
+}
+
+/// What one reconciliation wants done: the frames to set and the windows to raise, plus the verdicts on earlier
+/// asks reached on the way. Pure data, so a pass can be logged, compared and tested without touching the system.
 public struct Plan: Equatable {
     public var ops: [Op] = []
     public var raises: [WindowID] = []
-    public init(ops: [Op] = [], raises: [WindowID] = []) { self.ops = ops; self.raises = raises }
+    public var verdicts: [Verdict] = []
+    public init(ops: [Op] = [], raises: [WindowID] = [], verdicts: [Verdict] = []) { self.ops = ops; self.raises = raises; self.verdicts = verdicts }
+    /// Nothing to carry out; verdicts alone do not count.
     public var isEmpty: Bool { ops.isEmpty && raises.isEmpty }
     public var commands: [Command] { ops.map { .setFrame($0.window, $0.frame) } + raises.map { .raise($0) } }
     public func frame(of w: WindowID) -> CGRect? { ops.first { $0.window == w }?.frame }
@@ -50,11 +61,6 @@ public struct Executor: Equatable {
         public var count: Int
         public var since: Date
     }
-    /// A refused ask whose window stayed larger than asked: that is the window's minimum size.
-    public struct Learned: Equatable {
-        public let window: WindowID
-        public let minSize: CGSize
-    }
 
     public static let settleTime: TimeInterval = 0.5
     public static let maxAttempts = 4
@@ -65,15 +71,25 @@ public struct Executor: Equatable {
 
     public init() {}
 
-    /// Judges every pending ask against the windows' real frames; returns the minimum sizes it learned.
+    /// Whether `actual` counts as the op's frame taken. A slot must match to the pixel; a corner the window waits
+    /// at is reached when it is near it, since macOS clamps a window there to keep a sliver on screen.
+    public static func satisfies(_ actual: CGRect, _ op: Op) -> Bool {
+        switch op.intent {
+        case .slot, .unpark: return actual.approximatelyEquals(op.frame, tolerance: 0.75)
+        case .aside, .park: return abs(actual.minX - op.frame.minX) <= 100 && abs(actual.minY - op.frame.minY) <= 100
+        }
+    }
+
+    /// Judges every pending ask against the windows' real frames.
     @discardableResult
-    public mutating func observe(actual: (WindowID) -> CGRect?, now: Date) -> [Learned] {
-        var learned: [Learned] = []
-        for (w, p) in pending {
+    public mutating func observe(actual: (WindowID) -> CGRect?, now: Date) -> [Verdict] {
+        var verdicts: [Verdict] = []
+        for (w, p) in pending.sorted(by: { $0.key < $1.key }) {
             guard let a = actual(w) else { pending[w] = nil; continue }
-            if a.approximatelyEquals(p.op.frame, tolerance: 0.75) {
+            if Self.satisfies(a, p.op) {
                 pending[w] = nil
                 refused[w] = nil
+                verdicts.append(.confirmed(w))
                 continue
             }
             if now.timeIntervalSince(p.askedAt) < Self.settleTime {
@@ -82,24 +98,25 @@ public struct Executor: Equatable {
                 continue
             }
             pending[w] = nil
-            // Went somewhere else after settling (the user, the app, a park): no verdict; the next pass asks anew.
-            guard a.approximatelyEquals(p.before, tolerance: 0.75) else { continue }
+            // Went somewhere else after settling (the user, the app, a park): the next pass asks anew.
+            guard a.approximatelyEquals(p.before, tolerance: 0.75) else { verdicts.append(.superseded(w)); continue }
             let count = refused[w]?.target == p.op.frame ? (refused[w]!.count + 1) : 1
             refused[w] = Refusal(target: p.op.frame, count: count, since: now)
+            verdicts.append(.refused(w, count: count))
             // Held still larger than asked: that is as small as it goes.
             let wide = a.width > p.op.frame.width + 1, tall = a.height > p.op.frame.height + 1
-            if wide || tall { learned.append(Learned(window: w, minSize: CGSize(width: wide ? a.width : 0, height: tall ? a.height : 0))) }
+            if wide || tall { verdicts.append(.learnedMinimum(w, CGSize(width: wide ? a.width : 0, height: tall ? a.height : 0))) }
         }
-        return learned
+        return verdicts
     }
 
     /// Decides which of the plan's asks to make now and records them as pending. Asks already pending, or refused
     /// too recently, wait. Raises always go through.
     public mutating func submit(_ plan: Plan, actual: (WindowID) -> CGRect?, now: Date) -> Plan {
-        var out = Plan(raises: plan.raises)
+        var out = Plan(raises: plan.raises, verdicts: plan.verdicts)
         for op in plan.ops {
             let a = actual(op.window)
-            if let a, a.approximatelyEquals(op.frame, tolerance: 0.75) { pending[op.window] = nil; continue }
+            if let a, Self.satisfies(a, op) { pending[op.window] = nil; continue }
             if let p = pending[op.window], p.op.frame == op.frame { continue }
             // A fresh refusal is asked again at once (the settle time already spaced the asks); after the limit it
             // rests until `retryAfter`, then starts over.
