@@ -11,8 +11,10 @@ public struct SavedLayout: Codable, Equatable {
         /// The window's id when saved; stable for as long as the app keeps the window open, so a BetterWM
         /// relaunch puts every window back exactly, whatever its title has become.
         public var id: WindowID?
-        public init(bundleID: String?, title: String, frame: CGRect, heightWeight: CGFloat, id: WindowID? = nil) {
-            self.bundleID = bundleID; self.title = title; self.frame = frame; self.heightWeight = heightWeight; self.id = id
+        /// A name the user gave the window's tab, in place of its title.
+        public var label: String?
+        public init(bundleID: String?, title: String, frame: CGRect, heightWeight: CGFloat, id: WindowID? = nil, label: String? = nil) {
+            self.bundleID = bundleID; self.title = title; self.frame = frame; self.heightWeight = heightWeight; self.id = id; self.label = label
         }
     }
     public struct Column: Codable, Equatable {
@@ -110,14 +112,15 @@ public struct SavedLayout: Codable, Equatable {
 
     /// Captures every non-empty grid in `state`, describing windows with what `snapshot` knows about them.
     /// `floatingSpace` names the space an untiled window belongs to; nil leaves it out.
-    public static func capture(_ state: DesiredState, _ snapshot: Snapshot, floatingSpace: (WindowInfo) -> SpaceID? = { _ in nil }) -> SavedLayout {
+    public static func capture(_ state: DesiredState, _ snapshot: Snapshot, floatingSpace: (WindowInfo) -> SpaceID? = { _ in nil },
+                               label: (WindowID) -> String? = { _ in nil }) -> SavedLayout {
         var out = SavedLayout()
         // Empty grids are still worth saving when their mode isn't the default.
         for (space, grid) in state.grids.sorted(by: { $0.key < $1.key }) where !grid.isEmpty || grid.mode != .columns {
             let columns = grid.columns.compactMap { col -> Column? in
                 let windows = col.windows.compactMap { id -> Window? in
                     guard let w = snapshot.window(id) else { return nil }
-                    return Window(bundleID: w.bundleID, title: w.title, frame: w.frame, heightWeight: grid.heightWeights[id] ?? 1, id: id)
+                    return Window(bundleID: w.bundleID, title: w.title, frame: w.frame, heightWeight: grid.heightWeights[id] ?? 1, id: id, label: label(id))
                 }
                 return windows.isEmpty ? nil : Column(weight: col.weight, windows: windows)
             }
@@ -156,6 +159,12 @@ public struct SavedLayout: Codable, Equatable {
     /// Matching prefers the very same window (by id), then same app and title, then same app and nearest frame.
     /// Unmatched slots are dropped; a column with no survivors disappears.
     public func restore(space: SpaceID, candidates: [WindowInfo], exactTitle: Bool = false) -> Grid? {
+        var labels: [WindowID: String] = [:]
+        return restore(space: space, candidates: candidates, exactTitle: exactTitle, labels: &labels)
+    }
+
+    /// As above, also collecting the tab names of the matched windows into `labels`.
+    public func restore(space: SpaceID, candidates: [WindowInfo], exactTitle: Bool = false, labels: inout [WindowID: String]) -> Grid? {
         guard let saved = spaces.first(where: { $0.id == space }) else { return nil }
         var pool = candidates
         func take(_ slot: Window) -> WindowInfo? {
@@ -174,6 +183,7 @@ public struct SavedLayout: Codable, Equatable {
                 guard let w = take(slot) else { continue }
                 ids.append(w.id)
                 grid.heightWeights[w.id] = slot.heightWeight
+                if let label = slot.label { labels[w.id] = label }
             }
             if !ids.isEmpty { grid.columns.append(BetterWMCore.Column(ids, weight: col.weight)) }
         }

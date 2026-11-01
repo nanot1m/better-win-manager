@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-11-01
+
+### Added
+- Tabs in the stacked layout can be renamed: double-click a tab, or right-click it and choose Rename Tab, type a name and press Return. The name replaces the window's title on the tab and is saved with the layout; an empty name or Use Window Title restores the title.
+
 ## [0.28.0] - 2026-11-01
 
 ### Added

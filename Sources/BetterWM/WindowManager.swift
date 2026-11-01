@@ -841,6 +841,7 @@ final class WindowManager {
                 state.forget(id)
                 floatingFrames[id] = nil
                 adoptedInBackground[id] = nil
+                tabLabels[id] = nil
                 Thumbnails.forget(id)
                 lastFocusedByWorkspace = lastFocusedByWorkspace.filter { $0.value != id }
             }
@@ -875,7 +876,9 @@ final class WindowManager {
                 guard let ws = VirtualWorkspaces.workspace(of: savedSpace.id) else { continue }
                 if !atLaunch, desktops.isShown(ws) { continue }
                 let candidates = pool.filter { !reconciler.isIgnored($0) && eligible($0) }
-                guard !candidates.isEmpty, let grid = layout.restore(space: savedSpace.id, candidates: candidates, exactTitle: !atLaunch) else { continue }
+                var labels: [WindowID: String] = [:]
+                guard !candidates.isEmpty, let grid = layout.restore(space: savedSpace.id, candidates: candidates, exactTitle: !atLaunch, labels: &labels) else { continue }
+                tabLabels.merge(labels) { _, new in new }
                 Log.write("restore", "\(grid.windows.map { describe($0) }) back on workspace \(ws + 1)\(atLaunch ? "" : " (app relaunched)")")
                 for id in grid.windows { desktops.move(id, to: ws) }
                 pool.removeAll { grid.contains($0.id) }
@@ -1000,7 +1003,7 @@ final class WindowManager {
         }
         var layout = SavedLayout.capture(state, snap, floatingSpace: { w in
             self.desktops.isKnown(w.id) ? VirtualWorkspaces.spaceID(self.desktops.workspace(of: w.id)) : nil
-        })
+        }, label: { self.tabLabels[$0] })
         // Desktops not active right now keep what was saved for them before.
         let activeSpaces = Set(snap.screens.map(\.space))
         let captured = Set(layout.spaces.map(\.id))
@@ -1524,6 +1527,16 @@ final class WindowManager {
     }
 
     private var tabStrips: [TabStripWindow] = []
+    /// Names given to tabs in place of their windows' titles; saved with the layout.
+    private var tabLabels: [WindowID: String] = [:]
+    func setTabLabel(_ id: WindowID, _ label: String?) {
+        let trimmed = label?.trimmingCharacters(in: .whitespacesAndNewlines)
+        tabLabels[id] = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        Log.write("tabs", "\(describe(id)) tab named \(tabLabels[id].map { "\"\($0)\"" } ?? "by its title again")")
+        refreshTabStrips()
+        if let full = pendingSnapshot { scheduleSave(full) }
+    }
+
     private func refreshTabStrips() {
         var needed: [(CGRect, [TabStripWindow.Item], TabStripWindow.Side)] = []
         if config.stackStyle != .cascade {
@@ -1534,7 +1547,7 @@ final class WindowManager {
                 let items = state.grid(for: space).windows.compactMap { id -> TabStripWindow.Item? in
                     guard let pid = system.pid(of: id) else { return nil }
                     return TabStripWindow.Item(id: id, app: NSRunningApplication(processIdentifier: pid)?.localizedName ?? "",
-                                               title: system.axWindow(id)?.title ?? "")
+                                               title: system.axWindow(id)?.title ?? "", label: tabLabels[id])
                 }
                 needed.append((frame, items, config.stackStyle == .tabsLeft ? .left : config.stackStyle == .tabsRight ? .right : .top))
             }
@@ -1543,6 +1556,9 @@ final class WindowManager {
             let s = TabStripWindow()
             s.onSelect = { [weak self] id in self?.bringForwardInTabbedStack(id, raise: true) }
             s.onReorder = { [weak self] id, to in self?.reorderDeck(id, to: to) }
+            s.onRename = { [weak self] id, label in self?.setTabLabel(id, label) }
+            // The strip took the app active for typing; the window in front gets its focus back.
+            s.onEditingEnd = { [weak self] in self?.focusTopWindow() }
             tabStrips.append(s)
         }
         let focused = focusRing.currentWindowID ?? system.focused?.windowID

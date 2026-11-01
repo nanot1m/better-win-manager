@@ -8,11 +8,23 @@ final class TabStripWindow {
         let id: WindowID
         let app: String
         let title: String
+        /// A name the user gave the tab; shown instead of the formatted title.
+        var label: String? = nil
     }
     enum Side { case top, left, right }
 
     private let panel: NSPanel
     private let view = TabStripView()
+    /// The user named a tab (nil or empty: back to the window's title).
+    var onRename: ((WindowID, String?) -> Void)? {
+        get { view.onRename }
+        set { view.onRename = newValue }
+    }
+    /// Renaming ended: the strip gives key status up, and focus should go back to the front window.
+    var onEditingEnd: (() -> Void)? {
+        get { view.onEditingEnd }
+        set { view.onEditingEnd = newValue }
+    }
     var onSelect: ((WindowID) -> Void)? {
         get { view.onSelect }
         set { view.onSelect = newValue }
@@ -27,7 +39,13 @@ final class TabStripWindow {
     init() {
         // Behind every app window: the strip lives in the area the layout keeps free, and a window carried over
         // it stays on top. Not an auxiliary of fullscreen Spaces, so a fullscreen app covers it.
-        panel = .overlay(level: .normal, behavior: [.canJoinAllSpaces, .transient])
+        panel = EditablePanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.level = .normal
+        panel.hasShadow = false
+        panel.animationBehavior = .none
+        panel.collectionBehavior = [.canJoinAllSpaces, .transient]
         panel.contentView = view
     }
 
@@ -49,7 +67,17 @@ final class TabStripWindow {
     }
 }
 
-private final class TabStripView: NSView {
+/// Key status for the rename field, without activating the app.
+private final class EditablePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
+private final class TabStripView: NSView, NSTextFieldDelegate {
+    var onRename: ((WindowID, String?) -> Void)?
+    var onEditingEnd: (() -> Void)?
+    private var editor: NSTextField?
+    private var editing: WindowID?
+    private var editStarted = Date.distantPast
     var onSelect: ((WindowID) -> Void)?
     var onReorder: ((WindowID, Int) -> Void)?
     private var drag: ReorderDrag?
@@ -82,6 +110,8 @@ private final class TabStripView: NSView {
                 guard let self, let t, let i = indexOf(t), i < self.items.count else { return }
                 self.onSelect?(self.items[i].id)
             }
+            t.onRename = { [weak self, weak t] in if let t, let i = indexOf(t) { self?.beginRename(i) } }
+            t.onContextMenu = { [weak self, weak t] e in if let t, let i = indexOf(t) { self?.showMenu(for: i, with: e) } }
             t.onDragBegan = { [weak self, weak t] in if let t, let i = indexOf(t) { self?.beginDrag(i) } }
             t.onDragMoved = { [weak self] d in self?.drag?.update(delta: d) }
             t.onDragEnded = { [weak self] in self?.endDrag() }
@@ -97,12 +127,15 @@ private final class TabStripView: NSView {
             let active = item.id == focused
             // Re-adding a view that is already frontmost drops a frame; only move it when something is above it.
             if active, subviews.last !== t { addSubview(t, positioned: .above, relativeTo: nil) }
-            t.configure(title: BarView.formatTitle(config.tabTitleFormat, app: item.app, title: item.title,
-                                                   color: active ? accent.contrastingText : .white),
-                        active: active, accent: accent, side: side)
+            let color: NSColor = active ? accent.contrastingText : .white
+            let title = item.label.map { NSAttributedString(string: $0, attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: color]) }
+                ?? BarView.formatTitle(config.tabTitleFormat, app: item.app, title: item.title, color: color)
+            t.configure(title: title, active: active, accent: accent, side: side)
         }
         needsLayout = true
         layoutTabs()
+        // A refresh re-adds the active tab on top; the rename field, if any, stays above all of them.
+        if let editor { addSubview(editor, positioned: .above, relativeTo: nil) }
     }
 
     override func layout() {
@@ -110,6 +143,99 @@ private final class TabStripView: NSView {
         layoutTabs()
         settling?.settle()
         settling = nil
+        if let editor, let id = editing, let i = items.firstIndex(where: { $0.id == id }), let tab = tabs[safe: i] {
+            editor.frame = editorFrame(over: tab.frame)
+        }
+    }
+
+    private func editorFrame(over f: CGRect) -> CGRect {
+        side == .top ? CGRect(x: f.minX + 6, y: f.minY + 4, width: f.width - 12, height: f.height - 8)
+                     : CGRect(x: f.midX - 100, y: f.midY - 11, width: 200, height: 22)
+    }
+
+    // MARK: Renaming
+
+    private func showMenu(for index: Int, with event: NSEvent) {
+        guard index < items.count, let tab = tabs[safe: index] else { return }
+        let menu = NSMenu()
+        let rename = menu.addItem(withTitle: "Rename Tab…", action: #selector(menuRename(_:)), keyEquivalent: "")
+        rename.target = self
+        rename.representedObject = index
+        if items[index].label != nil {
+            let reset = menu.addItem(withTitle: "Use Window Title", action: #selector(menuReset(_:)), keyEquivalent: "")
+            reset.target = self
+            reset.representedObject = index
+        }
+        NSMenu.popUpContextMenu(menu, with: event, for: tab)
+    }
+    @objc private func menuRename(_ item: NSMenuItem) { if let i = item.representedObject as? Int { beginRename(i) } }
+    @objc private func menuReset(_ item: NSMenuItem) {
+        if let i = item.representedObject as? Int, i < items.count { onRename?(items[i].id, nil) }
+    }
+
+    /// An inline field over the tab; Return keeps the name, Escape or clicking away drops the edit.
+    private func beginRename(_ index: Int) {
+        guard index < items.count, let tab = tabs[safe: index], let window else { return }
+        endRename(commit: false)
+        let item = items[index]
+        let field = NSTextField(string: item.label ?? item.title)
+        field.font = .systemFont(ofSize: 12, weight: .semibold)
+        field.isBordered = false
+        field.focusRingType = .none
+        field.drawsBackground = true
+        field.backgroundColor = NSColor(white: 1, alpha: 0.95)
+        field.textColor = .black
+        field.alignment = .center
+        field.lineBreakMode = .byTruncatingTail
+        field.delegate = self
+        field.wantsLayer = true
+        field.layer?.cornerRadius = 5
+        field.frame = editorFrame(over: tab.frame)
+        addSubview(field)
+        editor = field
+        editing = item.id
+        editStarted = Date()
+        takeFocus()
+    }
+
+    /// The panel is non-activating: as the key window it gets the typing while the app stays in the background.
+    /// The first click of the double click raised a window, which can take key status away a moment later; the
+    /// late re-take covers that.
+    private func takeFocus() {
+        guard let window, let field = editor else { return }
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(field)
+        field.currentEditor()?.selectAll(nil)
+    }
+
+    private func endRename(commit: Bool) {
+        guard let field = editor, let id = editing else { return }
+        let text = field.stringValue
+        editor = nil
+        editing = nil
+        window?.makeFirstResponder(nil)
+        field.removeFromSuperview()
+        window?.orderBack(nil)
+        if commit { onRename?(id, text) }
+        onEditingEnd?()
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        // Return commits; focus leaving any other way (a click elsewhere) cancels. Except right after the edit
+        // began: the first click of the double click raised the window, and its app taking focus back is not the
+        // user leaving. The field takes the focus again.
+        let byReturn = (obj.userInfo?["NSTextMovement"] as? Int) == NSTextMovement.return.rawValue
+        if !byReturn, Date().timeIntervalSince(editStarted) < 0.8, editor != nil {
+            DispatchQueue.main.async { [weak self] in self?.takeFocus() }
+            return
+        }
+        endRename(commit: byReturn)
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        guard selector == #selector(NSResponder.cancelOperation(_:)) else { return false }
+        endRename(commit: false)
+        return true
     }
 
     /// Tabs in the order they appear along the strip (left tabs run bottom to top, so the deck is reversed there).
@@ -170,6 +296,8 @@ private final class TabStripView: NSView {
 /// view's layer is left to the reorder drag.
 private final class TabView: NSView {
     var onClick: (() -> Void)?
+    var onRename: (() -> Void)?
+    var onContextMenu: ((NSEvent) -> Void)?
     var onDragBegan: (() -> Void)?
     var onDragMoved: ((CGFloat) -> Void)?
     var onDragEnded: (() -> Void)?
@@ -309,8 +437,12 @@ private final class TabView: NSView {
     override func mouseEntered(with event: NSEvent) { hovering = true; layoutBody(animated: true); paint(animated: true) }
     override func mouseExited(with event: NSEvent) { hovering = false; layoutBody(animated: true); paint(animated: true) }
 
-    /// A click brings the window forward; a drag past a few points moves the tab along the strip.
+    override func rightMouseDown(with event: NSEvent) { onContextMenu?(event) }
+
+    /// A click brings the window forward; a double click renames the tab; a drag past a few points moves the tab
+    /// along the strip.
     override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2 { onRename?(); return }
         guard let window else { onClick?(); return }
         let start = event.locationInWindow
         var dragging = false
@@ -326,4 +458,8 @@ private final class TabView: NSView {
         }
         if dragging { onDragEnded?() } else { onClick?() }
     }
+}
+
+private extension Array {
+    subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil }
 }
