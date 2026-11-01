@@ -56,7 +56,6 @@ public final class VirtualWorkspaces {
     public static let base: SpaceID = 1_000_000_000
     /// Model Space ID of a desktop; stable across launches so saved layouts match.
     public static func spaceID(_ ws: Int) -> SpaceID { base + SpaceID(ws) * 100 }
-    public static func isVirtual(_ id: SpaceID) -> Bool { id >= base }
     public static func workspace(of id: SpaceID) -> Int? { id >= base ? Int((id - base) / 100) : nil }
 
     // MARK: Displays

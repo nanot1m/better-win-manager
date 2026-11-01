@@ -202,14 +202,6 @@ final class AXWindow: Hashable {
         }
     }
 
-    func setOrigin(_ origin: CGPoint) {
-        AX.run { [self] in
-            guard !AXResponsiveness.isUnresponsive(pid) else { return }
-            var pos = origin
-            if let p = AXValueCreate(.cgPoint, &pos) { AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, p) }
-        }
-    }
-
     func raise() {
         AX.run { [self] in
             if !AXResponsiveness.isUnresponsive(pid) { AXUIElementPerformAction(element, kAXRaiseAction as CFString) }

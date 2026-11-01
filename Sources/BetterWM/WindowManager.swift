@@ -550,14 +550,17 @@ final class WindowManager {
         return r
     }
 
+    /// The park ask for a window: the frame kept past the corner of its desktop's display.
+    private func parkOp(_ id: WindowID, _ f: CGRect) -> Op {
+        let corner = Parking.origin(for: f, home: screen(ofDesktop: desktops.workspace(of: id))?.frame.toCocoa(),
+                                    screens: NSScreen.screens.map { $0.frame.toCocoa() })
+        return Op(window: id, frame: CGRect(origin: corner, size: f.size), intent: .park)
+    }
+
     /// Parks windows of inactive workspaces and restores returning floating ones; tiled ones follow their grid.
     /// Parking's asks, judged by the same executor as the layout's; returns what to carry out now.
     private func applyVirtualParking(_ snap: Snapshot) -> Plan {
         let v = desktops
-        let screenFrames = NSScreen.screens.map { $0.frame.toCocoa() }
-        func corner(_ id: WindowID, _ f: CGRect) -> CGPoint {
-            Parking.origin(for: f, home: screen(ofDesktop: v.workspace(of: id))?.frame.toCocoa(), screens: screenFrames)
-        }
         let plan = v.apply(windows: snap.windows.map(\.id).filter { !snap.away.contains($0) },
                 pid: { snap.window($0)?.pid },
                 hideable: { p in
@@ -565,12 +568,9 @@ final class WindowManager {
                     return app.activationPolicy == .regular
                 },
                 isTiled: { self.state.isTiled($0) }, frame: { snap.window($0)?.frame },
-                parkOrigin: corner,
+                parkOrigin: { self.parkOp($0, $1).frame.origin },
                 // At the corner that would be chosen now: a display connected beside the old one makes it re-park.
-                isInCorner: { id, f in
-                    let o = corner(id, f)
-                    return abs(o.x - f.minX) <= 100 && abs(o.y - f.minY) <= 100
-                },
+                isInCorner: { Executor.satisfies($1, self.parkOp($0, $1)) },
                 fit: { self.fit($1, toDesktopOf: $0) },
                 hide: { pid in
                     // A hidden window cannot be captured; the overview shows what it looked like just before.
@@ -589,24 +589,16 @@ final class WindowManager {
                 refusals: { self.state.executor.refused[$0]?.count ?? 0 },
                 // Moves ignored while macOS is waking or rearranging displays say nothing about the window.
                 claimAllowed: snap.now >= claimsSuspendedUntil)
-        let actual = { (w: WindowID) -> CGRect? in snap.away.contains(w) ? nil : snap.window(w)?.frame }
-        let accepted = state.executor.submit(plan, actual: actual, now: snap.now)
-        for op in accepted.ops { Log.write("plan", "\(describe(op.window)) -> \(op.intent.rawValue) \(Int(op.frame.minX)),\(Int(op.frame.minY))") }
-        wsEvents.watch(Array(v.parkedWindows.subtracting(watchedParked)))
-        watchedParked = v.parkedWindows
-        return accepted
+        return state.executor.submit(plan, actual: snap.ownFrame(of:), now: snap.now)
     }
 
-    private var watchedParked: Set<WindowID> = []
     /// A fullscreen transition makes macOS pull parked windows back onto the screen (they count as off screen).
     /// WindowServer reports the move at once; put the window back before the next frame rather than at the next tick.
     private func reparkIfPushedOnScreen(_ id: WindowID) {
         guard desktops.isParked(id), !interacting, let f = WindowServerEvents.bounds(of: id) else { return }
-        let o = Parking.origin(for: f, home: screen(ofDesktop: desktops.workspace(of: id))?.frame.toCocoa(),
-                               screens: NSScreen.screens.map { $0.frame.toCocoa() })
-        guard abs(o.x - f.minX) > 100 || abs(o.y - f.minY) > 100 else { return }
+        let op = parkOp(id, f)
+        guard !Executor.satisfies(f, op) else { return }
         // Through the executor like any other ask, so a window that keeps coming back is seen refusing.
-        let op = Op(window: id, frame: CGRect(origin: o, size: f.size), intent: .park)
         let accepted = state.executor.submit(Plan(ops: [op]), actual: { _ in f }, now: Date())
         guard !accepted.isEmpty else { return }
         Log.write("park", "#\(id) pushed on screen to \(Int(f.minX)),\(Int(f.minY)); back to the corner")
@@ -819,13 +811,13 @@ final class WindowManager {
                 var (next, plan) = self.reconciler.reconcile(self.state, snap)
                 self.state = next
                 self.watchTracked()
-                self.logReconcileChanges(from: before, to: next, plan: plan)
                 let ids = Set(snap.windows.map(\.id))
                 if ids != self.lastWindowIDs { self.lastWindowIDs = ids; self.onWindowsChange?() }
                 self.scheduleSave(snap)
                 let t1 = Date()
                 plan.ops += self.applyVirtualParking(snap).ops
                 timing.append("park \(Int(Date().timeIntervalSince(t1) * 1000))")
+                self.logReconcileChanges(from: before, to: self.state, plan: plan)
                 if !plan.isEmpty {
                     self.anticipateRing(plan, snap.focused)
                     self.system.execute(plan.commands)
@@ -1053,11 +1045,10 @@ final class WindowManager {
     func apply() {
         var snap = system.lightSnapshot(tracked: tracked)
         markAway(&snap)
-        let actual = { (w: WindowID) -> CGRect? in snap.away.contains(w) ? nil : snap.window(w)?.frame }
         // A live gesture asks on every mouse move; pending asks are replaced, not judged, so the executor only
         // records them here.
         let plan = interacting ? reconciler.plan(for: state, snap)
-                               : state.executor.submit(reconciler.plan(for: state, snap), actual: actual, now: snap.now)
+                               : state.executor.submit(reconciler.plan(for: state, snap), actual: snap.ownFrame(of:), now: snap.now)
         anticipateRing(plan, snap.focused)
         if interacting { system.executeLatest(plan.commands) } else { system.execute(plan.commands) }
         if let full = pendingSnapshot { scheduleSave(full) }
@@ -1258,11 +1249,6 @@ final class WindowManager {
         state.mutate(screen.space) { $0.setMode($0.mode == .stacked ? .columns : .stacked) }
         Log.write("layout", "space \(screen.space) mode -> \(state.grid(for: screen.space).mode)")
         apply()
-    }
-
-    func layoutMode(forScreenAt p: CGPoint) -> LayoutMode {
-        guard let screen = screen(at: p) else { return .columns }
-        return state.grid(for: screen.space).mode
     }
 
     /// Grows or shrinks the focused window by `config.resizeStep`: a tiled one against its neighbours, a floating

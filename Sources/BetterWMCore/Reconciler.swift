@@ -69,8 +69,7 @@ public struct Reconciler {
     public func reconcile(_ state: DesiredState, _ snapshot: Snapshot) -> (DesiredState, Plan) {
         var state = state
         // Verdicts first: a window that kept a larger size than asked has a minimum size to lay out around.
-        let actual = { (w: WindowID) -> CGRect? in snapshot.away.contains(w) ? nil : snapshot.window(w)?.frame }
-        let verdicts = state.executor.observe(actual: actual, now: snapshot.now)
+        let verdicts = state.executor.observe(actual: snapshot.ownFrame(of:), now: snapshot.now)
         for case let .learnedMinimum(w, size) in verdicts {
             guard let space = state.space(containing: w) else { continue }
             state.mutate(space) { grid in
@@ -120,7 +119,7 @@ public struct Reconciler {
         }
         var wanted = plan(for: state, snapshot)
         wanted.verdicts = verdicts
-        let accepted = state.executor.submit(wanted, actual: actual, now: snapshot.now)
+        let accepted = state.executor.submit(wanted, actual: snapshot.ownFrame(of:), now: snapshot.now)
         return (state, accepted)
     }
 

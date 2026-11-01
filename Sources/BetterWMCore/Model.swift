@@ -52,6 +52,8 @@ public struct Snapshot: Equatable {
     }
 
     public func window(_ id: WindowID) -> WindowInfo? { windows.first { $0.id == id } }
+    /// A window's frame for the executor to judge by: nothing while macOS owns the window (fullscreen, a display within its grace).
+    public func ownFrame(of id: WindowID) -> CGRect? { away.contains(id) ? nil : window(id)?.frame }
     public func screen(containing p: CGPoint) -> ScreenInfo? { screens.first { $0.area.contains(p) } ?? screens.first }
     public func screen(for space: SpaceID) -> ScreenInfo? { screens.first { $0.space == space } }
 }
