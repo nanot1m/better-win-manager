@@ -8,18 +8,8 @@ public struct DesiredState: Equatable {
     public var seen: [SpaceID: Set<WindowID>] = [:]
     /// Spaces whose next reconcile tiles every window regardless of `tileExistingOnStart` (Retile action).
     public var retileRequested: Set<SpaceID> = []
-    /// Frames last requested per window; a window still larger than a frame we asked for has a minimum size.
-    public var requested: [WindowID: CGRect] = [:]
-    /// How often in a row the same frame was asked of a window that did not move at all in between. Some windows
-    /// refuse a size they cannot grow to; asking every tick makes them jitter, so after a few tries the ask stops
-    /// until the target changes. A window that moved meanwhile (parked and back, leaving fullscreen) did not refuse.
-    public struct Attempt: Equatable { public var target: CGRect; public var seen: CGRect; public var count: Int; public var since: Date }
-    /// After giving up, try again this long later: a refusal is often temporary (a display being rearranged).
-    public static let retryAfter: TimeInterval = 3
-    public var attempts: [WindowID: Attempt] = [:]
-    public static let maxAttempts = 4
-    /// Asks closer together than this are one attempt: the app has not had time to act on the first.
-    public static let attemptSpacing: TimeInterval = 0.5
+    /// Carries plans out and keeps the verdict on every ask: pending, confirmed, refused.
+    public var executor = Executor()
     /// Windows floating on purpose (untiled by hand or restored as floating); never arrivals, even on a first visit.
     public var floating: Set<WindowID> = []
 
@@ -41,8 +31,7 @@ public struct DesiredState: Equatable {
         for k in grids.keys { grids[k]?.remove(w) }
         for k in seen.keys { seen[k]?.remove(w) }
         floating.remove(w)
-        requested[w] = nil
-        attempts[w] = nil
+        executor.forget(w)
     }
 
     public mutating func mutate(_ space: SpaceID, _ body: (inout Grid) -> Void) {
@@ -74,10 +63,22 @@ public struct Reconciler {
         return false
     }
 
-    /// Brings `state` in line with `snapshot` for every active screen and emits the frame changes needed.
-    /// Pure: no system calls, so the same inputs always yield the same outputs.
-    public func reconcile(_ state: DesiredState, _ snapshot: Snapshot) -> (DesiredState, [Command]) {
+    /// Brings `state` in line with `snapshot` for every active screen and emits the plan to carry out: the asks
+    /// the executor accepts now, given what it has learned about each window. Pure: no system calls, so the same
+    /// inputs always yield the same outputs.
+    public func reconcile(_ state: DesiredState, _ snapshot: Snapshot) -> (DesiredState, Plan) {
         var state = state
+        // Verdicts first: a window that kept a larger size than asked has a minimum size to lay out around.
+        let actual = { (w: WindowID) -> CGRect? in snapshot.away.contains(w) ? nil : snapshot.window(w)?.frame }
+        for learned in state.executor.observe(actual: actual, now: snapshot.now) {
+            guard let space = state.space(containing: learned.window) else { continue }
+            state.mutate(space) { grid in
+                var m = grid.minSizes[learned.window] ?? .zero
+                m.width = max(m.width, learned.minSize.width)
+                m.height = max(m.height, learned.minSize.height)
+                grid.minSizes[learned.window] = m
+            }
+        }
         for screen in snapshot.screens {
             let space = screen.space
             var grid = state.grid(for: space)
@@ -111,67 +112,38 @@ public struct Reconciler {
                 }
             }
 
-            // Minimum sizes: a window still larger than the frame we asked for refused to shrink; distribute space
-            // around it. Only once it had time to comply and did not change at all: a window passing through a
-            // larger frame (leaving fullscreen, mid-resize) has no such minimum.
-            let geo = geometry(grid, screen, front: front(of: grid, in: snapshot))
-            for (w, target) in geo.windowFrames() {
-                guard !snapshot.away.contains(w), let actual = snapshot.window(w)?.frame, state.requested[w] == target else { continue }
-                if actual.approximatelyEquals(target, tolerance: 0.75) { state.attempts[w] = nil; continue }
-                guard let a = state.attempts[w], a.target == target, a.seen.approximatelyEquals(actual, tolerance: 0.75),
-                      snapshot.now.timeIntervalSince(a.since) >= DesiredState.attemptSpacing else { continue }
-                let wide = actual.width > target.width + 1, tall = actual.height > target.height + 1
-                guard wide || tall else { continue }
-                var m = grid.minSizes[w] ?? .zero
-                if wide { m.width = max(m.width, actual.width) }
-                if tall { m.height = max(m.height, actual.height) }
-                grid.minSizes[w] = m
-            }
-
             state.grids[space] = grid
             state.seen[space] = hereIDs
             state.floating.subtract(grid.windows)
             state.retileRequested.remove(space)
         }
-        var cmds = commands(for: state, snapshot)
-        cmds = cmds.filter { cmd in
-            guard case let .setFrame(w, f) = cmd, let seen = snapshot.window(w)?.frame else { return true }
-            if let a = state.attempts[w], a.target == f, a.seen.approximatelyEquals(seen, tolerance: 0.75) {
-                if a.count >= DesiredState.maxAttempts {
-                    guard snapshot.now.timeIntervalSince(a.since) >= DesiredState.retryAfter else { return false }
-                    state.attempts[w] = DesiredState.Attempt(target: f, seen: seen, count: 1, since: snapshot.now)
-                    return true
-                }
-                guard snapshot.now.timeIntervalSince(a.since) >= DesiredState.attemptSpacing else { return true }
-                state.attempts[w] = DesiredState.Attempt(target: f, seen: seen, count: a.count + 1, since: snapshot.now)
-            } else {
-                state.attempts[w] = DesiredState.Attempt(target: f, seen: seen, count: 1, since: snapshot.now)
-            }
-            return true
-        }
-        for case let .setFrame(w, f) in cmds { state.requested[w] = f }
-        return (state, cmds)
+        let accepted = state.executor.submit(plan(for: state, snapshot), actual: actual, now: snapshot.now)
+        return (state, accepted)
     }
 
-    /// Every tiled window on an active screen with its slot and its real frame.
-    func slots(_ state: DesiredState, _ snapshot: Snapshot) -> [(window: WindowID, target: CGRect, actual: CGRect)] {
+    /// Every tiled window on an active screen with its slot, its real frame and why it goes there.
+    func slots(_ state: DesiredState, _ snapshot: Snapshot) -> [(window: WindowID, target: CGRect, actual: CGRect, intent: Intent)] {
         snapshot.screens.flatMap { screen in
             let geo = geometry(state.grid(for: screen.space), screen, front: front(of: state.grid(for: screen.space), in: snapshot))
-            return geo.windowFrames().compactMap { w, target -> (window: WindowID, target: CGRect, actual: CGRect)? in
+            return geo.windowFrames().compactMap { w, target -> (window: WindowID, target: CGRect, actual: CGRect, intent: Intent)? in
                 guard !snapshot.away.contains(w), let actual = snapshot.window(w)?.frame else { return nil }
                 // A hidden window of a tabbed stack that already waits by the corner is done: macOS keeps a sliver of
                 // it on screen (it clamps the position), so the exact frame is never taken, and it is covered by the
                 // front window anyway. It gets its real frame when it comes forward.
-                if geo.waitsAside(target), abs(actual.minX - target.minX) <= 100, abs(actual.minY - target.minY) <= 100 { return nil }
-                return (w, target, actual)
+                if geo.waitsAside(target) {
+                    if abs(actual.minX - target.minX) <= 100, abs(actual.minY - target.minY) <= 100 { return nil }
+                    return (w, target, actual, .aside)
+                }
+                return (w, target, actual, .slot)
             }
         }
     }
 
-    /// Frame changes needed so every tiled window on an active screen sits in its slot.
-    public func commands(for state: DesiredState, _ snapshot: Snapshot) -> [Command] {
-        // AX rounds to whole pixels; sub-pixel differences are not worth a round trip.
-        slots(state, snapshot).filter { !$0.actual.approximatelyEquals($0.target, tolerance: 0.75) }.map { .setFrame($0.window, $0.target) }
+    /// Everything the layout wants moved so every tiled window on an active screen sits in its slot, before the
+    /// executor's verdicts. AX rounds to whole pixels; sub-pixel differences are not worth a round trip.
+    public func plan(for state: DesiredState, _ snapshot: Snapshot) -> Plan {
+        Plan(ops: slots(state, snapshot).filter { !$0.actual.approximatelyEquals($0.target, tolerance: 0.75) }
+            .map { Op(window: $0.window, frame: $0.target, intent: $0.intent) })
     }
 
     /// Tiled windows whose real frame no longer matches their slot: the user moved or resized them by hand.

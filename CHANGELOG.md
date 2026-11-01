@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Changed
+- Reconciliation has an intermediate representation: the reconciler emits a plan (frames with their intent, windows to raise) and an executor judges every ask from the window's real frame afterwards, confirming it, counting a refusal, or learning a minimum size from a window that held a larger size. Settle passes are gone; one look after the settle time, or sooner when the window moves, replaces them. The snapshot keeps a mirror: frames from the window server, titles re-read only when an app announces a change, Accessibility asked only about windows never seen before. A snapshot pass went from about 20 ms to 2 ms; tracked windows' moves and resizes bring a pass within 50 ms. Every plan line is logged as `[plan]`.
+
 ## [0.29.0] - 2026-11-01
 
 ### Added

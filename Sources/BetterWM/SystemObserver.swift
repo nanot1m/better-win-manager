@@ -12,6 +12,15 @@ final class SystemObserver {
     private var keptFromCache: Set<WindowID> = []
     private var lastReadAt: [WindowID: Date] = [:]
     private var closedByAppQ: Set<WindowID> = []
+    /// The mirror: titles as last read, re-read only for apps that announced a change or on a full pass. Frames
+    /// come straight from the window server; the Accessibility round trips a snapshot used to spend per window
+    /// are gone.
+    private var titles: [WindowID: String] = [:]
+    private var titleDirtyPids: Set<pid_t> = []
+    /// Windows already matched to their Accessibility handles and judged: standard ones are reported, the rest
+    /// (sheets, palettes) are left alone without asking their app again.
+    private var standardKnown: Set<WindowID> = []
+    private var notStandardKnown: Set<WindowID> = []
 
     // MARK: Published state (main thread), refreshed after every snapshot
 
@@ -36,6 +45,9 @@ final class SystemObserver {
         closedByApp.subtract(ids)
         AX.queue.async { self.closedByAppQ.subtract(ids) }
     }
+
+    /// An app changed a window title: its titles are re-read at the next snapshot.
+    func titlesChanged(for pid: pid_t) { AX.queue.async { self.titleDirtyPids.insert(pid) } }
 
     func pid(of id: WindowID) -> pid_t? { axMain[id]?.pid ?? lastInfoMain[id]?.pid }
     /// Frame from the last snapshot, without touching Accessibility.
@@ -68,10 +80,10 @@ final class SystemObserver {
     /// Full picture: everything on the active Spaces, plus any `tracked` window still resolvable even if
     /// momentarily off the on-screen list (mid-transition or on another Space). Taken on the AX queue;
     /// `completion` runs on the main thread with the result.
-    func snapshot(tracked: [WindowID], completion: @escaping (Snapshot) -> Void) {
+    func snapshot(tracked: [WindowID], full: Bool = false, completion: @escaping (Snapshot) -> Void) {
         let shownSpaces = Set(NSScreen.screens.map { Spaces.current(for: $0) })
         AX.queue.async {
-            let (infos, focused, closed) = self.take(tracked: tracked, shownSpaces: shownSpaces)
+            let (infos, focused, closed) = self.take(tracked: tracked, shownSpaces: shownSpaces, full: full)
             let handles = self.ax
             DispatchQueue.main.async {
                 self.publish(infos, handles: handles, focused: focused, closed: closed)
@@ -80,15 +92,15 @@ final class SystemObserver {
         }
     }
 
-    private func take(tracked: [WindowID], shownSpaces: Set<SpaceID>) -> ([WindowInfo], AXWindow?, Set<WindowID>) {
+    private func take(tracked: [WindowID], shownSpaces: Set<SpaceID>, full: Bool) -> ([WindowInfo], AXWindow?, Set<WindowID>) {
         var infos: [WindowInfo] = []
         var seen = Set<WindowID>()
-        for w in Spaces.visibleWindows() {
-            guard let id = w.windowID else { continue }
-            ax[id] = w
+        let dirty = full ? nil : titleDirtyPids
+        titleDirtyPids.removeAll()
+        for (id, w) in visibleWindows() {
             seen.insert(id)
             closedByAppQ.remove(id)
-            infos.append(info(id, w))
+            infos.append(info(id, w, readTitle: dirty == nil || dirty!.contains(w.pid) || titles[id] == nil))
         }
         // Window IDs WindowServer still knows, hidden or off screen included; computed only if needed.
         var aliveCache: Set<WindowID>?
@@ -102,12 +114,15 @@ final class SystemObserver {
                 continue
             }
             if let w = ax[id], w.isValid, w.isStandard {
-                infos.append(info(id, w))
+                infos.append(info(id, w, readTitle: dirty == nil || dirty!.contains(w.pid) || titles[id] == nil))
                 lastReadAt[id] = Date()
                 keptFromCache.remove(id)
                 continue
             }
             ax[id] = nil
+            standardKnown.remove(id)
+            notStandardKnown.remove(id)
+            titles[id] = nil
             // Accessibility can fail for a window that still exists: the app is hidden or just unhiding, hung, or
             // the screen is locked. Dropping it would untile it, so keep the last known picture while one of those
             // holds. A window merely kept off screen by its app after the user closed it has no such excuse.
@@ -154,9 +169,34 @@ final class SystemObserver {
         return spaces.allSatisfy(shownSpaces.contains) && !CGWindowInfo.isOnScreen(id)
     }
 
+    /// Standard windows on screen, front to back, matched to their Accessibility handles. Handles are kept from
+    /// one snapshot to the next; only an app with a window never seen before is asked for its window list.
+    private func visibleWindows() -> [(WindowID, AXWindow)] {
+        var out: [(WindowID, AXWindow)] = []
+        var enumerated: [pid_t: [AXWindow]] = [:]
+        for info in CGWindowInfo.list([.optionOnScreenOnly, .excludeDesktopElements]) where info.isOrdinaryOtherApp {
+            if let w = ax[info.id], standardKnown.contains(info.id) { out.append((info.id, w)); continue }
+            if notStandardKnown.contains(info.id) { continue }
+            if enumerated[info.pid] == nil {
+                guard !AXResponsiveness.isUnresponsive(info.pid) else { enumerated[info.pid] = []; continue }
+                var v: CFTypeRef?
+                let err = AXUIElementCopyAttributeValue(AXResponsiveness.application(info.pid), kAXWindowsAttribute as CFString, &v)
+                if err != .success { AXResponsiveness.noteFailure(info.pid, err) }
+                enumerated[info.pid] = (v as? [AXUIElement] ?? []).map { AXWindow(element: $0, pid: info.pid) }
+            }
+            guard let w = enumerated[info.pid]?.first(where: { $0.windowID == info.id }) else { continue }
+            guard w.isStandard else { notStandardKnown.insert(info.id); continue }
+            ax[info.id] = w
+            standardKnown.insert(info.id)
+            out.append((info.id, w))
+        }
+        return out
+    }
+
     /// Spaces are the manager's business and main-thread state; the queue leaves them empty.
-    private func info(_ id: WindowID, _ w: AXWindow) -> WindowInfo {
-        WindowInfo(id: id, pid: w.pid, bundleID: w.bundleID, frame: w.frame, spaces: [], title: w.title)
+    private func info(_ id: WindowID, _ w: AXWindow, readTitle: Bool) -> WindowInfo {
+        if readTitle || titles[id] == nil { titles[id] = w.title }
+        return WindowInfo(id: id, pid: w.pid, bundleID: w.bundleID, frame: WindowServerEvents.bounds(of: id) ?? w.frame, spaces: [], title: titles[id] ?? "")
     }
 
     private func publish(_ infos: [WindowInfo], handles: [WindowID: AXWindow], focused: AXWindow?, closed: Set<WindowID>) {

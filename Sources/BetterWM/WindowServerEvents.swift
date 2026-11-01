@@ -63,6 +63,7 @@ final class WindowServerEvents {
                 // Payloads are packed; the pointer is not necessarily 4-byte aligned.
                 let wid: UInt32? = (data != nil && length >= 4) ? data!.loadUnaligned(as: UInt32.self) : nil
                 let isWindowEvent = [Event.windowMove, .windowResize, .windowReorder, .windowLevel, .windowCreate, .windowDestroy].contains(e)
+                if e == .windowDestroy, let wid { WindowServerEvents.forget(wid) }
                 for h in me.handlers.values { h(e, isWindowEvent ? wid : nil) }
             }, e.rawValue, ctx)
         }
@@ -74,10 +75,24 @@ final class WindowServerEvents {
         watch(CGWindowInfo.list(.optionOnScreenOnly).map(\.id))
     }
 
-    /// Move/resize events are only delivered for windows explicitly requested.
+    /// Move/resize events are only delivered for windows explicitly requested, and each request replaces the
+    /// last: the hub keeps the union of everything asked for, so the ring's window and the manager's tracked
+    /// windows do not knock each other out. Destroyed windows leave the set.
+    private static var watched: Set<CGWindowID> = []
+    private static let watchedLock = NSLock()
     func watch(_ ids: [CGWindowID]) {
         guard let cid = WindowServerEvents.mainConnection?(), !ids.isEmpty else { return }
-        ids.withUnsafeBufferPointer { WindowServerEvents.requestForWindows?(cid, $0.baseAddress!, Int32($0.count)) }
+        WindowServerEvents.watchedLock.lock()
+        WindowServerEvents.watched.formUnion(ids)
+        let all = Array(WindowServerEvents.watched)
+        WindowServerEvents.watchedLock.unlock()
+        all.withUnsafeBufferPointer { WindowServerEvents.requestForWindows?(cid, $0.baseAddress!, Int32($0.count)) }
+    }
+
+    static func forget(_ id: CGWindowID) {
+        watchedLock.lock()
+        watched.remove(id)
+        watchedLock.unlock()
     }
 
     /// The window's own corner radius as WindowServer composites it; nil if the query is unavailable or empty.

@@ -27,19 +27,19 @@ struct ReconcilerTests {
         let r = Reconciler(config: config)
         let snap = snapshot([win(2, CGRect(x: 800, y: 0, width: 600, height: 600)),
                              win(1, CGRect(x: 100, y: 0, width: 600, height: 600))])
-        let (state, commands) = r.reconcile(DesiredState(), snap)
+        let (state, plan) = r.reconcile(DesiredState(), snap)
         expect(state.grid(for: space).columns.map(\.windows) == [[1], [2]], #function, 31)
-        expect(commands == [.setFrame(1, CGRect(x: 0, y: 0, width: 800, height: 1000)),
-                             .setFrame(2, CGRect(x: 800, y: 0, width: 800, height: 1000))], #function, #line)
+        expect(plan.ops == [Op(window: 1, frame: CGRect(x: 0, y: 0, width: 800, height: 1000), intent: .slot),
+                            Op(window: 2, frame: CGRect(x: 800, y: 0, width: 800, height: 1000), intent: .slot)], #function, #line)
     }
 
     func testNoCommandsWhenAlreadyInPlace() {
         let r = Reconciler(config: config)
         var (state, _) = r.reconcile(DesiredState(), snapshot([win(1, .zero)]))
         let settled = snapshot([win(1, area)])
-        var commands: [Command]
-        (state, commands) = r.reconcile(state, settled)
-        expect(commands.isEmpty, #function, 42)
+        var plan: Plan
+        (state, plan) = r.reconcile(state, settled)
+        expect(plan.isEmpty, #function, 42)
     }
 
     func testArrivalAppendsOnRightByDefault() {
@@ -84,15 +84,15 @@ struct ReconcilerTests {
         // Window 2 refused to go below 1000 wide.
         let refused = snapshot([win(1, CGRect(x: 0, y: 0, width: 800, height: 1000)),
                                 win(2, CGRect(x: 800, y: 0, width: 1000, height: 1000))])
-        var commands: [Command]
-        (state, commands) = r.reconcile(state, refused)
+        var plan: Plan
+        (state, plan) = r.reconcile(state, refused)
         expect(state.grid(for: space).minSizes[2] == nil, #function, #line)
         var later = refused
         later.now += 1
-        (state, commands) = r.reconcile(state, later)
+        (state, plan) = r.reconcile(state, later)
         expect(state.grid(for: space).minSizes[2]?.width == 1000, #function, #line)
-        expect(commands == [.setFrame(1, CGRect(x: 0, y: 0, width: 600, height: 1000)),
-                             .setFrame(2, CGRect(x: 600, y: 0, width: 1000, height: 1000))], #function, #line)
+        expect(plan.commands == [.setFrame(1, CGRect(x: 0, y: 0, width: 600, height: 1000)),
+                                 .setFrame(2, CGRect(x: 600, y: 0, width: 1000, height: 1000))], #function, #line)
     }
 
     func testPassingThroughLargerFrameTeachesNoMinimum() {
@@ -111,12 +111,12 @@ struct ReconcilerTests {
         var (state, _) = r.reconcile(DesiredState(), snapshot([win(1, area), win(2, area)]))
         var away = snapshot([win(1, CGRect(x: 0, y: 0, width: 800, height: 1000)), win(2, area)], now: Date(timeIntervalSinceReferenceDate: 5))
         away.away = [2]
-        var commands: [Command]
-        (state, commands) = r.reconcile(state, away)
+        var plan: Plan
+        (state, plan) = r.reconcile(state, away)
         away.now += 5
-        (state, commands) = r.reconcile(state, away)
+        (state, plan) = r.reconcile(state, away)
         expect(state.isTiled(2) && state.grid(for: space).minSizes[2] == nil, #function, #line)
-        expect(!commands.contains { if case .setFrame(2, _) = $0 { return true } else { return false } }, #function, #line)
+        expect(plan.frame(of: 2) == nil, #function, #line)
     }
 
     func testParkingAvoidsNeighbouringDisplay() {
@@ -325,7 +325,7 @@ struct ReconcilerTests {
         var st = DesiredState(); st.grids[space] = g
         let r = Reconciler(config: c)
         let waiting = snapshot([win(2, frames[2]!), win(1, CGRect(x: area.maxX - 2, y: area.maxY - 32, width: 500, height: 400))])
-        expect(r.commands(for: st, waiting).isEmpty, #function, #line)
+        expect(r.plan(for: st, waiting).isEmpty, #function, #line)
         c.stackStyle = .tabsLeft
         let left = GridGeometry(grid: g, area: area, config: c)
         expect(left.windowFrames().first?.1 == CGRect(x: 30, y: 0, width: area.width - 30, height: area.height), #function, #line)
@@ -494,12 +494,9 @@ struct ReconcilerTests {
         state.grids[space] = g
         state.seen[space] = [1, 2, 3]
         // Focus (z-order) changes never reorder the deck.
-        let (next, commands) = r.reconcile(state, snapshot([win(1, area), win(3, area), win(2, area)]))
+        let (next, plan) = r.reconcile(state, snapshot([win(1, area), win(3, area), win(2, area)]))
         expect(next.grid(for: space).windows == [1, 2, 3], #function, #line)
-        let x = Dictionary(uniqueKeysWithValues: commands.compactMap { c -> (WindowID, CGFloat)? in
-            if case let .setFrame(w, f) = c { return (w, f.minX) } else { return nil }
-        })
-        expect(x[1] == 0 && x[2] == 50 && x[3] == 100, #function, #line)
+        expect(plan.frame(of: 1)?.minX == 0 && plan.frame(of: 2)?.minX == 50 && plan.frame(of: 3)?.minX == 100, #function, #line)
         // Deliberate reordering still works.
         expect(next.grid(for: space).canMove(1, .right) && !next.grid(for: space).canMove(1, .mergeRight), #function, #line)
     }
@@ -527,17 +524,24 @@ struct ReconcilerTests {
         let r = Reconciler(config: config)
         let t0 = Date(timeIntervalSinceReferenceDate: 0)
         let stuck = CGRect(x: 0, y: 0, width: 10, height: 10)
-        var (state, commands) = r.reconcile(DesiredState(), snapshot([win(1, stuck)], now: t0))
-        // Settle passes of one tick are a single attempt.
-        for _ in 0..<5 { (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: t0)) }
-        expect(commands.count == 1, #function, #line)
+        var (state, plan) = r.reconcile(DesiredState(), snapshot([win(1, stuck)], now: t0))
+        expect(plan.ops.count == 1 && state.executor.pending[1] != nil, #function, #line)
+        // While the ask is pending nothing is asked again, however many passes run.
+        for _ in 0..<5 { (state, plan) = r.reconcile(state, snapshot([win(1, stuck)], now: t0)) }
+        expect(plan.isEmpty, #function, #line)
+        // Unchanged after the settle time: a refusal, and another ask; up to the limit.
         var now = t0
-        for _ in 1..<DesiredState.maxAttempts { now += 1; (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: now)) }
-        expect(!commands.isEmpty, #function, #line)
-        (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: now + 1))
-        expect(commands.isEmpty, #function, #line)
-        (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: now + DesiredState.retryAfter + 1))
-        expect(commands.count == 1, #function, #line)
+        for i in 1..<Executor.maxAttempts {
+            now += 1
+            (state, plan) = r.reconcile(state, snapshot([win(1, stuck)], now: now))
+            expect(plan.ops.count == 1 && state.executor.refused[1]?.count == i, #function, #line)
+        }
+        (state, plan) = r.reconcile(state, snapshot([win(1, stuck)], now: now + 1))
+        expect(plan.isEmpty && state.executor.isRefusing(1), #function, #line)
+        (state, plan) = r.reconcile(state, snapshot([win(1, stuck)], now: now + 1.2))
+        expect(plan.isEmpty, #function, #line)
+        (state, plan) = r.reconcile(state, snapshot([win(1, stuck)], now: now + 1 + Executor.retryAfter))
+        expect(plan.ops.count == 1, #function, #line)
     }
 
     func testWindowThatMovedHasNotRefused() {
@@ -545,11 +549,23 @@ struct ReconcilerTests {
         let t0 = Date(timeIntervalSinceReferenceDate: 0)
         let stuck = CGRect(x: 0, y: 0, width: 10, height: 10)
         let parked = CGRect(x: 1598, y: 998, width: 10, height: 10)
-        var (state, commands) = r.reconcile(DesiredState(), snapshot([win(1, stuck)], now: t0))
+        var (state, plan) = r.reconcile(DesiredState(), snapshot([win(1, stuck)], now: t0))
         var now = t0
-        for _ in 1..<DesiredState.maxAttempts { now += 1; (state, commands) = r.reconcile(state, snapshot([win(1, stuck)], now: now)) }
-        (state, commands) = r.reconcile(state, snapshot([win(1, parked)], now: now + 1))
-        expect(commands.count == 1, #function, #line)
+        for _ in 1..<Executor.maxAttempts { now += 1; (state, plan) = r.reconcile(state, snapshot([win(1, stuck)], now: now)) }
+        // It went somewhere else meanwhile: no verdict on that ask, and the next one is made.
+        (state, plan) = r.reconcile(state, snapshot([win(1, parked)], now: now + 1))
+        expect(plan.ops.count == 1 && !state.executor.isRefusing(1), #function, #line)
+    }
+
+    func testConfirmedAskClearsRefusals() {
+        let r = Reconciler(config: config)
+        let t0 = Date(timeIntervalSinceReferenceDate: 0)
+        let stuck = CGRect(x: 0, y: 0, width: 10, height: 10)
+        var (state, _) = r.reconcile(DesiredState(), snapshot([win(1, stuck)], now: t0))
+        (state, _) = r.reconcile(state, snapshot([win(1, stuck)], now: t0 + 1))
+        expect(state.executor.refused[1]?.count == 1, #function, #line)
+        (state, _) = r.reconcile(state, snapshot([win(1, area)], now: t0 + 2))
+        expect(state.executor.refused[1] == nil && state.executor.pending[1] == nil, #function, #line)
     }
 
     func testForgetClearsEveryRecord() {
@@ -557,7 +573,7 @@ struct ReconcilerTests {
         var (state, _) = r.reconcile(DesiredState(), snapshot([win(1, .zero), win(2, .zero)]))
         state.floating.insert(1)
         state.forget(1)
-        expect(!state.isTiled(1) && !state.floating.contains(1) && state.requested[1] == nil && state.attempts[1] == nil
+        expect(!state.isTiled(1) && !state.floating.contains(1) && state.executor.pending[1] == nil && state.executor.refused[1] == nil
                && !(state.seen[space] ?? []).contains(1), #function, #line)
         expect(state.isTiled(2), #function, #line)
     }
@@ -772,6 +788,7 @@ let tests: [(String, () -> Void)] = [
     ("refusedFrameGivesUpThenRetries", t.testRefusedFrameGivesUpThenRetries),
     ("forgetClearsEveryRecord", t.testForgetClearsEveryRecord),
     ("windowThatMovedHasNotRefused", t.testWindowThatMovedHasNotRefused),
+    ("confirmedAskClearsRefusals", t.testConfirmedAskClearsRefusals),
     ("passingThroughLargerFrameTeachesNoMinimum", t.testPassingThroughLargerFrameTeachesNoMinimum),
     ("awayWindowKeepsSlotAndIsLeftAlone", t.testAwayWindowKeepsSlotAndIsLeftAlone),
     ("parkingAvoidsNeighbouringDisplay", t.testParkingAvoidsNeighbouringDisplay),

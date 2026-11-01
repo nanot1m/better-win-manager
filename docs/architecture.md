@@ -11,7 +11,7 @@ flowchart TB
     subgraph Core["BetterWMCore (pure, tested)"]
         Model["Model<br/>WindowInfo · ScreenInfo · Snapshot · Command"]
         Grid["Grid · GridGeometry<br/>columns, weights, zones, resizing"]
-        Reconciler["Reconciler · DesiredState<br/>arrivals, departures, min sizes, refusals"]
+        Reconciler["Reconciler · DesiredState · Executor<br/>arrivals, departures, plan, verdicts"]
         VW["VirtualWorkspaces<br/>desktops, homes per display, parking"]
         Parking["Parking<br/>corner clear of other displays"]
         DragRules["DragRules<br/>drop / release / snap back"]
@@ -23,7 +23,7 @@ flowchart TB
     subgraph App["BetterWM (AppKit, SkyLight, Accessibility)"]
         direction TB
         WM["WindowManager<br/>the one owner of state"]
-        SO["SystemObserver<br/>snapshots on AX.queue"]
+        SO["SystemObserver<br/>mirror + snapshots on AX.queue"]
         AX["AXWindow · AXResponsiveness · AX.queue"]
         Spaces["Spaces · CGWindowInfo<br/>SkyLight, window list"]
         WSE["WindowServerEvents<br/>move/reorder/create events"]
@@ -116,7 +116,7 @@ sequenceDiagram
     E->>WM: tick()
     WM->>WM: pruneDeadWindows (window list)
     WM->>SO: snapshot(tracked:)
-    SO->>SO: visible windows + tracked, focused, excuses for unreadable
+    SO->>SO: window list + mirror (WS frames, cached titles), tracked, focused
     SO-->>WM: Snapshot (main thread)
     alt no window readable
         WM->>WM: ignore pass
@@ -124,12 +124,13 @@ sequenceDiagram
         WM->>WM: markAway (fullscreen, missing display)
         WM->>WM: assignNewVirtualWindows (saved layout, siblings, active)
         WM->>R: reconcile(state, snapshot)
-        R-->>WM: state', [Command]
+        Note over R: executor judges pending asks,<br/>learns minimum sizes, filters the plan
+        R-->>WM: state', Plan
         WM->>WM: scheduleSave
         WM->>VW: apply(parking: hide / park / unpark)
-        WM->>SO: execute(commands)
-        opt commands non-empty and settle
-            WM->>SO: snapshot again (≤ 3 passes)
+        WM->>SO: execute(plan)
+        opt plan non-empty
+            WM->>WM: one look after the settle time<br/>(sooner on a window-server move event)
         end
     end
     WM->>UI: refreshChrome, completions

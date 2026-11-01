@@ -7,10 +7,10 @@ final class WindowObserver {
     private let onNewWindow: (AXWindow) -> Void
     private let onFocusChange: () -> Void
     private let onGeometryChange: () -> Void
-    private let onTitleChange: () -> Void
+    private let onTitleChange: (pid_t) -> Void
 
     init(onNewWindow: @escaping (AXWindow) -> Void, onFocusChange: @escaping () -> Void,
-         onGeometryChange: @escaping () -> Void, onTitleChange: @escaping () -> Void) {
+         onGeometryChange: @escaping () -> Void, onTitleChange: @escaping (pid_t) -> Void) {
         self.onNewWindow = onNewWindow
         self.onFocusChange = onFocusChange
         self.onGeometryChange = onGeometryChange
@@ -51,7 +51,11 @@ final class WindowObserver {
             switch notification as String {
             case kAXWindowCreatedNotification: break
             case kAXWindowMovedNotification, kAXWindowResizedNotification: me.onGeometryChange(); return
-            case kAXTitleChangedNotification: me.onTitleChange(); return
+            case kAXTitleChangedNotification:
+                var pid: pid_t = 0
+                AXUIElementGetPid(element, &pid)
+                me.onTitleChange(pid)
+                return
             default: me.onFocusChange(); return
             }
             var pid: pid_t = 0

@@ -690,7 +690,11 @@ final class WindowManager {
             case .frontChange, .windowReorder: self?.refanStackedScreens()
             case .windowCreate, .windowDestroy: self?.scheduleTick()
             case .spaceChange: self?.stepAsideFromFullscreen()
-            case .windowMove: if let wid { self?.reparkIfPushedOnScreen(wid) }
+            case .windowMove, .windowResize:
+                guard let self, let wid else { return }
+                if event == .windowMove { self.reparkIfPushedOnScreen(wid) }
+                // A tracked window changed: the executor wants to see it, and a displaced window wants its slot back.
+                if !self.interacting, self.watchedTracked.contains(wid) { self.scheduleTick(after: 0.05) }
             default: break
             }
         }
@@ -713,22 +717,36 @@ final class WindowManager {
                                         self.focusRing.scheduleUpdate()
                                         self.scheduleTick()
                                     },
-                                    onTitleChange: { [weak self] in self?.system.refreshFocused { self?.onFocusChange?() } })
+                                    onTitleChange: { [weak self] pid in
+                                        self?.system.titlesChanged(for: pid)
+                                        self?.system.refreshFocused { self?.onFocusChange?() }
+                                        self?.scheduleTick()
+                                    })
         tick()
         // Window creation, destruction, focus and Space changes all arrive as events; the timer is a safety net.
         // A full snapshot walks every window through Accessibility, so once a second was measurable idle CPU.
-        timer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in self?.tick() }
+        timer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in self?.tick(full: true) }
     }
 
     private var tickScheduled = false
     /// Events come in bursts (an app opening three windows, a Space switch); one tick per burst is enough.
-    func scheduleTick() {
+    func scheduleTick(after delay: TimeInterval = 0.15) {
         guard !tickScheduled else { return }
         tickScheduled = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             self?.tickScheduled = false
             self?.tick()
         }
+    }
+
+    private var watchedTracked: Set<WindowID> = []
+    /// Every tiled or parked window reports its moves and resizes, so a frame change is seen as it happens
+    /// rather than at the next snapshot.
+    private func watchTracked() {
+        let ids = Set(tracked)
+        let new = ids.subtracting(watchedTracked)
+        if !new.isEmpty { wsEvents.watch(Array(new)) }
+        watchedTracked = ids
     }
 
     // MARK: Reconcile loop
@@ -751,18 +769,20 @@ final class WindowManager {
     /// The snapshot is taken on the AX queue, so this returns at once; `completion` runs on the main thread once
     /// the pass and its settle passes are done. `settle` re-reads the screen after moving windows, for ones that
     /// refuse a size; a desktop switch skips it, since the window-server events the moves cause bring a tick right after.
-    func tick(settle: Bool = true, completion: (() -> Void)? = nil) {
+    /// `full` re-reads every title through Accessibility; otherwise the snapshot trusts its mirror and reads only
+    /// windows it has never seen and apps whose titles changed.
+    func tick(settle: Bool = true, full: Bool = false, completion: (() -> Void)? = nil) {
         if let completion { tickCompletions.append(completion) }
         if tickInFlight { tickPending = true; return }
         guard !interacting, !switching else { drainTickCompletions(); return }
         tickInFlight = true
         pruneDeadWindows()
-        runPass(0, settle: settle, assignRetries: 3, timing: [])
+        runPass(0, settle: settle, full: full, assignRetries: 3, timing: [])
     }
 
-    private func runPass(_ pass: Int, settle: Bool, assignRetries: Int, timing: [String]) {
+    private func runPass(_ pass: Int, settle: Bool, full: Bool, assignRetries: Int, timing: [String]) {
         let t0 = Date()
-        system.snapshot(tracked: tracked) { [weak self] snap in
+        system.snapshot(tracked: tracked, full: full) { [weak self] snap in
             guard let self else { return }
             var timing = timing
             timing.append("snap\(pass) \(Int(Date().timeIntervalSince(t0) * 1000))")
@@ -786,25 +806,29 @@ final class WindowManager {
                 // Placing windows changes what the next snapshot shows, and apps unhiding during launch add windows
                 // between snapshots; every window must pass through assignment before parking can adopt it.
                 if self.assignNewVirtualWindows(snap), assignRetries > 0 {
-                    return self.runPass(pass, settle: settle, assignRetries: assignRetries - 1, timing: timing)
+                    return self.runPass(pass, settle: settle, full: full, assignRetries: assignRetries - 1, timing: timing)
                 }
                 self.desktops.rememberHomes(snap.windows)
                 self.restoreSavedModes(snap)
                 let before = self.state
-                let (next, commands) = self.reconciler.reconcile(self.state, snap)
+                let (next, plan) = self.reconciler.reconcile(self.state, snap)
                 self.state = next
-                self.logReconcileChanges(from: before, to: next)
+                self.watchTracked()
+                self.logReconcileChanges(from: before, to: next, plan: plan)
                 let ids = Set(snap.windows.map(\.id))
                 if ids != self.lastWindowIDs { self.lastWindowIDs = ids; self.onWindowsChange?() }
                 self.scheduleSave(snap)
                 let t1 = Date()
                 self.applyVirtualParking(snap)
                 timing.append("park \(Int(Date().timeIntervalSince(t1) * 1000))")
-                if !commands.isEmpty {
-                    self.anticipateRing(commands, snap.focused)
-                    self.system.execute(commands)
-                    timing.append("exec \(commands.count)")
-                    if settle, pass + 1 < 3 { return self.runPass(pass + 1, settle: settle, assignRetries: 3, timing: timing) }
+                if !plan.isEmpty {
+                    self.anticipateRing(plan, snap.focused)
+                    self.system.execute(plan.commands)
+                    timing.append("exec \(plan.ops.count)")
+                    // The executor judges each ask once the window has had the settle time; one look after that
+                    // replaces re-asking in settle passes. Window-server events bring the look sooner when a
+                    // window moves.
+                    if settle { self.scheduleTick(after: Executor.settleTime + 0.1) }
                 }
                 self.finishTick(timing)
             }
@@ -965,7 +989,7 @@ final class WindowManager {
     /// counted so far, by parking and by the layout, are dropped: they were likely macOS, not the window.
     private func suspendClaims(until date: Date) {
         claimsSuspendedUntil = date
-        state.attempts.removeAll()
+        state.executor.reset()
         desktops.forgetReparkAttempts()
         Log.write("park", claimsSuspendedUntil == .distantFuture ? "pausing the refusal rule (sleep or lock)" : "refusal rule resumes in \(Int(claimsSuspendedUntil.timeIntervalSinceNow)) s")
     }
@@ -1025,32 +1049,36 @@ final class WindowManager {
     func apply() {
         var snap = system.lightSnapshot(tracked: tracked)
         markAway(&snap)
-        let cmds = reconciler.commands(for: state, snap)
-        for case let .setFrame(w, f) in cmds { state.requested[w] = f }
-        anticipateRing(cmds, snap.focused)
-        if interacting { system.executeLatest(cmds) } else { system.execute(cmds) }
+        let actual = { (w: WindowID) -> CGRect? in snap.away.contains(w) ? nil : snap.window(w)?.frame }
+        // A live gesture asks on every mouse move; pending asks are replaced, not judged, so the executor only
+        // records them here.
+        let plan = interacting ? reconciler.plan(for: state, snap)
+                               : state.executor.submit(reconciler.plan(for: state, snap), actual: actual, now: snap.now)
+        anticipateRing(plan, snap.focused)
+        if interacting { system.executeLatest(plan.commands) } else { system.execute(plan.commands) }
         if let full = pendingSnapshot { scheduleSave(full) }
         refreshChrome()
     }
 
     func relayout() { apply() }
 
-    private func logReconcileChanges(from a: DesiredState, to b: DesiredState) {
+    private func logReconcileChanges(from a: DesiredState, to b: DesiredState, plan: Plan) {
         guard Log.enabled else { return }
+        for op in plan.ops { Log.write("plan", "\(describe(op.window)) -> \(op.intent.rawValue) \(Int(op.frame.minX)),\(Int(op.frame.minY)) \(Int(op.frame.width))x\(Int(op.frame.height))") }
         for space in Set(a.grids.keys).union(b.grids.keys) {
             let was = Set(a.grid(for: space).windows), now = Set(b.grid(for: space).windows)
             let added = now.subtracting(was), removed = was.subtracting(now)
             if !added.isEmpty { Log.write("reconcile", "space \(space): tiled \(added.map { describe($0) }) (first visit: \(a.seen[space] == nil), floating: \(a.floating.sorted()))") }
             if !removed.isEmpty { Log.write("reconcile", "space \(space): dropped \(removed.map { describe($0) })") }
         }
-        for (w, now) in b.attempts where now.count >= DesiredState.maxAttempts && (a.attempts[w]?.count ?? 0) < DesiredState.maxAttempts {
-            Log.write("layout", "\(describe(w)) refuses frame \(now.target); leaving it be until the layout changes")
+        for (w, r) in b.executor.refused where r.count >= Executor.maxAttempts && !a.executor.isRefusing(w) {
+            Log.write("layout", "\(describe(w)) refuses frame \(r.target); leaving it be until the layout changes")
         }
     }
 
     /// Puts the ring where the focused window is about to be, before the app has even applied the move.
     /// On stacked screens the front window by z-order is used: it is known before Accessibility reports focus.
-    private func anticipateRing(_ commands: [Command], _ focused: WindowID?) {
+    private func anticipateRing(_ plan: Plan, _ focused: WindowID?) {
         guard let focused else { return }
         // A stacked deck re-fans around the focused window; put the ring where it is about to land. Only when
         // the focused window is in that deck: a floating dialog over a stack keeps its own ring.
@@ -1060,7 +1088,7 @@ final class WindowManager {
             focusRing.show(windowID: focused, frame: frame)
             return
         }
-        for case let .setFrame(w, f) in commands where w == focused { focusRing.anticipate(windowID: focused, frame: f) }
+        if let f = plan.frame(of: focused) { focusRing.anticipate(windowID: focused, frame: f) }
     }
 
     /// A screen switching to a fullscreen Space: our windows would show over the app for the first frames of the
