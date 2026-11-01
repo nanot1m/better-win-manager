@@ -310,11 +310,13 @@ final class FocusRing {
         guard !target.isNull, !target.isInfinite, target.width.isFinite, target.height.isFinite, target.origin.x.isFinite, target.origin.y.isFinite,
               placedFrame != target else { return }
         placedFrame = target
-        if window.frame.size == target.size, shown,
-           WindowServerEvents.move(CGWindowID(window.windowNumber), to: padded.origin) {
+        if window.frame.size == target.size, WindowServerEvents.move(CGWindowID(window.windowNumber), to: padded.origin) {
             notify()
             return
         }
+        // After a WindowServer move AppKit still holds the old frame; asked for that same frame again it would do
+        // nothing and leave the ring where the server put it.
+        if window.frame == target { window.setFrameOrigin(NSPoint(x: target.minX + 1, y: target.minY)) }
         window.setFrame(target, display: false, animate: false)
         notify()
     }

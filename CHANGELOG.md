@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.30.1] - 2026-11-01
+
+### Fixed
+- The focus ring could get stuck at the parking corner after a desktop switch: moved there through the WindowServer while following a window being parked, it was then asked for a frame AppKit still believed it had, and the request did nothing. Same-size moves now always go through the WindowServer, and AppKit is nudged when it has to be used.
+
 ## [0.30.0] - 2026-11-01
 
 ### Added
