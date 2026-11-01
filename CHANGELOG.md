@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Fixed
+- The landing page on phones: the tutorial's mock windows sprawled over the page and the install line stretched it sideways. The "How it works" section now shows the heading, the mock screen, then the steps as a swipeable strip that follows the animation.
+
 ## [0.27.4] - 2026-10-30
 
 ### Fixed

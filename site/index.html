@@ -100,8 +100,9 @@
 
 
   /* Tutorial */
-  .tutorial .walk { display: grid; grid-template-columns: 1fr 1.5fr; gap: 40px; align-items: start; }
-  .tutorial .screen { margin: 0; max-width: none; position: sticky; top: 84px; }
+  .tutorial .walk { display: grid; grid-template-columns: 1fr 1.5fr; grid-template-rows: auto 1fr; gap: 0 40px; align-items: start; }
+  .tutorial .intro, .tutorial .lesson { grid-column: 1; }
+  .tutorial .screen { grid-column: 2; grid-row: 1 / span 2; margin: 0; max-width: none; position: sticky; top: 84px; }
   .lesson { display: grid; gap: 10px; counter-reset: l; }
   .lesson button { text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 14px 56px; position: relative; color: var(--text); cursor: pointer; font: inherit; transition: border-color .2s, background .2s; }
   .lesson button::before { counter-increment: l; content: counter(l); position: absolute; left: 16px; top: 14px; width: 26px; height: 26px; border-radius: 50%; background: rgba(255,255,255,.08); color: var(--muted); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
@@ -152,9 +153,23 @@
   footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 
   @media (max-width: 760px) {
+    html, body { overflow-x: hidden; }
     nav ul { display: none; }
-    .split, .tutorial .walk, .setup { grid-template-columns: 1fr; }
-    .tutorial .screen { position: static; }
+    .install { max-width: 100%; }
+    .install code { overflow-x: auto; min-width: 0; }
+    .cta { flex-wrap: wrap; }
+    .screen { border-radius: 12px; }
+    .split, .setup { grid-template-columns: 1fr; }
+    /* Mock screen first, then the steps as a swipeable strip that snaps one card at a time. */
+    .tutorial .walk { display: flex; flex-direction: column; align-items: stretch; gap: 20px; }
+    .tutorial .walk > div { min-width: 0; }
+    .tutorial .intro .sub { margin-bottom: 0; }
+    .tutorial .screen { position: relative; top: auto; width: 100%; }
+    .tutorial .lesson { order: 1; }
+    .lesson { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -24px; padding: 4px 24px 14px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    .lesson::-webkit-scrollbar { display: none; }
+    /* Cards share the tallest card's height; a button centres its content, so pin it to the top instead. */
+    .lesson button { flex: 0 0 82%; scroll-snap-align: center; display: flex; flex-direction: column; justify-content: flex-start; }
     .bar .right, .bar .title { display: none; }
   }
   @media (prefers-reduced-motion: reduce) { .desk, .tut .w, .tut .cursor, .tut .zone, .tut .tabs, .tut .tab { transition: none; } }
@@ -217,16 +232,16 @@
 
 <section id="tutorial" class="tutorial">
   <div class="wrap walk">
-    <div>
+    <div class="intro">
       <h2>How it works</h2>
       <p class="sub">Two layouts cover everything: columns when you want to see windows side by side, a stack when one window at a time deserves the whole screen.</p>
-      <div class="lesson" id="lesson">
+    </div>
+    <div class="lesson" id="lesson">
         <button class="on"><h3>Windows start free</h3><p>One window is tiled already. A new one opens where its app puts it, free to move, and BetterWM only outlines it.</p></button>
         <button><h3>Hold <kbd>⌥</kbd> and drag to tile</h3><p>Drop zones light up along the edges and between columns. Release over one and the window becomes a column.</p></button>
         <button><h3>Columns share the screen</h3><p>Tile another window the same way, or press <kbd>⌃⌥T</kbd>. Drag the gap between columns to resize; <kbd>⌃⌥E</kbd> makes them equal again.</p></button>
         <button><h3>Stack the screen with <kbd>⌃⌥S</kbd></h3><p>Every tiled window takes the whole screen, with a tab per window along the top. Pick a cascade or tabs on the left or right in Settings.</p></button>
         <button><h3>Switch windows</h3><p>Click a tab, or press <kbd>⌃]</kbd> and <kbd>⌃[</kbd>. Drag tabs to reorder the stack. <kbd>⌃⌥S</kbd> again brings the columns back.</p></button>
-      </div>
     </div>
     <div class="screen tut" id="tut" aria-hidden="true">
       <div class="bar">
@@ -326,15 +341,32 @@
   const lesson = [...document.querySelectorAll('#lesson button')];
   const tutTitle = document.getElementById('tutTitle');
   let step = 0, hold = 0;
-  function showStep(i) {
+  const strip = document.getElementById('lesson');
+  const narrow = matchMedia('(max-width: 760px)');
+  let scrollingByUs = 0;
+  function showStep(i, fromScroll) {
     step = i;
     tut.className = 'screen tut s' + (i + 1);
     lesson.forEach((b, j) => b.classList.toggle('on', j === i));
     document.getElementById('tabA').classList.toggle('on', i === 4);
     document.getElementById('tabB').classList.toggle('on', i !== 4);
     tutTitle.textContent = i === 4 ? 'Code' : 'Safari';
+    // On phones the steps are a strip: bring the active card to the middle, unless the user is the one scrolling.
+    if (narrow.matches && !fromScroll) {
+      scrollingByUs = Date.now() + 600;
+      const b = lesson[i];
+      strip.scrollTo({ left: b.offsetLeft - (strip.clientWidth - b.offsetWidth) / 2, behavior: 'smooth' });
+    }
   }
   lesson.forEach((b, i) => b.addEventListener('click', () => { showStep(i); if (hold !== Infinity) hold = Date.now() + 12000; }));
+  // Swiping the strip picks the card nearest the middle and pauses the autoplay for a while.
+  strip.addEventListener('scroll', () => {
+    if (!narrow.matches || Date.now() < scrollingByUs) return;
+    const mid = strip.scrollLeft + strip.clientWidth / 2;
+    let best = 0, dist = Infinity;
+    lesson.forEach((b, i) => { const d = Math.abs(b.offsetLeft + b.offsetWidth / 2 - mid); if (d < dist) { dist = d; best = i; } });
+    if (best !== step) { showStep(best, true); if (hold !== Infinity) hold = Date.now() + 8000; }
+  }, { passive: true });
   if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
     const section = document.getElementById('tutorial');
     section.addEventListener('mouseenter', () => { hold = Infinity; });
