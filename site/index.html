@@ -87,8 +87,12 @@
   .ico { width: 34px; height: 34px; border-radius: 9px; background: rgba(255,147,0,.12); color: var(--accent); display: grid; place-items: center; margin-bottom: 14px; font-size: 18px; }
 
   .split { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
-  .keys { display: grid; gap: 10px; }
-  .key { display: flex; justify-content: space-between; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; font-size: 15px; }
+  .keys { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .keys h4 { grid-column: 1 / -1; margin: 10px 0 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .keys h4:first-child { margin-top: 0; }
+  .docs .card h3 a { color: inherit; text-decoration: none; }
+  .docs .card h3 a:hover { color: var(--accent); }
+  .key { display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; font-size: 15px; }
   kbd { font: 13px ui-monospace, "SF Mono", Menlo, monospace; background: #1f222b; border: 1px solid #333846; border-bottom-width: 2px; border-radius: 6px; padding: 3px 8px; color: #e1e3e8; white-space: nowrap; }
 
   .steps { counter-reset: s; display: grid; gap: 14px; }
@@ -160,6 +164,7 @@
     .cta { flex-wrap: wrap; }
     .screen { border-radius: 12px; }
     .split, .setup { grid-template-columns: 1fr; }
+    .keys { grid-template-columns: 1fr; }
     /* Mock screen first, then the steps as a swipeable strip that snaps one card at a time. */
     .tutorial .walk { display: flex; flex-direction: column; align-items: stretch; gap: 20px; }
     .tutorial .walk > div { min-width: 0; }
@@ -184,7 +189,7 @@
       <li><a href="#features">Features</a></li>
       <li><a href="#keys">Hotkeys</a></li>
       <li><a href="#install">Install</a></li>
-      <li><a href="https://github.com/nanot1m/better-win-manager/tree/master/docs">Docs</a></li>
+      <li><a href="#docs">Docs</a></li>
       <li><a href="https://github.com/nanot1m/better-win-manager">GitHub</a></li>
     </ul>
   </div>
@@ -294,17 +299,44 @@
   <div class="wrap split">
     <div>
       <h2>Keyboard first, when you want it</h2>
-      <p class="sub">Every action has a global hotkey and a place in the menu. All bindings are editable in Settings, and a popup on ⌥⌘Space lists them when you forget.</p>
+      <p class="sub">Every action has a global hotkey, a place in the menu and a tile in the Window Actions popup. The buttons on the focus ring run the ones you use most. All bindings are editable in Settings; these are the defaults.</p>
       <a class="btn" href="https://github.com/nanot1m/better-win-manager/blob/master/docs/actions.md">All actions and defaults</a>
     </div>
     <div class="keys">
-      <div class="key">Switch desktop <kbd>⌃1 … ⌃9</kbd></div>
-      <div class="key">Send window to desktop <kbd>⌃⌥1 … ⌃⌥9</kbd></div>
-      <div class="key">Move window <kbd>⌃⌥ ←↑↓→</kbd></div>
+      <h4>Windows</h4>
       <div class="key">Tile or untile <kbd>⌃⌥T</kbd></div>
-      <div class="key">Retile the screen <kbd>⌃⌥R</kbd></div>
+      <div class="key">Move window <kbd>⌃⌥ ←↑↓→</kbd></div>
+      <div class="key">Merge into next column <kbd>⌃⌥⇧ ←→</kbd></div>
+      <div class="key">Grow / shrink <kbd>⌃= / ⌃-</kbd></div>
+      <div class="key">Focus next / previous <kbd>⌃] / ⌃[</kbd></div>
       <div class="key">Window switcher <kbd>⌥Tab</kbd></div>
+      <h4>Screen</h4>
+      <div class="key">Stack or unstack the screen <kbd>⌃⌥S</kbd></div>
+      <div class="key">Retile the screen <kbd>⌃⌥R</kbd></div>
+      <div class="key">Equalize sizes <kbd>⌃⌥E</kbd></div>
+      <div class="key">Window actions popup <kbd>⌥⌘Space</kbd></div>
+      <h4>Desktops</h4>
+      <div class="key">Switch desktop <kbd>⌃1 … ⌃9</kbd></div>
+      <div class="key">Next / previous desktop <kbd>⌃→ / ⌃←</kbd></div>
+      <div class="key">Send window to desktop <kbd>⌃⌥1 … ⌃⌥9</kbd></div>
       <div class="key">Overview <kbd>F3</kbd></div>
+    </div>
+  </div>
+</section>
+
+<section id="docs" class="docs">
+  <div class="wrap">
+    <h2>Documentation</h2>
+    <p class="sub">Short pages, one per topic, kept current with every release.</p>
+    <div class="grid">
+      <div class="card"><div class="ico">▶</div><h3><a href="https://github.com/nanot1m/better-win-manager/blob/master/docs/getting-started.md">Getting started</a></h3><p>Install, the two permissions, the macOS settings to change once, and the first five minutes.</p></div>
+      <div class="card"><div class="ico">◫</div><h3><a href="https://github.com/nanot1m/better-win-manager/blob/master/docs/concepts.md">Concepts</a></h3><p>Columns, stacked layout and tabs, floating windows, desktops, and how parking and hiding keep other desktops out of the way.</p></div>
+      <div class="card"><div class="ico">⌘</div><h3><a href="https://github.com/nanot1m/better-win-manager/blob/master/docs/actions.md">Actions and hotkeys</a></h3><p>Every action with its default binding, the Window Actions popup, the menu, the switcher and the focus ring buttons.</p></div>
+      <div class="card"><div class="ico">⚙</div><h3><a href="https://github.com/nanot1m/better-win-manager/blob/master/docs/settings.md">Settings reference</a></h3><p>Every key in <code>config.conf</code> with its default, what the Settings window calls it, import and export.</p></div>
+      <div class="card"><div class="ico">▤</div><h3><a href="https://github.com/nanot1m/better-win-manager/blob/master/docs/status-bar.md">Status bar</a></h3><p>Desktop chips, the window title, widgets, weather and Now Playing, and how to arrange them.</p></div>
+      <div class="card"><div class="ico">🐈</div><h3><a href="https://github.com/nanot1m/better-win-manager/blob/master/docs/cats.md">Cats</a></h3><p>Sprite sheets, behaviour, petting, and the portals around the notch.</p></div>
+      <div class="card"><div class="ico">⚠</div><h3><a href="https://github.com/nanot1m/better-win-manager/blob/master/docs/troubleshooting.md">Troubleshooting</a></h3><p>The app will not open, hotkeys do not arrive, a window will not tile, where the log is and what to send with a report.</p></div>
+      <div class="card"><div class="ico">⌁</div><h3><a href="https://github.com/nanot1m/better-win-manager/blob/master/CHANGELOG.md">Changelog</a></h3><p>What changed in every release, newest first.</p></div>
     </div>
   </div>
 </section>
@@ -317,7 +349,7 @@
       <div class="step"><h3>Install with Homebrew</h3><p>Or download the zip from the latest release and move the app to Applications.</p>
 <pre>brew install --cask nanot1m/tap/betterwm</pre></div>
       <div class="step"><h3>Grant Accessibility</h3><p>A welcome window links straight to the right System Settings pane. Screen Recording is optional and only adds window previews.</p></div>
-      <div class="step"><h3>Hold ⌥ and drag a window</h3><p>That's the whole tutorial; <a href="#tutorial">how it works</a> shows the rest. The <a href="https://github.com/nanot1m/better-win-manager/blob/master/docs/getting-started.md">getting started guide</a> covers the rest.</p></div>
+      <div class="step"><h3>Hold ⌥ and drag a window</h3><p>That's the whole tutorial; <a href="#tutorial">how it works</a> shows the rest, and the <a href="https://github.com/nanot1m/better-win-manager/blob/master/docs/getting-started.md">getting started guide</a> goes deeper.</p></div>
     </div>
   </div>
 </section>
