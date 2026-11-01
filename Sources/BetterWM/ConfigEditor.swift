@@ -80,6 +80,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var ringRadiusLabel: NSTextField!
     private var ringAutoRadius: NSSwitch!
     private var ringFloating: NSSwitch!
+    private var ringActions: NSSwitch!
     private var barSwitch: NSSwitch!
     private var barHeightField: NSTextField!
     private var barClockField: NSTextField!
@@ -556,6 +557,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private func ringGroups() -> [NSView] {
         ringSwitch = toggle()
         ringFloating = toggle()
+        ringActions = toggle()
         ringColor = well()
         ringFloatingMode = choice(["Same as tiled", "Custom colour"], #selector(floatingColorModeChanged))
         ringFloatingColor = well()
@@ -579,6 +581,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             group(nil, [
                 row("Highlight the focused window", nil, [ringSwitch]),
                 row("Also highlight floating windows", "Untiled windows get the ring too.", [ringFloating]),
+                row("Action buttons on the ring", "Tile, stack, send to the next desktop and the actions popup, as small buttons on the ring's top edge near the right corner.", [ringActions]),
             ]),
             group("Colour", [
                 row("Tiled windows", nil, [ringColor]),
@@ -930,6 +933,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         ringPadding.doubleValue = Double(config.focusRingPadding)
         ringRadius.doubleValue = Double(config.focusRingRadius)
         on(ringAutoRadius, config.focusRingAutoRadius)
+        on(ringActions, config.focusRingActions)
         autoRadiusChanged()
         ringSliderChanged(ringWidth)
         ringSliderChanged(ringPadding)
@@ -1017,6 +1021,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.focusRingPadding = CGFloat(ringPadding.doubleValue.rounded())
         config.focusRingRadius = CGFloat(ringRadius.doubleValue.rounded())
         config.focusRingAutoRadius = isOn(ringAutoRadius)
+        config.focusRingActions = isOn(ringActions)
         config.bar = isOn(barSwitch)
         config.barHeight = number(barHeightField, or: defaults.barHeight)
         config.barClockFormat = barClockField.stringValue.isEmpty ? defaults.barClockFormat : barClockField.stringValue

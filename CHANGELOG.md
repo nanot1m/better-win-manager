@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Added
+- Action buttons on the focus ring (`focusRingActions`, Settings › Focus ring): a small tab in the ring's colour growing out of its top edge near the right corner, above the window, with tile / untile, toggle stacked layout, send to the next desktop, and the Window Actions popup. Hovering a button shows its name and hotkey. The tab follows the ring and goes with it.
+
 ### Fixed
 - The landing page on phones: the tutorial's mock windows sprawled over the page and the install line stretched it sideways. The "How it works" section now shows the heading, the mock screen, then the steps as a swipeable strip that follows the animation.
 
