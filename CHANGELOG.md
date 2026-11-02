@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.34.4] - 2026-11-02
+
+### Fixed
+- The focus ring could stay at the parking corner after ⌘Tab brought a window of another desktop in: the ring was first put at the window's still-parked position, then moved to the slot through the WindowServer, and AppKit put it back at the corner when the ring was ordered front. A focused window still past the corner is no longer ringed there, and AppKit's frame is brought up to date before the ring is ordered front.
+
 ## [0.34.3] - 2026-11-02
 
 ### Fixed

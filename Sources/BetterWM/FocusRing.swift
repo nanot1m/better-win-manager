@@ -33,7 +33,13 @@ final class FocusRing {
         shown = false
         placedFrame = .zero
     }
-    private func showRing() { shown = true; Fade.show(window) { window.orderFrontRegardless() } }
+    private func showRing() { shown = true; Fade.show(window) { orderFront() } }
+    /// Ordering a window front makes AppKit reassert the frame it knows; after WindowServer moves that is stale,
+    /// so it is brought up to date first.
+    private func orderFront() {
+        if placedFrame != .zero, window.frame != placedFrame { window.setFrame(placedFrame, display: false, animate: false) }
+        window.orderFrontRegardless()
+    }
     /// The frame the ring was last put at. A WindowServer move leaves AppKit's `window.frame` stale.
     private var placedFrame: NSRect = .zero
     /// The ring's outer corner radius as drawn; nothing should hang over the curve.
@@ -181,7 +187,7 @@ final class FocusRing {
     /// Brings the ring back to the front of its level after anything that could have slipped a window above it.
     func reorder() {
         guard current != nil, shown, !suspended else { return }
-        window.orderFrontRegardless()
+        orderFront()
     }
 
     /// The focused window as the last snapshot saw it; the ring never asks Accessibility itself.
@@ -237,7 +243,11 @@ final class FocusRing {
             notify()
             return
         }
-        present(id: id, frame: WindowServerEvents.bounds(of: id) ?? w.frame, floating: !isTiled(w))
+        let actual = WindowServerEvents.bounds(of: id) ?? w.frame
+        // Focused but still parked past a corner (its desktop just switched in): the layout is about to place it
+        // and the switch shows the ring where it will land; a ring at the corner meanwhile is wrong.
+        guard Self.onScreen(actual) else { return }
+        present(id: id, frame: actual, floating: !isTiled(w))
     }
 
     private func present(id: CGWindowID, frame: CGRect, floating: Bool? = nil, inactive: Bool = false) {
