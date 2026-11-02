@@ -30,7 +30,6 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `tabHeight` / `tabWidth` | 30 / 240 | Thickness of the tab strip (its height on top, its width on the left, where tabs read sideways), and the longest a tab gets; the windows get the rest |
 | `tabTitleFormat` | `{app} — {title}` | Tab label; `{app}` and `{title}` are replaced |
 | `tiledTabs` | false | A tab above every window in the columns layout too, showing its title or the name given to it |
-| `unfocusedTabs` | ring | Tabs of a window that is not focused, in either layout: `ring` puts a grey ring around the window, `attached` moves the tabs over the ring's gap to touch it |
 | `resizeStep` | 40 | Points the `grow` / `shrink` actions resize the focused window by |
 | `stackScreensNarrowerThan` | 0 | Screens narrower than this start in stacked layout; 0 never |
 | `ignoreApps` | System Settings, Calculator, Activity Monitor, Installer, Passwords, App Store, 1Password, Karabiner settings and about twenty other utilities | Bundle identifiers never tiled automatically; dragging them into a column still works |

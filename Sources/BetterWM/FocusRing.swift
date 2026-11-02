@@ -65,11 +65,6 @@ final class FocusRing {
         }
     }
 
-    /// Grey rings around windows whose tab strip would otherwise hang loose: a stack's front window while a
-    /// floating window holds the focus, or tiled windows with tabs that are not the focused one.
-    private var secondaries: [(window: UnconstrainedWindow, layer: CALayer)] = []
-    private var secondaryIDs: [CGWindowID] = []
-
     private static func makeWindow(_ layer: CALayer) -> UnconstrainedWindow {
         let w = UnconstrainedWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: false)
         w.isOpaque = false
@@ -190,7 +185,6 @@ final class FocusRing {
             // focus anywhere, the grey ring goes back on it. Only a disabled ring forgets.
             if !config.focusRing { current = nil }
             hideRing()
-            showSecondary([])
             notify()
             return
         }
@@ -240,7 +234,6 @@ final class FocusRing {
         if current != id {
             current = id
             events.watch([id])
-            if secondaryIDs.contains(id) { showSecondary(secondaryIDs) }
         }
         isInactive = inactive
         if targetChanged { onFocusChange?() }
@@ -269,48 +262,6 @@ final class FocusRing {
             onReorder?()
         }
         notify()
-    }
-
-    /// Grey rings around `ids`, skipping the one the main ring is on; empty hides them all. The manager owns
-    /// them through the tab strips; the main ring only takes them down when it is itself switched off.
-    private var secondaryGeneration = 0
-    func showSecondary(_ ids: [CGWindowID]) {
-        secondaryIDs = ids
-        secondaryGeneration += 1
-        let shown: [(CGWindowID, CGRect)] = config.focusRing && !suspended && !hiddenForSystemReveal
-            ? ids.compactMap { id in
-                guard id != current, CGWindowInfo.isOnScreen(id), let f = WindowServerEvents.bounds(of: id) else { return nil }
-                return (id, f)
-            } : []
-        while secondaries.count < shown.count {
-            let layer = CALayer()
-            secondaries.append((Self.makeWindow(layer), layer))
-        }
-        for (i, s) in secondaries.enumerated() {
-            guard i < shown.count else { Fade.hide(s.window); continue }
-            let (id, f) = shown[i]
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            s.layer.cornerRadius = radius(for: id) + pad
-            s.layer.borderWidth = config.focusRingWidth
-            s.layer.borderColor = Self.inactiveColor.cgColor
-            CATransaction.commit()
-            s.window.setFrame(f.insetBy(dx: -pad, dy: -pad).toCocoa(), display: false)
-            // Right above its own window and so below the one that has the focus: a grey ring is a mark on the
-            // window, not an outline over everything.
-            s.window.level = .normal
-            let order = { s.window.order(.above, relativeTo: Int(id)) }
-            if s.window.isVisible || !Fade.enabled {
-                Fade.show(s.window, order)
-            } else {
-                // A beat after the main ring has moved on, so the hand-off reads as one motion rather than two flashes.
-                let generation = secondaryGeneration
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
-                    guard let self, generation == self.secondaryGeneration, self.secondaryIDs.contains(id) else { return }
-                    Fade.show(s.window, order)
-                }
-            }
-        }
     }
 
     private func pulse() {

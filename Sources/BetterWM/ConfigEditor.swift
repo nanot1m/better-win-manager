@@ -52,7 +52,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var stackStylePopup: NSPopUpButton!
     private var tabHeightField: NSTextField!
     private var tiledTabsSwitch: NSSwitch!
-    private var unfocusedTabsPopup: NSPopUpButton!
     private var tabWidthField: NSTextField!
     private var tabTitleField: NSTextField!
     private var resizeStepField: NSTextField!
@@ -537,11 +536,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         }
         tabHeightField = numberField("30")
         tiledTabsSwitch = toggle()
-        unfocusedTabsPopup = NSPopUpButton()
-        for u in Config.UnfocusedTabs.allCases {
-            unfocusedTabsPopup.addItem(withTitle: u.title)
-            unfocusedTabsPopup.lastItem?.representedObject = u.rawValue
-        }
         tabWidthField = numberField("240")
         tabTitleField = NSTextField(string: "")
         tabTitleField.widthAnchor.constraint(equalToConstant: 200).isActive = true
@@ -563,7 +557,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 row("Tab strip thickness / max tab length", "The strip's height on top or width on the left, where tabs read sideways; and the longest a tab gets.", [tabHeightField, unit("pt"), tabWidthField, unit("pt")]),
                 row("Tab title", "{app} and {title} are replaced.", [tabTitleField]),
                 row("Tabs on tiled windows too", "A tab above every window in the columns layout, to see titles and renamed tabs there.", [tiledTabsSwitch]),
-                row("Tabs of an unfocused window", "The focus ring's gap would leave them hanging: ring the window in grey, or move the tabs down to touch it.", [unfocusedTabsPopup]),
                 row("Start stacked on narrow screens", "Screens narrower than this begin in stacked layout; 0 never.", [stackNarrowField, unit("pt")]),
             ]),
         ]
@@ -936,7 +929,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         stackStylePopup.selectItem(at: Config.StackStyle.allCases.firstIndex(of: config.stackStyle) ?? 0)
         tabHeightField.stringValue = String(Int(config.tabHeight))
         on(tiledTabsSwitch, config.tiledTabs)
-        unfocusedTabsPopup.selectItem(at: Config.UnfocusedTabs.allCases.firstIndex(of: config.unfocusedTabs) ?? 0)
         tabWidthField.stringValue = String(Int(config.tabWidth))
         tabTitleField.stringValue = config.tabTitleFormat
         resizeStepField.stringValue = String(Int(config.resizeStep))
@@ -1032,7 +1024,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         if let raw = stackStylePopup.selectedItem?.representedObject as? String, let st = Config.StackStyle(rawValue: raw) { config.stackStyle = st }
         config.tabHeight = max(16, number(tabHeightField, or: defaults.tabHeight))
         config.tiledTabs = isOn(tiledTabsSwitch)
-        if let raw = unfocusedTabsPopup.selectedItem?.representedObject as? String, let u = Config.UnfocusedTabs(rawValue: raw) { config.unfocusedTabs = u }
         config.tabWidth = max(60, number(tabWidthField, or: defaults.tabWidth))
         config.tabTitleFormat = tabTitleField.stringValue.isEmpty ? defaults.tabTitleFormat : tabTitleField.stringValue
         config.resizeStep = max(1, number(resizeStepField, or: defaults.resizeStep))

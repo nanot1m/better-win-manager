@@ -1607,30 +1607,24 @@ final class WindowManager {
         }
         let focused = focusRing.currentWindowID ?? system.focused?.windowID
         // A strip whose window is not the focused one (a floating window holds the focus, or another tiled
-        // window does) would hang loose: its window gets a grey ring, or the strip moves over the ring's gap to
-        // touch it, as configured. A stack's front window is the first in z-order.
-        var secondaries: [WindowID] = []
+        // window does) would hang loose over the ring's gap; it moves over the gap to touch its window. A stack's
+        // front window is the first in z-order.
         for (i, s) in tabStrips.enumerated() {
             guard i < needed.count else { s.hide(); continue }
             var (frame, items, side, _) = needed[i]
             let ids = Set(items.map(\.id))
             let front = focused.flatMap { ids.contains($0) ? $0 : nil } ?? zOrder.first(where: ids.contains)
             if let front, front != focused {
-                switch config.unfocusedTabs {
-                case .ring: secondaries.append(front)
-                case .attached:
-                    let d = config.focusRingOutset + config.tileInset
-                    switch side {
-                    case .top: frame.origin.y += d
-                    case .left: frame.origin.x += d
-                    case .right: frame.origin.x -= d
-                    }
+                let d = config.focusRingOutset + config.tileInset
+                switch side {
+                case .top: frame.origin.y += d
+                case .left: frame.origin.x += d
+                case .right: frame.origin.x -= d
                 }
             }
             s.show(frame: frame, items: items, focused: front, inactive: focusRing.isInactive || front != focused,
                    clearance: focusRing.cornerRadius, side: side, config: config)
         }
-        focusRing.showSecondary(secondaries)
     }
 
     private func refreshHandles() {

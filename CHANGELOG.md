@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Removed
+- The grey ring around a window whose tabs are not the focused ones, and the `unfocusedTabs` setting with it. The tabs now always move over the ring's gap to touch their window, which reads clearly on its own; an `unfocusedTabs` line in `config.conf` is ignored.
+
 ## [0.31.0] - 2026-11-02
 
 ### Changed
