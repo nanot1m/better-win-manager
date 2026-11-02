@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Fixed
+- Sending the focused window to another desktop no longer leaves the focus ring at the parking corner: the ring used to be moved ahead of the window to where the plan would put it, which for a parked window is past the corner.
+
 ## [0.34.4] - 2026-11-02
 
 ### Fixed

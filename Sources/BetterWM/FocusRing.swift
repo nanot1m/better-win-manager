@@ -337,6 +337,8 @@ final class FocusRing {
     /// Called by the layout right as it moves the focused window, so the ring lands with the window, not after it.
     func anticipate(windowID: CGWindowID, frame: CGRect) {
         guard !suspended, config.focusRing, current == windowID, shown else { return }
+        // Sent to another desktop: the plan parks it past a corner. Not a place for the ring.
+        guard Self.onScreen(frame) else { hideRing(); notify(); return }
         place(frame: frame)
     }
 }
