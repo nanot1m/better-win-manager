@@ -32,7 +32,7 @@ flowchart TB
         HotKey["HotKey (Carbon)"]
         Gestures["SwipeGesture (multitouch)"]
         subgraph UI["UI"]
-            Bar["StatusBar · BarCat"]
+            Bar["StatusBar · BarWidgets · BarCat"]
             Ring["FocusRing"]
             Overlay["ZoneOverlay · HandleWindow"]
             Overview["Overview"]

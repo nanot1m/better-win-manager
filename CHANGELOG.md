@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Changed
+- Status bar internals: the right side is a list of widgets, each owning its data source (weather, media, Wi-Fi, sound, the clock timer, the input-source observer) and its views; a widget not in `barWidgets` runs nothing. No visible change. Plan for the rest in `docs/plans/status-bar-widgets.md`.
+
 ## [0.35.1] - 2026-11-02
 
 ### Changed

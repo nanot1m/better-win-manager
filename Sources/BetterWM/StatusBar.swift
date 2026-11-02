@@ -6,14 +6,9 @@ import Cocoa
 final class StatusBar {
     private var windows: [BarWindow] = []
     private var config: Config
-    private let weather: WeatherService
     private let events = WindowServerEvents()
-    private var clock: Timer?
-    private let media = MediaService()
-    private let wifi = WiFiMonitor()
-    private let sound = SoundService()
-    private lazy var soundPopover = SoundPopover(service: sound)
-    private var inputSourceObserver: NSObjectProtocol?
+    /// One object per widget kind; the ones in `config.barWidgets` are running and shown.
+    private let widgets: [Config.BarWidget: BarWidget]
     var onSelectDesktop: ((Int) -> Void)?
     var onSelectFullscreen: ((UInt64) -> Void)?
     var fullscreenSpaces: () -> [(space: UInt64, pids: [pid_t])] = { [] }
@@ -39,13 +34,10 @@ final class StatusBar {
 
     init(config: Config) {
         self.config = config
-        weather = WeatherService(config: config)
-        weather.onUpdate = { [weak self] _ in self?.refresh() }
-        media.onUpdate = { [weak self] _ in self?.refresh() }
-        wifi.onChange = { [weak self] in self?.refresh() }
-        if config.bar && config.barWidgets.contains(.media) { media.start() }
-        if config.bar && config.barWidgets.contains(.sound) { sound.start() }
-        sound.onChange = { [weak self] in self?.refresh(); self?.soundPopover.refreshIfShown() }
+        widgets = BarWidgets.make(config: config)
+        for w in widgets.values { w.wantsRefresh = { [weak self] in self?.refresh() } }
+        (widgets[.menu] as? MenuWidget)?.onPressed = { [weak self] v in self?.onMenuRequested?(v) }
+        runWidgets()
         events.onEvent = { [weak self] event, _ in
             switch event {
             case .spaceChange: self?.stepAsideFromFullscreen(); self?.refresh()
@@ -57,16 +49,21 @@ final class StatusBar {
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
             self?.stepAsideFromFullscreen()
         }
-        clock = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in self?.refresh() }
-        inputSourceObserver = InputSource.observe { [weak self] in self?.refresh() }
         rebuild()
+    }
+
+    /// Starts the widgets in the bar and stops the rest, so a widget that is off costs nothing.
+    private func runWidgets() {
+        for (id, w) in widgets {
+            if config.bar && config.barWidgets.contains(id) { w.apply(config); w.start() } else { w.stop() }
+        }
     }
 
     /// Distance from the screen's top edge to the bar's bottom edge; zero when the bar is off.
     func inset(for screen: NSScreen) -> CGFloat { config.bar ? config.barTopOffset + height(for: screen) : 0 }
 
     /// Dev aid: opens the sound popover on the first bar.
-    func showSoundPopover() { if let v = windows.first?.view.soundAnchor { soundPopover.toggle(relativeTo: v) } }
+    func showSoundPopover() { (widgets[.sound] as? SoundWidget)?.showPopover() }
 
     /// At offset zero with no side margin the bar shares the top edge with the notch.
     private func atScreenTop(_ screen: NSScreen) -> Bool { config.barTopOffset == 0 && config.barMargin == 0 }
@@ -77,11 +74,8 @@ final class StatusBar {
     }
 
     func apply(_ config: Config) {
-        if config.bar && config.barWidgets.contains(.media) { media.start() } else { media.stop() }
-        if config.bar && config.barWidgets.contains(.sound) { sound.start() } else { sound.stop() }
         self.config = config
-        clockFormatter = makeClockFormatter()
-        weather.apply(config)
+        runWidgets()
         rebuild()
     }
 
@@ -125,23 +119,18 @@ final class StatusBar {
     private func rebuild() {
         windows.forEach { $0.orderOut(nil) }
         windows = []
+        widgets.values.forEach { $0.dropViews() }
         guard config.bar else { onLayoutChange?(); return }
         for screen in NSScreen.screens {
             let h = height(for: screen), m = config.barMargin
             let frame = NSRect(x: screen.frame.minX + m, y: screen.frame.maxY - config.barTopOffset - h, width: screen.frame.width - 2 * m, height: h)
             let w = BarWindow(frame: frame, screen: screen)
             w.view.apply(config, avoidNotch: atScreenTop(screen))
+            w.view.setRightWidgets(config.barWidgets.compactMap { id in widgets[id].map { (id, $0.makeView()) } })
             w.view.onSelectDesktop = { [weak self] i in self?.onSelectDesktop?(i) }
             w.view.onSelectFullscreen = { [weak self] s in self?.onSelectFullscreen?(s) }
             w.view.onReorderDesktop = { [weak self] from, to in self?.onReorderDesktop?(from, to) }
-            w.view.onMenuRequested = { [weak self] v in self?.onMenuRequested?(v) }
             w.view.onDesktopMenu = { [weak self] d, v in self?.onDesktopMenu?(d, v) }
-            w.view.onPlayPause = { [weak self] in self?.media.togglePlayPause() }
-            w.view.onSoundRequested = { [weak self] v in self?.soundPopover.toggle(relativeTo: v) }
-            w.view.onSoundScroll = { [weak self] delta in
-                guard let self else { return }
-                self.sound.setOutputVolume(self.sound.state.outputVolume + Float(delta) * 0.03)
-            }
             windows.append(w)
             // Entering fullscreen hides the menu bar, which lands here too: a fullscreen screen gets no bar.
             if !Spaces.showsFullscreen(screen) { w.orderFrontRegardless() }
@@ -159,12 +148,6 @@ final class StatusBar {
         guard refreshAfterInteraction else { return }
         refreshAfterInteraction = false
         refresh()
-    }
-    private lazy var clockFormatter = makeClockFormatter()
-    private func makeClockFormatter() -> DateFormatter {
-        let f = DateFormatter()
-        f.dateFormat = config.barClockFormat
-        return f
     }
     private func refresh() {
         guard !refreshScheduled else { return }
@@ -192,6 +175,11 @@ final class StatusBar {
             ?? NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
         let title = focused?.title ?? ""
         let label = focused?.windowID.flatMap(tabLabel)
+        // Widgets first: the cats read the battery and CPU from the widgets' fresh readings.
+        if let textColor = windows.first?.view.textColor {
+            let style = BarStyle(textColor: textColor, config: config)
+            for id in config.barWidgets { widgets[id]?.render(style) }
+        }
         var model = BarView.Model(
             desktops: [],
             current: nil,
@@ -202,20 +190,8 @@ final class StatusBar {
             app: app,
             title: title,
             label: label,
-            clock: config.barClock ? clockFormatter.string(from: Date()) : nil,
-            weather: weather.reading.map { r in
-                (String(format: "%.0f°", r.temperature), r.symbol)
-            },
-            battery: config.barBattery ? SystemStatus.battery() : nil,
-            batteryPercent: config.barBatteryPercent,
-            wifi: config.barWifi ? wifi.strength : nil,
-            showWifi: config.barWifi,
-            cpu: config.barCpu ? SystemStatus.cpuLoad() : nil,
-            memory: config.barMemory ? SystemStatus.memoryUsed() : nil,
-            disk: config.barDisk ? SystemStatus.diskFree() : nil,
-            inputSource: config.barInputSource ? InputSource.current() : nil,
-            media: config.barWidgets.contains(.media) ? media.current : nil,
-            sound: config.barWidgets.contains(.sound) ? sound.symbolName : nil,
+            battery: config.barWidgets.contains(.battery) ? (widgets[.battery] as? BatteryWidget)?.battery : nil,
+            cpu: config.barWidgets.contains(.cpu) ? (widgets[.cpu] as? CpuWidget)?.load : nil,
             titleFormat: config.barTitleFormat
         )
         for w in windows {
@@ -277,22 +253,6 @@ final class BarWindow: NSPanel {
 
     // AppKit pushes windows below the menu-bar level out of the menu bar area; the bar must be allowed to sit there.
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
-}
-
-/// A non-key panel swallows the first click unless the control accepts it.
-private final class ChipButton: NSButton {
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-}
-
-/// A chip button that also reports trackpad and wheel scrolling, for the volume.
-private final class ScrollButton: NSButton {
-    var onScroll: ((CGFloat) -> Void)?
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func scrollWheel(with event: NSEvent) {
-        let d = event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.scrollingDeltaX
-        guard d != 0 else { return }
-        onScroll?(event.hasPreciseScrollingDeltas ? d / 4 : d)
-    }
 }
 
 /// Desktop number plus the icons of the apps open there. A non-key panel swallows the first click unless the
@@ -399,38 +359,25 @@ final class BarView: NSView {
         var app: String
         var title: String
         var label: String?
-        var clock: String?
-        var weather: (String, String)?
+        /// For the cats' reactions; the widgets themselves draw these.
         var battery: SystemStatus.Battery?
-        var batteryPercent: Bool
-        var wifi: Double?
-        var showWifi: Bool
         var cpu: Double?
-        var memory: Double?
-        var disk: Int64?
-        var inputSource: String?
-        var media: MediaService.NowPlaying?
-        var sound: String?
         var titleFormat: String
     }
 
     var onSelectDesktop: ((Int) -> Void)?
     var onSelectFullscreen: ((UInt64) -> Void)?
     var onReorderDesktop: ((Int, Int) -> Void)?
-    var onMenuRequested: ((NSView) -> Void)?
     /// Right-click on a desktop chip: the desktop and the chip to anchor a menu to.
     var onDesktopMenu: ((Int, NSView) -> Void)?
-    var onPlayPause: (() -> Void)?
-    var onSoundRequested: ((NSView) -> Void)?
     /// Scroll over the sound widget: positive delta turns the volume up.
-    var onSoundScroll: ((CGFloat) -> Void)?
     private let screen: NSScreen
     private let background = NSVisualEffectView()
     private let solid = NSView()
     private var avoidNotch = false
     private var notchPortals = true
     private var catsEnabled = true
-    private var textColor: NSColor = .labelColor
+    private(set) var textColor: NSColor = .labelColor
     private var activeColor: NSColor = .controlAccentColor
     private var focusOutline: NSColor?
     private var padding: CGFloat = 12
@@ -438,27 +385,9 @@ final class BarView: NSView {
     private let right = NSStackView()
     private let appLabel = NSTextField(labelWithString: "")
     private let titleLabel = NSTextField(labelWithString: "")
-    private let weatherIcon = NSImageView()
-    private let weatherLabel = NSTextField(labelWithString: "")
-    private let cpuIcon = NSImageView()
-    private let cpuLabel = NSTextField(labelWithString: "")
-    private let memIcon = NSImageView()
-    private let memLabel = NSTextField(labelWithString: "")
-    private let diskIcon = NSImageView()
-    private let diskLabel = NSTextField(labelWithString: "")
-    private let inputLabel = NSTextField(labelWithString: "")
-    private let wifiIcon = NSImageView()
-    private let batteryIcon = NSImageView()
-    private let batteryLabel = NSTextField(labelWithString: "")
-    private let clockLabel = NSTextField(labelWithString: "")
-    private let menuButton = ChipButton(title: "", target: nil, action: nil)
-    private let mediaButton = ChipButton(title: "", target: nil, action: nil)
-    private let mediaLabel = NSTextField(labelWithString: "")
-    private let soundButton = ScrollButton(title: "", target: nil, action: nil)
-    var soundAnchor: NSView { soundButton }
     private let cat = BarCat(frame: .zero)
-    /// One container per right-side widget; `apply` arranges them in the configured order.
-    private var widgetViews: [Config.BarWidget: NSStackView] = [:]
+    /// The right side's widget views by widget; the cats aim at some of them.
+    private var rightViews: [Config.BarWidget: NSView] = [:]
     private var chips: [ChipView] = []
     /// Fullscreen Spaces, after the desktop chips; clicking one goes there.
     private var fsChips: [ChipView] = []
@@ -485,79 +414,19 @@ final class BarView: NSView {
         wantsLayer = true
         layer?.masksToBounds = true
 
-        for l in [appLabel, titleLabel, weatherLabel, cpuLabel, memLabel, diskLabel, inputLabel, batteryLabel, clockLabel] {
+        for l in [appLabel, titleLabel] {
             l.font = .systemFont(ofSize: 12, weight: l === appLabel ? .semibold : .regular)
             l.textColor = .labelColor
             l.lineBreakMode = .byTruncatingTail
             l.maximumNumberOfLines = 1
         }
         titleLabel.textColor = .secondaryLabelColor
-        clockLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-        for icon in [weatherIcon, cpuIcon, memIcon, diskIcon, wifiIcon, batteryIcon] {
-            icon.imageScaling = .scaleProportionallyDown
-            icon.contentTintColor = .labelColor
-            icon.widthAnchor.constraint(equalToConstant: icon === batteryIcon ? 22 : 16).isActive = true
-        }
-        cpuIcon.image = NSImage(systemSymbolName: "cpu", accessibilityDescription: nil)
-        memIcon.image = NSImage(systemSymbolName: "memorychip", accessibilityDescription: nil)
-        diskIcon.image = NSImage(systemSymbolName: "internaldrive", accessibilityDescription: nil)
-        for l in [cpuLabel, memLabel, diskLabel] { l.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular) }
 
         left.orientation = .horizontal
         left.spacing = 10
         left.alignment = .centerY
         right.orientation = .horizontal
-        right.spacing = 8
         right.alignment = .centerY
-        func widget(_ w: Config.BarWidget, _ views: [NSView], spacing: CGFloat = 3) {
-            let st = NSStackView(views: views)
-            st.orientation = .horizontal
-            st.alignment = .centerY
-            st.spacing = spacing
-            widgetViews[w] = st
-        }
-        widget(.weather, [weatherIcon, weatherLabel])
-        widget(.cpu, [cpuIcon, cpuLabel])
-        widget(.memory, [memIcon, memLabel])
-        widget(.disk, [diskIcon, diskLabel])
-        inputLabel.font = .systemFont(ofSize: 11, weight: .semibold)
-        inputLabel.wantsLayer = true
-        inputLabel.layer?.cornerRadius = 4
-        inputLabel.alignment = .center
-        inputLabel.widthAnchor.constraint(equalToConstant: 26).isActive = true
-        widget(.keyboard, [inputLabel])
-        widget(.wifi, [wifiIcon])
-        widget(.battery, [batteryIcon, batteryLabel], spacing: 4)
-        widget(.clock, [clockLabel])
-        menuButton.isBordered = false
-        menuButton.image = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: "BetterWM menu")
-        menuButton.imageScaling = .scaleProportionallyDown
-        // Generous hit area: the icon is 16pt but the whole bar height and a wide margin should take the click.
-        menuButton.widthAnchor.constraint(equalToConstant: 32).isActive = true
-        menuButton.heightAnchor.constraint(equalToConstant: 28).isActive = true
-        menuButton.target = self
-        menuButton.action = #selector(menuPressed)
-        menuButton.toolTip = "BetterWM"
-        widget(.menu, [menuButton])
-        mediaButton.isBordered = false
-        mediaButton.imageScaling = .scaleProportionallyDown
-        mediaButton.widthAnchor.constraint(equalToConstant: 24).isActive = true
-        mediaButton.heightAnchor.constraint(equalToConstant: 28).isActive = true
-        mediaButton.target = self
-        mediaButton.action = #selector(playPausePressed)
-        mediaLabel.font = .systemFont(ofSize: 12)
-        mediaLabel.lineBreakMode = .byTruncatingTail
-        mediaLabel.maximumNumberOfLines = 1
-        mediaLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 220).isActive = true
-        widget(.media, [mediaButton, mediaLabel], spacing: 2)
-        soundButton.isBordered = false
-        soundButton.imageScaling = .scaleProportionallyDown
-        soundButton.widthAnchor.constraint(equalToConstant: 24).isActive = true
-        soundButton.heightAnchor.constraint(equalToConstant: 28).isActive = true
-        soundButton.target = self
-        soundButton.action = #selector(soundPressed)
-        soundButton.onScroll = { [weak self] d in self?.onSoundScroll?(d) }
-        widget(.sound, [soundButton])
         right.spacing = 12
         for v in [left, right] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
         cat.translatesAutoresizingMaskIntoConstraints = false
@@ -600,20 +469,23 @@ final class BarView: NSView {
         layer?.cornerRadius = config.barRadius
         layer?.borderWidth = config.barBorderWidth
         layer?.borderColor = (NSColor(hex: config.barBorderColor) ?? .separatorColor).cgColor
-        for l in [appLabel, weatherLabel, cpuLabel, memLabel, diskLabel, inputLabel, batteryLabel, clockLabel] { l.textColor = textColor }
-        inputLabel.layer?.backgroundColor = textColor.withAlphaComponent(0.12).cgColor
+        appLabel.textColor = textColor
         titleLabel.textColor = textColor.withAlphaComponent(0.65)
-        for icon in [weatherIcon, cpuIcon, memIcon, diskIcon, wifiIcon, batteryIcon] { icon.contentTintColor = textColor }
-        menuButton.contentTintColor = textColor
-        mediaButton.contentTintColor = textColor
-        mediaLabel.textColor = textColor
-        soundButton.contentTintColor = textColor
         cat.isHidden = !config.barCat
         catsEnabled = config.barCat
         notchPortals = config.barNotchPortals
         cat.configure(sheets: config.barCatSheets, color: textColor, barHeight: config.barHeight)
+        needsLayout = true
+    }
+
+    /// The right side, in display order; each view belongs to a widget that updates it.
+    func setRightWidgets(_ views: [(Config.BarWidget, NSView)]) {
         right.arrangedSubviews.forEach { right.removeArrangedSubview($0); $0.removeFromSuperview() }
-        for w in config.barWidgets { if let v = widgetViews[w] { right.addArrangedSubview(v) } }
+        rightViews = [:]
+        for (id, v) in views {
+            right.addArrangedSubview(v)
+            rightViews[id] = v
+        }
         needsLayout = true
     }
 
@@ -735,43 +607,6 @@ final class BarView: NSView {
         appLabel.isHidden = true
         titleLabel.attributedStringValue = m.label.map { BarView.formatTitle("{app}", app: $0, title: "", color: textColor) }
             ?? BarView.formatTitle(m.titleFormat, app: m.app, title: m.title, color: textColor)
-        show(.media, m.media != nil)
-        show(.sound, m.sound != nil)
-        if let s = m.sound { soundButton.image = NSImage(systemSymbolName: s, accessibilityDescription: "Sound") }
-        if let np = m.media {
-            mediaButton.image = NSImage(systemSymbolName: np.playing ? "pause.fill" : "play.fill", accessibilityDescription: np.playing ? "Pause" : "Play")
-            mediaLabel.stringValue = np.text
-            mediaLabel.toolTip = np.text
-        }
-        func show(_ w: Config.BarWidget, _ visible: Bool) { widgetViews[w]?.isHidden = !visible }
-        show(.weather, m.weather != nil)
-        if let (text, symbol) = m.weather {
-            weatherIcon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-            weatherLabel.stringValue = text
-        }
-        func value(_ w: Config.BarWidget, _ label: NSTextField, _ text: String?) {
-            show(w, text != nil)
-            if let text { label.stringValue = text }
-        }
-        value(.cpu, cpuLabel, m.cpu.map { BarView.percent($0 * 100) })
-        value(.memory, memLabel, m.memory.map { BarView.percent($0 * 100) })
-        value(.disk, diskLabel, m.disk.map(SystemStatus.formatBytes))
-        value(.keyboard, inputLabel, m.inputSource)
-        show(.wifi, m.showWifi)
-        if m.showWifi {
-            wifiIcon.image = m.wifi.map { NSImage(systemSymbolName: "wifi", variableValue: $0, accessibilityDescription: nil) }
-                ?? NSImage(systemSymbolName: "wifi.slash", accessibilityDescription: nil)
-        }
-        show(.battery, m.battery != nil)
-        if let b = m.battery {
-            batteryLabel.isHidden = !m.batteryPercent
-            batteryIcon.image = NSImage(systemSymbolName: b.symbol, accessibilityDescription: nil)
-            batteryLabel.stringValue = BarView.percent(Double(b.percent))
-            batteryIcon.toolTip = "\(b.percent)%"
-            batteryIcon.contentTintColor = b.percent <= 15 && !b.charging ? .systemRed : textColor
-        }
-        show(.clock, m.clock != nil)
-        clockLabel.stringValue = m.clock ?? ""
         notifyCats(m)
     }
 
@@ -785,10 +620,10 @@ final class BarView: NSView {
             lastDesktop = current
         }
         if let b = m.battery {
-            if b.percent <= 15, !b.charging, !warnedBatteryLow, let w = widgetViews[.battery], !w.isHidden {
+            if b.percent <= 15, !b.charging, !warnedBatteryLow, let w = rightViews[.battery], !w.isHidden {
                 warnedBatteryLow = true
                 cat.react(.batteryLow(x: w.convert(w.bounds, to: cat).midX))
-            } else if warnedBatteryLow, b.charging, let w = widgetViews[.battery] {
+            } else if warnedBatteryLow, b.charging, let w = rightViews[.battery] {
                 warnedBatteryLow = false
                 cat.react(.charging(x: w.convert(w.bounds, to: cat).midX))
             } else if b.percent > 20 {
@@ -831,10 +666,6 @@ final class BarView: NSView {
         }
     }
 
-    @objc private func menuPressed() { onMenuRequested?(menuButton) }
-    @objc private func playPausePressed() { onPlayPause?() }
-    @objc private func soundPressed() { onSoundRequested?(soundButton) }
-
     /// Expands {app} and {title} in `format`; the app name is bold, everything else dimmer. With no title (or a
     /// title equal to the app name) only the app is shown.
     static func formatTitle(_ format: String, app: String, title: String, color: NSColor) -> NSAttributedString {
@@ -860,12 +691,6 @@ final class BarView: NSView {
         }
         out.append(NSAttributedString(string: String(rest), attributes: dim))
         return out
-    }
-
-    /// Two digits minimum, padded with a figure space so the monospaced labels keep a stable width.
-    static func percent(_ value: Double) -> String {
-        let n = Int(value.rounded())
-        return (n < 10 ? "\u{2007}" : "") + "\(n)%"
     }
 
 }

@@ -5,7 +5,7 @@
 Two targets plus tests, buildable with Command Line Tools alone.
 
 - **BetterWMCore** is pure Swift with no AppKit: the model (`Snapshot`, `WindowInfo`, `ScreenInfo`), the `Grid` and its geometry, the `Reconciler`, `SavedLayout` persistence, `Config` parsing and serialisation, layout presets. Everything here is deterministic and covered by `swift run CoreTests`, a plain executable with its own `expect` harness because the toolchain has no XCTest.
-- **BetterWM** is the app shell: `SystemObserver` builds snapshots from Accessibility and the window list and executes frame commands; `WindowManager` owns the desired state, runs ticks, and holds the virtual workspace sets; `VirtualWorkspaces` is the per-desktop membership, parking and hiding model; `DragController` is the event tap; `FocusRing`, `StatusBar`, `BarCat`, `WindowSwitcher`, `ActionPopup`, `ConfigEditor` are the UI; `Spaces` and `WindowServerEvents` wrap the private SkyLight calls; `HotKey` wraps Carbon hotkeys.
+- **BetterWM** is the app shell: `SystemObserver` builds snapshots from Accessibility and the window list and executes frame commands; `WindowManager` owns the desired state, runs ticks, and holds the virtual workspace sets; `VirtualWorkspaces` is the per-desktop membership and parking model; `DragController` is the event tap; `FocusRing`, `StatusBar` (whose right side is a list of `BarWidget`s in `BarWidgets.swift`, each owning its data source and views), `BarCat`, `WindowSwitcher`, `ActionPopup`, `ConfigEditor` are the UI; `Spaces` and `WindowServerEvents` wrap the private SkyLight calls; `HotKey` wraps Carbon hotkeys.
 
 ## The tick
 
