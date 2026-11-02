@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.34.2] - 2026-11-02
+
+### Fixed
+- The focus ring could come back at a parked window's corner instead of around the focused window: a ring window that had faded out was moved through the WindowServer while hidden, and AppKit put it back where it last was when it was shown again. Hidden ring windows are now placed through AppKit.
+
 ## [0.34.1] - 2026-11-02
 
 ### Fixed

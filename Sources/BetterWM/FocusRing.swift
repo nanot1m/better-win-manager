@@ -299,7 +299,9 @@ final class FocusRing {
         guard !target.isNull, !target.isInfinite, target.width.isFinite, target.height.isFinite, target.origin.x.isFinite, target.origin.y.isFinite,
               placedFrame != target else { return }
         placedFrame = target
-        if window.frame.size == target.size, WindowServerEvents.move(CGWindowID(window.windowNumber), to: padded.origin) {
+        // A WindowServer move only for a ring that is up: on a window ordered out it is lost when AppKit orders
+        // the window back in at the frame it last set itself.
+        if shown, window.frame.size == target.size, WindowServerEvents.move(CGWindowID(window.windowNumber), to: padded.origin) {
             notify()
             return
         }
