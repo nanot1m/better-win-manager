@@ -6,6 +6,14 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-02
+
+### Fixed
+- The ring buttons no longer hang inside the window when the ring's top edge is right under the status bar (no tab strip above it): AppKit was pushing the pill down to keep it out of the menu bar area.
+
+### Added
+- Right-clicking a tab, or a desktop chip in the status bar, offers the tab look: on a stacked desktop the stacked look (cascade, tabs on top, left or right), on a columns desktop showing or hiding the tabs above its windows (`tiledTabs`). A tab's menu also sends its window to any desktop, or a new one. The same toggle is a `toggleTabs` action: a ring button by default, bindable to a hotkey; on a stacked screen it steps to the next look.
+
 ## [0.32.0] - 2026-11-02
 
 ### Changed

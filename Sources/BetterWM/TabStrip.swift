@@ -29,6 +29,20 @@ final class TabStripWindow {
         get { view.onSelect }
         set { view.onSelect = newValue }
     }
+    /// Fills in the tab look items of a tab's menu, given whether the strip is a stacked screen's.
+    var tabMenuItems: ((NSMenu, Bool) -> Void)? {
+        get { view.tabMenuItems }
+        set { view.tabMenuItems = newValue }
+    }
+    var onSendToDesktop: ((WindowID, Int) -> Void)? {
+        get { view.onSendToDesktop }
+        set { view.onSendToDesktop = newValue }
+    }
+    /// How many desktops there are and which one the window is on, for the tab menu's "Send to Desktop" list.
+    var desktopChoices: ((WindowID) -> (count: Int, current: Int?))? {
+        get { view.desktopChoices }
+        set { view.desktopChoices = newValue }
+    }
     /// A tab dragged to a new place in the deck: the window and the deck position it was dropped at.
     var onReorder: ((WindowID, Int) -> Void)? {
         get { view.onReorder }
@@ -52,7 +66,9 @@ final class TabStripWindow {
     /// `frame` in AX coordinates.
     /// `inactive`: the front window has no focus; its tab is greyed like the ring. `clearance`: how far the
     /// first tab stays from the strip's start, at least the ring's corner radius so it does not hang over the curve.
-    func show(frame: CGRect, items: [Item], focused: WindowID?, inactive: Bool, clearance: CGFloat, side: Side, config: Config) {
+    /// `stacked`: the strip belongs to a stacked screen (one tab per window) rather than sitting over a tiled window.
+    func show(frame: CGRect, items: [Item], focused: WindowID?, inactive: Bool, clearance: CGFloat, side: Side, stacked: Bool = true, config: Config) {
+        view.stacked = stacked
         let target = frame.toCocoa()
         // A short move at the same size is the strip settling onto or lifting off its window; it slides. Anything
         // larger is a new place, taken at once.
@@ -83,6 +99,10 @@ private final class TabStripView: NSView, NSTextFieldDelegate {
     private var editing: WindowID?
     private var editStarted = Date.distantPast
     var onSelect: ((WindowID) -> Void)?
+    var tabMenuItems: ((NSMenu, Bool) -> Void)?
+    var onSendToDesktop: ((WindowID, Int) -> Void)?
+    var desktopChoices: ((WindowID) -> (count: Int, current: Int?))?
+    var stacked = true
     var onReorder: ((WindowID, Int) -> Void)?
     private var drag: ReorderDrag?
     private var settling: ReorderDrag?
@@ -176,7 +196,25 @@ private final class TabStripView: NSView, NSTextFieldDelegate {
             reset.target = self
             reset.representedObject = index
         }
+        menu.addItem(.separator())
+        if let (count, current) = desktopChoices?(items[index].id) {
+            // Every desktop plus a new one at the end, like the hotkeys ⌃⌥1 … ⌃⌥9.
+            let send = NSMenu()
+            for d in 0..<min(9, count + 1) {
+                let item = send.addItem(withTitle: d < count ? "Desktop \(d + 1)" : "New Desktop \(d + 1)", action: #selector(menuSendToDesktop(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = [index, d]
+                item.isEnabled = d != current
+            }
+            send.autoenablesItems = false
+            menu.addItem(withTitle: "Send to Desktop", action: nil, keyEquivalent: "").submenu = send
+        }
+        tabMenuItems?(menu, stacked)
         NSMenu.popUpContextMenu(menu, with: event, for: tab)
+    }
+    @objc private func menuSendToDesktop(_ item: NSMenuItem) {
+        guard let pair = item.representedObject as? [Int], pair.count == 2, pair[0] < items.count else { return }
+        onSendToDesktop?(items[pair[0]].id, pair[1])
     }
     @objc private func menuRename(_ item: NSMenuItem) { if let i = item.representedObject as? Int { beginRename(i) } }
     @objc private func menuReset(_ item: NSMenuItem) {

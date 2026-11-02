@@ -10,7 +10,7 @@ final class RingActions {
         let action: String
     }
     static let symbols: [String: String] = [
-        "toggleTile": "rectangle.split.2x1", "toggleStack": "rectangle.stack", "grow": "plus.magnifyingglass",
+        "toggleTile": "rectangle.split.2x1", "toggleStack": "rectangle.stack", "toggleTabs": "rectangle.topthird.inset.filled", "grow": "plus.magnifyingglass",
         "shrink": "minus.magnifyingglass", "equalize": "equal.square", "retile": "arrow.triangle.2.circlepath",
         "sendToPreviousDesktop": "arrow.left.square", "sendToNextDesktop": "arrow.right.square",
         "overview": "square.grid.2x2", "popup": "ellipsis.circle",
@@ -29,7 +29,7 @@ final class RingActions {
     var perform: (String) -> Void = { _ in }
 
     init() {
-        panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel = UnconstrainedPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
@@ -88,6 +88,11 @@ final class RingActions {
     private var showGeneration = 0
 
     func hide() { showGeneration += 1; Fade.hide(panel); tip.hide() }
+}
+
+/// AppKit keeps a panel below the menu bar; the pill stands on a ring that may reach right under the status bar.
+private final class UnconstrainedPanel: NSPanel {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
 /// A small dark label under a pill button.

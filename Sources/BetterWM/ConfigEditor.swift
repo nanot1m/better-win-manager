@@ -888,7 +888,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             ("Move & Layout", [
                 "moveLeft", "moveRight", "moveUp", "moveDown",
                 "mergeLeft", "mergeRight",
-                "toggleTile", "grow", "shrink", "toggleStack", "retile", "equalize",
+                "toggleTile", "grow", "shrink", "toggleStack", "toggleTabs", "retile", "equalize",
                 "pause", "refreshRing",
             ]),
             ("Actions & Overview", [

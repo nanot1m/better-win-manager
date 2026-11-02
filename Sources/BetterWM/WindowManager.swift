@@ -1256,6 +1256,14 @@ final class WindowManager {
         tick()
     }
 
+    func isStacked(desktop d: Int) -> Bool { state.grid(for: VirtualWorkspaces.spaceID(d)).mode == .stacked }
+    /// Whether the screen holding the focused window (or the cursor) is stacked.
+    var focusedScreenIsStacked: Bool {
+        let anchor = system.focused?.frame.center ?? NSEvent.mouseLocation.toAX()
+        guard let screen = screen(at: anchor) else { return false }
+        return state.grid(for: screen.space).mode == .stacked
+    }
+
     /// Flips the layout mode of the screen holding the focused window (or the cursor).
     func toggleStackedLayout() {
         let anchor = system.focused?.frame.center ?? NSEvent.mouseLocation.toAX()
@@ -1511,6 +1519,10 @@ final class WindowManager {
         send(w, toDesktop: index)
     }
 
+    func sendWindow(_ id: WindowID, toDesktop index: Int) {
+        if let w = system.axWindow(id) { send(w, toDesktop: index) }
+    }
+
     func send(_ w: AXWindow, toDesktop index: Int) {
         guard let id = id(w) else { return }
         let v = desktops
@@ -1567,6 +1579,8 @@ final class WindowManager {
     }
 
     private var tabStrips: [TabStripWindow] = []
+    /// Adds the app-level tab look items to a tab's menu; set by the app, which owns the configuration.
+    var tabMenuItems: ((NSMenu, Bool) -> Void)?
     /// Names given to tabs in place of their windows' titles; saved with the layout.
     private var tabLabels: [WindowID: String] = [:]
     func setTabLabel(_ id: WindowID, _ label: String?) {
@@ -1601,6 +1615,12 @@ final class WindowManager {
             s.onSelect = { [weak self] id in self?.bringForwardInTabbedStack(id, raise: true) }
             s.onReorder = { [weak self] id, to in self?.reorderDeck(id, to: to) }
             s.onRename = { [weak self] id, label in self?.setTabLabel(id, label) }
+            s.onSendToDesktop = { [weak self] id, d in self?.sendWindow(id, toDesktop: d) }
+            s.desktopChoices = { [weak self] id in
+                guard let self else { return (0, nil) }
+                return (self.desktopCount, self.state.space(containing: id).flatMap(VirtualWorkspaces.workspace(of:)) ?? self.desktops.workspace(of: id))
+            }
+            s.tabMenuItems = { [weak self] menu, stacked in self?.tabMenuItems?(menu, stacked) }
             // The strip took the app active for typing; the window in front gets its focus back.
             s.onEditingEnd = { [weak self] in self?.focusTopWindow() }
             tabStrips.append(s)
@@ -1611,7 +1631,7 @@ final class WindowManager {
         // front window is the first in z-order.
         for (i, s) in tabStrips.enumerated() {
             guard i < needed.count else { s.hide(); continue }
-            var (frame, items, side, _) = needed[i]
+            var (frame, items, side, stacked) = needed[i]
             let ids = Set(items.map(\.id))
             let front = focused.flatMap { ids.contains($0) ? $0 : nil } ?? zOrder.first(where: ids.contains)
             if let front, front != focused {
@@ -1623,7 +1643,7 @@ final class WindowManager {
                 }
             }
             s.show(frame: frame, items: items, focused: front, inactive: focusRing.isInactive || front != focused,
-                   clearance: focusRing.tabClearance, side: side, config: config)
+                   clearance: focusRing.tabClearance, side: side, stacked: stacked, config: config)
         }
     }
 

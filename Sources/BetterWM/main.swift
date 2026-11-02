@@ -102,6 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.overview.desktopChanged()
         }
         manager.onFocusChange = { [weak self] in self?.bar.focusChanged() }
+        manager.tabMenuItems = { [weak self] menu, stacked in self?.addTabItems(to: menu, stacked: stacked) }
         systemReveal.onChange = { [weak self] active in
             self?.manager.focusRing.hiddenForSystemReveal = active
             self?.bar.hiddenForSystemReveal = active
@@ -287,6 +288,7 @@ extension AppDelegate {
             "toggleTile": { [weak self] in self?.resumeForTiling(); self?.manager.toggleFocused() },
             "retile": { [weak self] in self?.resumeForTiling(); self?.manager.retileCurrentScreen() },
             "toggleStack": { [weak self] in self?.manager.toggleStackedLayout() },
+            "toggleTabs": { [weak self] in self?.toggleTabs() },
             "refreshRing": { [weak self] in self?.manager.focusRing.remeasureCorners() },
             "equalize": { [weak self] in self?.manager.equalize() },
             "grow": { [weak self] in self?.manager.resizeFocused(grow: true) },
@@ -364,6 +366,8 @@ extension AppDelegate {
         add("Move Left", #selector(menuMoveDesktopLeft(_:)), enabled: manager.neighbourDesktop(of: desktop, next: false) != nil)
         add("Move Right", #selector(menuMoveDesktopRight(_:)), enabled: manager.neighbourDesktop(of: desktop, next: true) != nil)
         if NSScreen.screens.count > 1 { add("Send to Next Screen", #selector(menuSendDesktopToNextScreen(_:))) }
+        menu.addItem(.separator())
+        addTabItems(to: menu, stacked: manager.isStacked(desktop: desktop))
         menu.autoenablesItems = false
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.bounds.minY - 4), in: view)
     }
@@ -554,18 +558,62 @@ extension AppDelegate {
     @objc func showPermissions() { onboarding.show() }
     @objc func checkForUpdates() { updater.check(interactive: true) }
     @objc func showSettings() {
-        configWindow.show(config: manager.config) { [weak self] cfg in
-            guard let self else { return }
-            self.manager.config = cfg
-            Fade.configured = cfg.fadeAnimations
-            self.updater.config = cfg
-            self.drag.refreshState()
-            self.bar.apply(cfg)
-            self.manager.relayout()
-            self.registerHotKeys(cfg)
-            self.applyGestureSetting(cfg)
-            self.statusItem.menu = self.buildMenu()
-            self.syncAutoTileItems()
+        configWindow.show(config: manager.config) { [weak self] cfg in self?.apply(config: cfg) }
+    }
+
+    /// A new configuration takes effect everywhere at once, whether it came from the Settings window or a menu.
+    func apply(config cfg: Config) {
+        manager.config = cfg
+        Fade.configured = cfg.fadeAnimations
+        updater.config = cfg
+        drag.refreshState()
+        bar.apply(cfg)
+        manager.relayout()
+        registerHotKeys(cfg)
+        applyGestureSetting(cfg)
+        statusItem.menu = buildMenu()
+        syncAutoTileItems()
+    }
+
+    /// Changes one setting from a menu: saved to the config file and applied.
+    func updateConfig(_ change: (inout Config) -> Void) {
+        var cfg = manager.config
+        change(&cfg)
+        cfg.save()
+        apply(config: cfg)
+    }
+
+    /// The menu items that change how tabs look: a stacked desktop picks its look, a columns desktop shows or
+    /// hides the tabs above its windows.
+    func addTabItems(to menu: NSMenu, stacked: Bool) {
+        if stacked {
+            let look = NSMenu()
+            for style in Config.StackStyle.allCases {
+                let item = look.addItem(withTitle: style.title, action: #selector(menuStackStyle(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = style.rawValue
+                item.state = manager.config.stackStyle == style ? .on : .off
+            }
+            menu.addItem(withTitle: "Stacked Look", action: nil, keyEquivalent: "").submenu = look
+        } else {
+            let item = menu.addItem(withTitle: manager.config.tiledTabs ? "Hide Tabs on Windows" : "Show Tabs on Windows", action: #selector(menuToggleTiledTabs), keyEquivalent: "")
+            item.target = self
+        }
+    }
+    @objc func menuStackStyle(_ s: NSMenuItem) {
+        guard let raw = s.representedObject as? String, let style = Config.StackStyle(rawValue: raw) else { return }
+        updateConfig { $0.stackStyle = style }
+    }
+    @objc func menuToggleTiledTabs() { updateConfig { $0.tiledTabs.toggle() } }
+    /// The ring button and hotkey: what the menus offer, for the screen in use. A stacked screen steps through
+    /// the looks, so one button reaches them all; a columns screen shows or hides the tabs above its windows.
+    func toggleTabs() {
+        if manager.focusedScreenIsStacked {
+            let looks = Config.StackStyle.allCases
+            let next = looks[((looks.firstIndex(of: manager.config.stackStyle) ?? 0) + 1) % looks.count]
+            updateConfig { $0.stackStyle = next }
+        } else {
+            updateConfig { $0.tiledTabs.toggle() }
         }
     }
     @objc func togglePause() { setTiling(enabled: !manager.enabled) }

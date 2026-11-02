@@ -108,9 +108,9 @@ public struct Config {
     public var fadeAnimations: Bool = true
     /// Which actions the ring buttons run, in order; keys from `actions`.
     public var focusRingActionKeys: [String] = Config.defaultRingActionKeys
-    public static let defaultRingActionKeys = ["toggleTile", "toggleStack", "sendToNextDesktop", "popup"]
+    public static let defaultRingActionKeys = ["toggleTile", "toggleStack", "toggleTabs", "sendToNextDesktop", "popup"]
     /// Actions that make sense as a ring button, in the order they appear.
-    public static let ringActionChoices = ["toggleTile", "toggleStack", "grow", "shrink", "equalize", "retile",
+    public static let ringActionChoices = ["toggleTile", "toggleStack", "toggleTabs", "grow", "shrink", "equalize", "retile",
                                            "sendToPreviousDesktop", "sendToNextDesktop", "overview", "popup"]
     /// Measure each window's real corner radius once and match it; `focusRingRadius` is the fallback.
     public var focusRingAutoRadius: Bool = true
@@ -240,6 +240,7 @@ public struct Config {
         ("mergeLeft", "Merge into left column"), ("mergeRight", "Merge into right column"),
         ("toggleTile", "Tile / untile focused window"), ("grow", "Grow focused window"), ("shrink", "Shrink focused window"),
         ("toggleStack", "Toggle stacked layout on this screen"),
+        ("toggleTabs", "Tabs: show or hide them on tiled windows; on a stacked screen, the next stacked look"),
         ("retile", "Retile current screen"),
         ("equalize", "Equalize sizes"), ("pause", "Pause / resume tiling"), ("refreshRing", "Re-measure window corners for the focus ring"),
         ("desktopNext", "Next desktop"), ("desktopPrevious", "Previous desktop"),
