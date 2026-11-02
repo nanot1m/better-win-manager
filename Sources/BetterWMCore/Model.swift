@@ -43,6 +43,9 @@ public struct Snapshot: Equatable {
     public var now: Date
     /// Windows away from their desktop (fullscreen): they keep their slot, but macOS owns their frame.
     public var away: Set<WindowID> = []
+    /// False while macOS is still moving windows itself (a display change, waking, unlocking): a window that
+    /// keeps a size then says nothing about how small it can go.
+    public var settled = true
 
     public init(screens: [ScreenInfo], windows: [WindowInfo], focused: WindowID?, now: Date) {
         self.screens = screens

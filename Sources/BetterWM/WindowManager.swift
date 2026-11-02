@@ -731,14 +731,18 @@ final class WindowManager {
         timer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in self?.tick(full: true) }
     }
 
-    private var tickScheduled = false
     /// Events come in bursts (an app opening three windows, a Space switch); one tick per burst is enough.
+    /// One timer, at the earliest deadline asked for. A later need (the settle look) is not lost to a sooner
+    /// one: the pass that runs re-books it while asks are still pending.
+    private var tickDeadline: Date?
     func scheduleTick(after delay: TimeInterval = 0.15) {
-        guard !tickScheduled else { return }
-        tickScheduled = true
+        let deadline = Date().addingTimeInterval(delay)
+        if let d = tickDeadline, d <= deadline { return }
+        tickDeadline = deadline
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            self?.tickScheduled = false
-            self?.tick()
+            guard let self, self.tickDeadline == deadline else { return }
+            self.tickDeadline = nil
+            self.tick()
         }
     }
 
@@ -814,6 +818,7 @@ final class WindowManager {
                 self.desktops.rememberHomes(snap.windows)
                 self.restoreSavedModes(snap)
                 let before = self.state
+                snap.settled = snap.now >= self.claimsSuspendedUntil
                 var (next, plan) = self.reconciler.reconcile(self.state, snap)
                 self.state = next
                 self.watchTracked()
@@ -828,11 +833,11 @@ final class WindowManager {
                     self.anticipateRing(plan, snap.focused)
                     self.system.execute(plan.commands)
                     timing.append("exec \(plan.ops.count)")
-                    // The executor judges each ask once the window has had the settle time; one look after that
-                    // replaces re-asking in settle passes. Window-server events bring the look sooner when a
-                    // window moves.
-                    if settle { self.scheduleTick(after: Executor.settleTime + 0.1) }
                 }
+                // The executor judges each ask once the window has had the settle time; one look after that
+                // replaces re-asking in settle passes. Window-server events bring the look sooner when a
+                // window moves.
+                if settle, !self.state.executor.pending.isEmpty { self.scheduleTick(after: Executor.settleTime + 0.1) }
                 self.finishTick(timing)
             }
         }

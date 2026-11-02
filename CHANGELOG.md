@@ -6,6 +6,12 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.30.2] - 2026-11-02
+
+### Fixed
+- After a display change (or waking, unlocking) windows could end up laid out wider than the screen: while macOS was still clamping them to the new display, their refusal to shrink was taken for a minimum size. No minimum is learned while the refusal rule is suspended.
+- An ask the apps did not take at once (as after a display change) is now judged after the settle time even when window events brought other passes in between; the settle look was dropped when a sooner pass was already booked, leaving the retry to the next unrelated event, seconds later.
+
 ## [0.30.1] - 2026-11-01
 
 ### Fixed

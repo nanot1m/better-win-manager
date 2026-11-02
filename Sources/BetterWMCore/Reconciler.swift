@@ -70,7 +70,7 @@ public struct Reconciler {
         var state = state
         // Verdicts first: a window that kept a larger size than asked has a minimum size to lay out around.
         let verdicts = state.executor.observe(actual: snapshot.ownFrame(of:), now: snapshot.now)
-        for case let .learnedMinimum(w, size) in verdicts {
+        for case let .learnedMinimum(w, size) in verdicts where snapshot.settled {
             guard let space = state.space(containing: w) else { continue }
             state.mutate(space) { grid in
                 var m = grid.minSizes[w] ?? .zero

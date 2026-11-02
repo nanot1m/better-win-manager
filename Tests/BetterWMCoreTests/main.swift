@@ -95,6 +95,18 @@ struct ReconcilerTests {
                                  .setFrame(2, CGRect(x: 600, y: 0, width: 1000, height: 1000))], #function, #line)
     }
 
+    func testUnsettledSnapshotTeachesNoMinimum() {
+        let r = Reconciler(config: config)
+        var (state, _) = r.reconcile(DesiredState(), snapshot([win(1, area), win(2, area)]))
+        var refused = snapshot([win(1, CGRect(x: 0, y: 0, width: 800, height: 1000)),
+                                win(2, CGRect(x: 800, y: 0, width: 1000, height: 1000))])
+        refused.settled = false
+        (state, _) = r.reconcile(state, refused)
+        refused.now += 1
+        (state, _) = r.reconcile(state, refused)
+        expect(state.grid(for: space).minSizes[2] == nil, #function, #line)
+    }
+
     func testPassingThroughLargerFrameTeachesNoMinimum() {
         let r = Reconciler(config: config)
         var (state, _) = r.reconcile(DesiredState(), snapshot([win(1, area), win(2, area)]))
@@ -832,6 +844,7 @@ let tests: [(String, () -> Void)] = [
     ("windowThatMovedHasNotRefused", t.testWindowThatMovedHasNotRefused),
     ("confirmedAskClearsRefusals", t.testConfirmedAskClearsRefusals),
     ("passingThroughLargerFrameTeachesNoMinimum", t.testPassingThroughLargerFrameTeachesNoMinimum),
+    ("unsettledSnapshotTeachesNoMinimum", t.testUnsettledSnapshotTeachesNoMinimum),
     ("awayWindowKeepsSlotAndIsLeftAlone", t.testAwayWindowKeepsSlotAndIsLeftAlone),
     ("parkingAvoidsNeighbouringDisplay", t.testParkingAvoidsNeighbouringDisplay),
     ("parkingFollowsActiveWorkspace", t.testParkingFollowsActiveWorkspace),
