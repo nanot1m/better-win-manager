@@ -10,8 +10,6 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ### Fixed
 - ⌘Tab to a window of a stacked desktop brings that window in directly. The stack's front window is now the focused one when it is in the stack; it used to follow the window order, which macOS updates a moment after the focus, so the stack's previous front came in first, then went aside for the right one.
-
-### Fixed
 - Sending the focused window to another desktop no longer leaves the focus ring at the parking corner: the ring used to be moved ahead of the window to where the plan would put it, which for a parked window is past the corner.
 
 ## [0.34.4] - 2026-11-02
