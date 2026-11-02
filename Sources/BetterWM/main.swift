@@ -63,13 +63,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ringActions = RingActions()
         ringActions.perform = { [weak self] key in self?.actionTable()[key]?() }
         ringActions.hotkeyLabel = { [weak self] key in self?.manager.config.hotkeys[key].map(KeyRecorderView.pretty) }
-        manager.focusRing.onChange = { [weak self] frame, inactive, inset, width, color in
+        manager.focusRing.onChange = { [weak self] frame, inactive, clearance, width, color in
             guard let self else { return }
             self.ringActions.configure(keys: self.manager.config.focusRingActionKeys)
             // No window actions for our own windows (Settings) or a dialog: the actions act on a standard app window.
             let own = NSApp.isActive && NSApp.keyWindow?.styleMask.contains(.titled) == true
             let dialog = self.manager.system.focused == nil
-            self.ringActions.follow(ring: inactive || own || dialog ? nil : frame, inset: inset, ringWidth: width, color: color, enabled: self.manager.config.focusRingActions)
+            self.ringActions.follow(ring: inactive || own || dialog ? nil : frame, clearance: clearance, ringWidth: width, color: color, enabled: self.manager.config.focusRingActions)
         }
         switcher = WindowSwitcher(manager: manager)
         overview = Overview(manager: manager)

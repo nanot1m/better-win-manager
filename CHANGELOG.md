@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.34.7] - 2026-11-02
+
+### Changed
+- Tabs and the ring buttons keep clear of the ring's corner by the largest measured corner radius in the stack, instead of the configured fallback radius. They sit closer to the corner on most windows and still hold still when the front window changes.
+
 ## [0.34.6] - 2026-11-02
 
 ### Fixed

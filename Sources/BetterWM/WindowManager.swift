@@ -625,6 +625,10 @@ final class WindowManager {
         focusRing.isTiled = { [unowned self] w in self.isTiled(w) }
         focusRing.isTiledID = { [unowned self] id in self.state.isTiled(id) }
         focusRing.isShown = { [unowned self] id in self.desktops.isShown(self.desktops.workspace(of: id)) }
+        focusRing.stackMates = { [unowned self] id in
+            guard let space = self.state.space(containing: id), case let grid = self.state.grid(for: space), grid.mode == .stacked else { return [id] }
+            return grid.windows
+        }
         focusRing.focusedWindow = { [unowned self] in self.system.focused ?? self.system.focusedDialog }
         focusRing.onReorder = { [unowned self] in self.stackHandles() }
         if config.restoreLayouts, let data = try? Data(contentsOf: Config.statePath),
@@ -1645,7 +1649,7 @@ final class WindowManager {
                 }
             }
             s.show(frame: frame, items: items, focused: front, inactive: focusRing.isInactive || front != focused,
-                   clearance: focusRing.tabClearance, side: side, stacked: stacked, config: config)
+                   clearance: focusRing.tabClearance(for: items.map(\.id)), side: side, stacked: stacked, config: config)
         }
     }
 

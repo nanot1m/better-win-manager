@@ -16,9 +16,11 @@ final class FocusRing {
     var currentWindowID: CGWindowID? { current }
     /// Called whenever the ring shows, moves or hides: its frame (Cocoa coordinates) or nil, whether it is grey,
     /// and how far its inner edge is from the frame.
+    /// Frame, greyed, corner clearance (how far in from the ring's outer corner anything standing on the ring
+    /// should start), line width, colour.
     var onChange: ((NSRect?, Bool, CGFloat, CGFloat, NSColor) -> Void)?
     private var currentColor = NSColor.controlAccentColor
-    private func notify() { onChange?(shown ? placedFrame : nil, isInactive, pad, config.focusRingWidth, currentColor) }
+    private func notify() { onChange?(shown ? placedFrame : nil, isInactive, current.map(clearance(for:)) ?? pad, config.focusRingWidth, currentColor) }
     /// Whether the ring is meant to be on screen; `window.isVisible` lingers through a fade-out.
     private var shown = false
     private func hideRing() { shown = false; Fade.hide(window) }
@@ -44,10 +46,16 @@ final class FocusRing {
     private var placedFrame: NSRect = .zero
     /// The ring's outer corner radius as drawn; nothing should hang over the curve.
     var cornerRadius: CGFloat { shown ? layer.cornerRadius : 0 }
-    /// How far the tabs keep from the strip's start so they never hang over the ring's curve. From the
-    /// configured radius rather than the window's measured one: a value that changed with each window would
-    /// shift the whole row of tabs on every switch.
-    var tabClearance: CGFloat { shown ? config.focusRingRadius + pad : 0 }
+    /// The windows that share a stack with `id` (itself included); the manager knows the grids.
+    var stackMates: (CGWindowID) -> [CGWindowID] = { [$0] }
+    /// How far in from the ring's outer corner the tabs and the buttons start, so they never hang over the curve:
+    /// the ring's reach plus the largest corner radius in the stack. One value for the whole stack, so the row
+    /// does not shift when a window with a different corner comes to the front.
+    func clearance(for id: CGWindowID) -> CGFloat { (stackMates(id).map(radius(for:)).max() ?? radius(for: id)) + pad }
+    func tabClearance(for ids: [CGWindowID]) -> CGFloat {
+        guard shown, let any = ids.first else { return 0 }
+        return clearance(for: any)
+    }
     /// The ring is on the window focus will come back to, greyed: no window has focus right now.
     private(set) var isInactive = false
     static let inactiveColor = NSColor(white: 0.55, alpha: 1)
