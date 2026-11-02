@@ -165,7 +165,7 @@ private final class TabStripView: NSView, NSTextFieldDelegate {
         layoutTabs()
         animateNextLayout = false
         // A refresh re-adds the active tab on top; the rename field, if any, stays above all of them.
-        if let editor { addSubview(editor, positioned: .above, relativeTo: nil) }
+        if let editor, editor.superview === self { addSubview(editor, positioned: .above, relativeTo: nil) }
     }
 
     override func layout() {
@@ -174,14 +174,12 @@ private final class TabStripView: NSView, NSTextFieldDelegate {
         settling?.settle()
         settling = nil
         if let editor, let id = editing, let i = items.firstIndex(where: { $0.id == id }), let tab = tabs[safe: i] {
-            editor.frame = editorFrame(over: tab.frame)
+            if let panel = editorPanel { panel.setFrame(editorPanelFrame(beside: tab.frame), display: true) }
+            else { editor.frame = editorFrame(over: tab.frame) }
         }
     }
 
-    private func editorFrame(over f: CGRect) -> CGRect {
-        side == .top ? CGRect(x: f.minX + 6, y: f.minY + 4, width: f.width - 12, height: f.height - 8)
-                     : CGRect(x: f.midX - 100, y: f.midY - 11, width: 200, height: 22)
-    }
+    private func editorFrame(over f: CGRect) -> CGRect { CGRect(x: f.minX + 6, y: f.minY + 4, width: f.width - 12, height: f.height - 8) }
 
     // MARK: Renaming
 
@@ -238,21 +236,53 @@ private final class TabStripView: NSView, NSTextFieldDelegate {
         field.delegate = self
         field.wantsLayer = true
         field.layer?.cornerRadius = 5
-        field.frame = editorFrame(over: tab.frame)
-        addSubview(field)
         editor = field
         editing = item.id
         editStarted = Date()
+        if side == .top {
+            field.frame = editorFrame(over: tab.frame)
+            addSubview(field)
+        } else {
+            // A sideways strip is too narrow to type in: the field sits in a small panel beside the tab.
+            let panel = EditablePanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = true
+            // The strip sits behind every app window; the field must not. Not a child window: a child is held at
+            // its parent's level.
+            panel.level = .floating
+            panel.collectionBehavior = [.canJoinAllSpaces, .transient]
+            let frame = editorPanelFrame(beside: tab.frame)
+            let content = NSView(frame: NSRect(origin: .zero, size: frame.size))
+            field.frame = content.bounds
+            field.autoresizingMask = [.width, .height]
+            content.addSubview(field)
+            panel.contentView = content
+            panel.setFrame(frame, display: true)
+            panel.orderFrontRegardless()
+            editorPanel = panel
+        }
         takeFocus()
+    }
+
+    private var editorPanel: NSPanel?
+    /// Screen frame for the rename panel: to the right of a left strip, to the left of a right strip, centred on the tab.
+    private func editorPanelFrame(beside tab: CGRect) -> NSRect {
+        guard let window else { return .zero }
+        let inWindow = convert(tab, to: nil)
+        let onScreen = window.convertToScreen(inWindow)
+        let size = NSSize(width: 220, height: 24)
+        let x = side == .left ? onScreen.maxX + 6 : onScreen.minX - 6 - size.width
+        return NSRect(x: x, y: onScreen.midY - size.height / 2, width: size.width, height: size.height)
     }
 
     /// The panel is non-activating: as the key window it gets the typing while the app stays in the background.
     /// The first click of the double click raised a window, which can take key status away a moment later; the
     /// late re-take covers that.
     private func takeFocus() {
-        guard let window, let field = editor else { return }
-        window.makeKeyAndOrderFront(nil)
-        window.makeFirstResponder(field)
+        guard let field = editor, let host = field.window else { return }
+        host.makeKeyAndOrderFront(nil)
+        host.makeFirstResponder(field)
         field.currentEditor()?.selectAll(nil)
     }
 
@@ -261,7 +291,11 @@ private final class TabStripView: NSView, NSTextFieldDelegate {
         let text = field.stringValue
         editor = nil
         editing = nil
-        window?.makeFirstResponder(nil)
+        field.window?.makeFirstResponder(nil)
+        if let panel = editorPanel {
+            panel.orderOut(nil)
+            editorPanel = nil
+        }
         field.removeFromSuperview()
         window?.orderBack(nil)
         if commit { onRename?(id, text) }
@@ -286,8 +320,8 @@ private final class TabStripView: NSView, NSTextFieldDelegate {
         return true
     }
 
-    /// Tabs in the order they appear along the strip (left tabs run bottom to top, so the deck is reversed there).
-    private var visualOrder: [Int] { side == .left ? Array((0..<items.count).reversed()) : Array(0..<items.count) }
+    /// Tabs in the order they appear along the strip: left to right, or top to bottom.
+    private var visualOrder: [Int] { Array(0..<items.count) }
 
     private func beginDrag(_ index: Int) {
         let order = visualOrder
@@ -322,12 +356,10 @@ private final class TabStripView: NSView, NSTextFieldDelegate {
         let n = CGFloat(max(1, items.count)), gap: CGFloat = 4
         var frames: [CGRect] = []
         if side != .top {
-            // Sideways tabs: as long along the strip as a top tab is wide, as thick as the strip. On the left they
-            // read bottom to top, so the deck runs that way too; on the right, top to bottom.
+            // Sideways tabs: as long along the strip as a top tab is wide, as thick as the strip, top to bottom.
             let h = min(maxLength, (bounds.height - pad * 2 - gap * (n - 1)) / n)
             for i in 0..<items.count {
-                let slot = side == .left ? CGFloat(items.count - 1 - i) : CGFloat(i)
-                let y = pad + slot * (h + gap)
+                let y = pad + CGFloat(i) * (h + gap)
                 frames.append(side == .left ? CGRect(x: 1, y: y, width: bounds.width - 1, height: h)
                                             : CGRect(x: 0, y: y, width: bounds.width - 1, height: h))
             }

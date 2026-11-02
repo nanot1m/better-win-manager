@@ -1238,17 +1238,17 @@ final class WindowManager {
 
     func retileCurrentScreen() {
         guard let screen = screen(at: NSEvent.mouseLocation.toAX()) else { return }
-        // Start the grid afresh but keep the screen's layout mode.
-        var fresh = Grid()
-        fresh.mode = state.grid(for: screen.space).mode
-        state.grids[screen.space] = fresh
-        state.seen[screen.space] = nil
-        // Retile is the "tile everything here" action: hand-floated windows on this screen are tiled too.
+        // The columns and their stacks stay as arranged; sizes go back to equal shares. Retile is the "tile
+        // everything here" action: hand-floated windows on this screen are tiled too, in columns of their own.
+        state.mutate(screen.space) { $0.equalize() }
         let here = system.lightSnapshot(tracked: Array(state.floating)).windows
             .filter { screen.area.contains($0.frame.center) }.map(\.id)
         state.floating.subtract(here)
+        // Only the tiled windows count as seen: every other window on the screen, floated by hand or simply never
+        // tiled (auto-tiling off), arrives afresh in the next pass and gets a column.
+        state.seen[screen.space] = Set(state.grid(for: screen.space).windows)
         state.retileRequested.insert(screen.space)
-        Log.write("layout", "retile space \(screen.space), including \(here.count) floating window(s)")
+        Log.write("layout", "retile space \(screen.space), including \(here.count) hand-floated window(s)")
         tick()
     }
 

@@ -96,7 +96,7 @@ public struct Reconciler {
             // Arrivals: first look at a desktop keeps the on-screen order; later arrivals follow the strategy.
             let firstVisit = state.seen[space] == nil
             let known = state.seen[space] ?? []
-            let shouldTile = firstVisit ? (config.tileExistingOnStart || state.retileRequested.contains(space)) : config.autoTile
+            let shouldTile = state.retileRequested.contains(space) || (firstVisit ? config.tileExistingOnStart : config.autoTile)
             if enabled, shouldTile {
                 let arrivals = here.filter { !known.contains($0.id) && !grid.contains($0.id) && !state.floating.contains($0.id) && !isIgnored($0) }
                     .sorted { a, b in

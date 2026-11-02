@@ -176,6 +176,30 @@ struct ReconcilerTests {
         expect(state.grid(for: space).windows == [1, 3], #function, #line)
     }
 
+    func testRetileKeepsStacksAndTilesFloating() {
+        var c = config
+        c.autoTile = false
+        let r = Reconciler(config: c)
+        var state = DesiredState()
+        var g = Grid()
+        g.columns = [Column([1, 2], weight: 3), Column([3], weight: 1)]
+        state.grids[space] = g
+        // 4 was untiled by hand; 5 was never tiled (auto-tiling off) and is known already.
+        state.seen[space] = [1, 2, 3, 4, 5]
+        state.floating = [4]
+        let snap = snapshot([win(1, area), win(2, area), win(3, area), win(4, CGRect(x: 1200, y: 100, width: 300, height: 300)),
+                             win(5, CGRect(x: 1300, y: 100, width: 300, height: 300))])
+        // What the Retile action does before the pass.
+        state.mutate(space) { $0.equalize() }
+        state.floating.remove(4)
+        state.seen[space] = Set(state.grid(for: space).windows)
+        state.retileRequested.insert(space)
+        let (next, _) = r.reconcile(state, snap)
+        let grid = next.grid(for: space)
+        expect(grid.columns.map(\.windows) == [[1, 2], [3], [4], [5]], #function, #line)
+        expect(grid.columns.map(\.weight) == [1, 1, 1, 1], #function, #line)
+    }
+
     func testRetileRequestTilesEverythingOnce() {
         var c = config
         c.tileExistingOnStart = false
@@ -847,6 +871,7 @@ let tests: [(String, () -> Void)] = [
     ("noTilingOnFirstVisitWhenDisabled", t.testNoTilingOnFirstVisitWhenDisabled),
     ("restoredFloatingWindowIsNotTiled", t.testRestoredFloatingWindowIsNotTiled),
     ("retileRequestTilesEverythingOnce", t.testRetileRequestTilesEverythingOnce),
+    ("retileKeepsStacksAndTilesFloating", t.testRetileKeepsStacksAndTilesFloating),
     ("dropZonesAndApply", t.testDropZonesAndApply),
     ("moveAndMerge", t.testMoveAndMerge),
     ("displacedDetection", t.testDisplacedDetection),

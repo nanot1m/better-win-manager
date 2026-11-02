@@ -6,6 +6,15 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.34.1] - 2026-11-02
+
+### Fixed
+- Sideways tabs (tabs on the left) run top to bottom like the deck, instead of bottom to top.
+- Renaming a sideways tab: the text field appears in a small panel beside the tab instead of being cut off inside the narrow strip.
+
+### Changed
+- Retile keeps the screen's columns and the stacks within them, resetting only the sizes to equal shares and tiling any floating windows; it used to rebuild the grid from scratch, one column per window.
+
 ## [0.34.0] - 2026-11-02
 
 ### Added
