@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.34.3] - 2026-11-02
+
+### Fixed
+- The focus ring no longer follows its window to the parking corner and stays there. When the ringed window is parked or set aside (a desktop switch by focus, a tab going behind another), the ring hides until the next focused window brings it back; it used to ride along and could be left at the corner while the previous app was still the frontmost one.
+
 ## [0.34.2] - 2026-11-02
 
 ### Fixed

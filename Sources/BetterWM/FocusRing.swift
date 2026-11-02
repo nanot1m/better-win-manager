@@ -22,6 +22,10 @@ final class FocusRing {
     /// Whether the ring is meant to be on screen; `window.isVisible` lingers through a fade-out.
     private var shown = false
     private func hideRing() { shown = false; Fade.hide(window) }
+    /// Whether a window frame's centre lies on a screen; parked and set-aside windows keep a sliver past a corner.
+    private static func onScreen(_ f: CGRect) -> Bool {
+        NSScreen.screens.contains { $0.frame.toCocoa().contains(CGPoint(x: f.midX, y: f.midY)) }
+    }
     private func retireRing() {
         let old = (window: window, layer: layer)
         Fade.hide(old.window) { [weak self] in self?.spareRings.append(old) }
@@ -107,6 +111,9 @@ final class FocusRing {
                 // Moving a window never changes focus; only the ringed window matters, and it is followed straight
                 // from WindowServer. An ⌥-drag of an unfocused window fires this per pixel, so no AX here.
                 guard !self.suspended, wid == self.current, let id = wid, let f = WindowServerEvents.bounds(of: id) else { return }
+                // Off to a corner (parked, or a tab set aside): no longer the window to ring. The ring hides rather
+                // than following; the next focused window brings it back.
+                guard Self.onScreen(f) else { self.hideRing(); self.notify(); return }
                 self.place(frame: f)
             case .windowReorder, .frontChange, .windowLevel:
                 if let wid, wid == self.current { self.reorder() }
@@ -214,7 +221,12 @@ final class FocusRing {
             notify()
             return
         }
-        if let id = w.windowID, !isShown(id) { return }
+        if let id = w.windowID, !isShown(id) {
+            // The focused window is on a desktop not shown (its app still frontmost right after a switch): keep the
+            // ring where it is, unless its own window has gone too.
+            if let c = current, !isShown(c) || WindowServerEvents.bounds(of: c).map(Self.onScreen) == false { hideRing(); notify() }
+            return
+        }
         // An app can report a window it keeps alive after closing (ChatGPT) as focused; ring only what is visible.
         // A window on no Space is mid-transition to or from fullscreen.
         guard config.focusRingFloating || isTiled(w), let id = w.windowID, CGWindowInfo.isOnScreen(id),
