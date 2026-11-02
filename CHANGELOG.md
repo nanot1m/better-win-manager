@@ -6,6 +6,12 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.34.6] - 2026-11-02
+
+### Fixed
+- The outer gap is now measured to the focus ring where the ring is the outermost thing, not to the window behind it, so the margin at the screen edges matches the margin above the tab strip; the ring used to reach 3 points into the gap.
+- The ring buttons no longer run into the status bar when nothing sits above the ring (columns layout without tabs on windows, or tabs on the left or right): the layout keeps room for them, as the tab strip did when tabs are on top.
+
 ## [0.34.5] - 2026-11-02
 
 ### Fixed

@@ -95,6 +95,14 @@ public struct Config {
     public var focusRingPadding: CGFloat = 0
     /// How far the ring reaches beyond a slot's edge; the layout keeps that much clear of the tab strip.
     public var focusRingOutset: CGFloat { focusRing ? (focusRingWidth / 2).rounded(.up) + 1 : 0 }
+    /// Height of the ring's button tab, which stands on the ring's top line.
+    public static let ringButtonsHeight: CGFloat = 20
+    /// Extra room to keep above the layout so the ring buttons clear whatever is above: nothing when a tab strip
+    /// sits there (the strip is room enough), else what the buttons need beyond the outer gap above the ring.
+    public func ringButtonsRoom(tabsAbove: Bool) -> CGFloat {
+        guard focusRing, focusRingActions, !focusRingActionKeys.isEmpty, !tabsAbove else { return 0 }
+        return max(0, Self.ringButtonsHeight - focusRingWidth + 2 - outerGap)
+    }
     /// The inset of a tiled window within its slot. The ring's inner edge lies a little inside the slot, so the
     /// inset covers that too and the visible gap is exactly `focusRingPadding`; zero keeps the window in its slot.
     public var tileInset: CGFloat {

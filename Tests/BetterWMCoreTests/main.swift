@@ -20,7 +20,28 @@ struct ReconcilerTests {
         c.outerGap = 0
         c.floatSmallWindows = false
         c.autoTile = true
+        c.focusRing = false
+        c.focusRingActions = false
         return c
+    }
+
+    func testRingButtonsGetRoomWhenNoTabsAbove() {
+        var c = config
+        c.focusRing = true
+        c.focusRingActions = true
+        var g = Grid()
+        g.columns = [Column([1])]
+        let plain = GridGeometry(grid: g, area: area, config: c)
+        // No outer gap, so the buttons (20 high, standing on a 4-point line) need their whole height less the line.
+        expect(plain.inner.minY == area.minY + c.focusRingOutset + c.ringButtonsRoom(tabsAbove: false) && c.ringButtonsRoom(tabsAbove: false) > 0, #function, #line)
+        c.tiledTabs = true
+        expect(GridGeometry(grid: g, area: area, config: c).inner.minY == area.minY, #function, #line)
+        g.setMode(.stacked)
+        c.tiledTabs = false
+        c.stackStyle = .tabsTop
+        expect(GridGeometry(grid: g, area: area, config: c).inner.minY == area.minY, #function, #line)
+        c.stackStyle = .tabsLeft
+        expect(GridGeometry(grid: g, area: area, config: c).inner.minY > area.minY, #function, #line)
     }
 
     func testFirstVisitTilesInScreenOrder() {
@@ -339,8 +360,9 @@ struct ReconcilerTests {
         c.focusRingWidth = 6
         c.focusRingPadding = 3
         // Ring 6 wide reaches 4 beyond the slot, so 2 of it lie inside: the window moves in by the gap plus those 2.
+        // At the sides the ring is outermost, so the slot itself starts the ring's reach (4) in from the edge.
         let ringed = GridGeometry(grid: g, area: area, config: c).windowFrames().first!.1
-        expect(ringed.minY == 30 + 4 + 5 && ringed.minX == 5 && ringed.width == area.width - 10, #function, #line)
+        expect(ringed.minY == 30 + 4 + 5 && ringed.minX == 4 + 5 && ringed.width == area.width - 18, #function, #line)
         // A slot narrower than twice the gap still yields a finite frame.
         c.focusRingPadding = 40
         var narrow = Grid()
@@ -348,7 +370,8 @@ struct ReconcilerTests {
         let tiny = GridGeometry(grid: narrow, area: CGRect(x: 0, y: 0, width: 30, height: 600), config: c).windowFrames().first!.1
         expect(!tiny.isNull && tiny.width >= 1 && tiny.minX.isFinite, #function, #line)
         c.focusRingPadding = 0
-        expect(GridGeometry(grid: g, area: area, config: c).windowFrames().first!.1.minX == 0, #function, #line)
+        // No gap means no inset inside the slot; the slot itself still starts the ring's reach in from the edge.
+        expect(GridGeometry(grid: g, area: area, config: c).windowFrames().first!.1.minX == 4, #function, #line)
         c.focusRing = false
         let top = GridGeometry(grid: g, area: area, config: c)
         let frames = Dictionary(uniqueKeysWithValues: top.windowFrames())
@@ -928,6 +951,7 @@ let tests: [(String, () -> Void)] = [
     ("mainDisplayChangeKeepsDesktops", t.testMainDisplayChangeKeepsDesktops),
     ("sendingLastDesktopLeavesANewOne", t.testSendingLastDesktopLeavesANewOne),
     ("directionalFocusInGrid", t.testDirectionalFocusInGrid),
+    ("ringButtonsGetRoomWhenNoTabsAbove", t.testRingButtonsGetRoomWhenNoTabsAbove),
     ("tiledTabsLeaveRoomAboveEachWindow", t.testTiledTabsLeaveRoomAboveEachWindow),
 ]
 for (name, run) in tests {

@@ -47,7 +47,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `focusRingWidth` | 6 | Thickness |
 | `focusRingPadding` | 0 | Gap between a window and its ring; tiled windows shrink inside their slot by it, the ring stays put |
 | `focusRingAutoRadius` | true | Measure each window's own corner radius |
-| `focusRingActions` | true | Small icon buttons on the ring's top edge near the right corner |
+| `focusRingActions` | true | Small icon buttons on the ring's top edge near the right corner. When no tab strip sits above the ring (columns layout without `tiledTabs`, or side tabs), the layout keeps room for them under the status bar |
 | `fadeAnimations` | true | Transitions for the ring, tab strips and action buttons: fades in and out, the ring's colour cross-fade, tabs growing in and sliding over. Off with Reduce Motion in System Settings |
 | `focusRingActionKeys` | toggleTile, toggleStack, toggleTabs, retile, sendToDesktop | Which actions the buttons run, left to right; any of toggleTile, toggleStack, toggleTabs, grow, shrink, equalize, retile, sendToPreviousDesktop, sendToNextDesktop, overview, popup |
 | `focusRingRadius` | 24 | Corner radius when measuring is not possible |

@@ -299,7 +299,28 @@ public struct GridGeometry {
         self.front = front
     }
 
-    public var inner: CGRect { area.insetBy(dx: config.outerGap, dy: config.outerGap) }
+    /// The side a tab strip runs along, if any; the strip is the outermost element there.
+    private var stripSide: Config.StackStyle? {
+        if grid.mode == .stacked { return config.stackStyle == .cascade ? nil : config.stackStyle }
+        return config.tiledTabs ? .tabsTop : nil
+    }
+
+    /// The outer gap is measured to what the eye sees at the edge: the ring where it is outermost, the tab strip
+    /// where one runs. Slots are inset by the ring's reach on every side but the strip's.
+    public var inner: CGRect {
+        let o = config.focusRingOutset
+        var r = area.insetBy(dx: config.outerGap + o, dy: config.outerGap + o)
+        switch stripSide {
+        case .tabsTop: r.origin.y -= o; r.size.height += o
+        case .tabsLeft: r.origin.x -= o; r.size.width += o
+        case .tabsRight: r.size.width += o
+        default: break
+        }
+        let room = config.ringButtonsRoom(tabsAbove: stripSide == .tabsTop)
+        r.origin.y += room
+        r.size.height -= room
+        return r
+    }
 
     /// Split `total` by `weights`, but never below `mins`; constrained entries take their minimum and the rest share what remains.
     static func distribute(total: CGFloat, weights: [CGFloat], mins: [CGFloat]) -> [CGFloat] {
@@ -359,7 +380,9 @@ public struct GridGeometry {
     /// The strips above tiled windows, one tab each; empty unless `tiledTabs` is on.
     public func tiledTabFrames() -> [(WindowID, CGRect)] {
         guard grid.mode == .columns, config.tiledTabs else { return [] }
-        return tiledSlots().map { w, f in (w, CGRect(x: f.minX, y: f.minY, width: f.width, height: config.tabHeight)) }
+        // As wide as the ring around the window below, so strip and ring share their edges.
+        let o = config.focusRingOutset
+        return tiledSlots().map { w, f in (w, CGRect(x: f.minX - o, y: f.minY, width: f.width + 2 * o, height: config.tabHeight)) }
     }
 
     /// The columns layout's slots, tab strips included.
@@ -381,11 +404,13 @@ public struct GridGeometry {
     /// The strip the tabs occupy on a stacked screen, or nil for a cascade (and for other layouts).
     public func tabStripFrame() -> CGRect? {
         guard grid.mode == .stacked else { return nil }
+        // The strip runs the full length of the outer gap's inside; only across is it bound to the slots.
+        let outer = area.insetBy(dx: config.outerGap, dy: config.outerGap)
         switch config.stackStyle {
         case .cascade: return nil
-        case .tabsTop: return CGRect(x: inner.minX, y: inner.minY, width: inner.width, height: config.tabHeight)
-        case .tabsLeft: return CGRect(x: inner.minX, y: inner.minY, width: config.tabHeight, height: inner.height)
-        case .tabsRight: return CGRect(x: inner.maxX - config.tabHeight, y: inner.minY, width: config.tabHeight, height: inner.height)
+        case .tabsTop: return CGRect(x: outer.minX, y: inner.minY, width: outer.width, height: config.tabHeight)
+        case .tabsLeft: return CGRect(x: inner.minX, y: outer.minY, width: config.tabHeight, height: outer.height)
+        case .tabsRight: return CGRect(x: inner.maxX - config.tabHeight, y: outer.minY, width: config.tabHeight, height: outer.height)
         }
     }
 
