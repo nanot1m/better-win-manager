@@ -6,6 +6,8 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-02
+
 ### Changed
 - Settings › Widgets: widgets are reordered by dragging their grip, with a line showing where the row will land, instead of up and down buttons. A widget's own settings (clock format, battery percentage, weather units and location) sit under a disclosure in its row rather than on the Status Bar page.
 - Switching between windows of a stack no longer jitters the ring and tabs: the ring's corner radius eases to the new window's instead of snapping, and the tabs keep a constant distance from the strip's start (from the configured ring radius) rather than shifting with each window's measured radius.
