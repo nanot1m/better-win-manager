@@ -150,9 +150,7 @@ final class WindowManager {
         for id in desktops.parkedWindows where state.isTiled(id) {
             if let f = targetFrame(of: id) { system.execute([.setFrame(id, f)]) }
         }
-        desktops.unparkAll(setFrame: { self.system.execute([.setFrame($0, $1)]) },
-                           unhide: { NSRunningApplication(processIdentifier: $0)?.unhide() },
-                           fit: { self.fit($1, toDesktopOf: $0) })
+        desktops.unparkAll(setFrame: { self.system.execute([.setFrame($0, $1)]) }, fit: { self.fit($1, toDesktopOf: $0) })
         system.waitForCommands()
     }
 
@@ -567,30 +565,11 @@ final class WindowManager {
     private func applyVirtualParking(_ snap: Snapshot) -> Plan {
         let v = desktops
         let plan = v.apply(windows: snap.windows.map(\.id).filter { !snap.away.contains($0) },
-                pid: { snap.window($0)?.pid },
-                hideable: { p in
-                    guard self.config.hideApps, let app = NSRunningApplication(processIdentifier: p) else { return false }
-                    return app.activationPolicy == .regular
-                },
                 isTiled: { self.state.isTiled($0) }, frame: { snap.window($0)?.frame },
                 parkOrigin: { self.parkOp($0, $1).frame.origin },
                 // At the corner that would be chosen now: a display connected beside the old one makes it re-park.
                 isInCorner: { Executor.satisfies($1, self.parkOp($0, $1)) },
                 fit: { self.fit($1, toDesktopOf: $0) },
-                hide: { pid in
-                    // A hidden window cannot be captured; the overview shows what it looked like just before.
-                    // Only when the overview is in use: captures count as screen recording to macOS.
-                    if self.config.overview { Thumbnails.captureNow(snap.windows.filter { $0.pid == pid }.map(\.id)) }
-                    // Hiding the frontmost app lets macOS pick the next one (usually Finder, with no window);
-                    // hand focus to the destination workspace's top app first, or to ourselves if it is empty.
-                    if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { self.activateTopApp() }
-                    NSRunningApplication(processIdentifier: pid)?.hide()
-                },
-                unhide: { [weak self] pid in
-                    NSRunningApplication(processIdentifier: pid)?.unhide()
-                    // Frames set while an app is still unhiding can be lost; look again shortly after.
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self?.scheduleTick(); self?.focusRing.reorder() }
-                },
                 refusals: { self.state.executor.refused[$0]?.count ?? 0 },
                 // Moves ignored while macOS is waking or rearranging displays say nothing about the window.
                 claimAllowed: snap.now >= claimsSuspendedUntil,
@@ -700,7 +679,10 @@ final class WindowManager {
         wsEvents.onEvent = { [weak self] event, wid in
             switch event {
             case .frontChange, .windowReorder: self?.refanStackedScreens(); self?.refreshTabStrips()
-            case .windowCreate, .windowDestroy: self?.scheduleTick()
+            case .windowCreate: self?.scheduleTick()
+            case .windowDestroy:
+                if let wid { self?.windowWentAway(wid) }
+                self?.scheduleTick()
             case .spaceChange: self?.stepAsideFromFullscreen()
             case .windowMove, .windowResize:
                 guard let self, let wid else { return }
@@ -868,10 +850,27 @@ final class WindowManager {
 
     /// Workspace membership outlives windows unless told otherwise; a closed window must not keep showing its
     /// app on a desktop chip or count as a sibling, even when its app keeps it alive.
+    /// The focused window closing leaves its app frontmost with nothing to focus (macOS does not pick another
+    /// app's window): the desktop's top window takes the focus, so ring and tabs stay sensible. Also for a window
+    /// its app keeps alive after closing (Ghostty), which sends no destroy event.
+    private func windowWentAway(_ id: WindowID) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            guard let self, let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != getpid() else { return }
+            // Accessibility may still name the closed window as focused (the app keeps it alive); what counts is
+            // whether the frontmost app has any window left on the screen.
+            let screens = NSScreen.screens.map { $0.frame.toCocoa() }
+            let hasWindow = CGWindowInfo.list([.optionOnScreenOnly, .excludeDesktopElements]).contains { w in
+                w.pid == front.processIdentifier && w.layer == 0 && screens.contains { $0.contains(CGPoint(x: w.bounds.midX, y: w.bounds.midY)) }
+            }
+            if !hasWindow { self.focusTopWindow() }
+        }
+    }
+
     private func pruneDeadWindows() {
         guard case let alive = CGWindowInfo.aliveIDs(), !alive.isEmpty else { return }
         let closed = system.closedByApp
         system.forgetClosed(closed)
+        closed.forEach(windowWentAway)
         do {
             let v = desktops
             for id in v.knownWindows where !alive.contains(id) || closed.contains(id) {
@@ -1046,7 +1045,6 @@ final class WindowManager {
         let captured = Set(layout.spaces.map(\.id))
         layout.spaces += lastSaved.spaces.filter { !activeSpaces.contains($0.id) && !captured.contains($0.id) }
         layout.spaces.sort { $0.id < $1.id }
-        layout.hiddenPids = desktops.hiddenPids.sorted()
         layout.desktopHomes = Dictionary(uniqueKeysWithValues: desktops.homes.map { (String($0.key), $0.value) })
         layout.shownOnDisplays = desktops.shownOn
         layout.activeDesktop = desktops.active
@@ -1205,7 +1203,8 @@ final class WindowManager {
         desktops.claim(id, for: desktopShown(at: w.frame.center))
         guard let screen = screen(at: w.frame.center) else { return }
         let geo = reconciler.geometry(state.grid(for: screen.space), screen)
-        state.mutate(screen.space) { $0.apply(.newColumn(index: geo.columnIndex(forX: w.frame.midX)), to: id) }
+        // The new column takes an equal share: weights carried over from drags would leave it a sliver.
+        state.mutate(screen.space) { $0.apply(.newColumn(index: geo.columnIndex(forX: w.frame.midX)), to: id); $0.equalizeWidths() }
         state.seen[screen.space, default: []].insert(id)
         apply()
     }
@@ -1320,7 +1319,11 @@ final class WindowManager {
         if !state.isTiled(id) {
             tile(w)
             guard let space = state.space(containing: id) else { return }
-            if state.grid(for: space).canMove(id, dir) {
+            let grid = state.grid(for: space)
+            // Just tiled into a column of its own at that edge: the move would only cycle the column's width,
+            // undoing the equal share it was just given.
+            if (dir == .left && grid.isAtEdge(id, .left)) || (dir == .right && grid.isAtEdge(id, .right)) { return }
+            if grid.canMove(id, dir) {
                 Log.write("layout", "move \(describe(w)) \(dir) (tiled first)")
                 state.mutate(space) { $0.move(id, dir) }
                 apply()

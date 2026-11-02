@@ -12,7 +12,7 @@ final class Overview {
     private var monitors: [Any] = []
     private var animator: Timer?
     /// Previews are recaptured while open so playing video and typing stay live; parked windows are on screen
-    /// too (just in the corner), only hidden apps keep their last look.
+    /// too, just in the corner.
     private var liveTimer: Timer?
     private var liveIDs: [WindowID] = []
     private(set) var progress: CGFloat = 0
@@ -327,8 +327,8 @@ struct OverviewModel {
     var ringWidth: CGFloat = 6
 }
 
-/// Window previews, captured on demand and kept: windows of hidden apps cannot be captured, so their last
-/// visible look stands in. Needs Screen Recording permission; without it the app icon is all there is.
+/// Window previews, captured on demand and kept; a window that cannot be captured keeps its last visible look.
+/// Needs Screen Recording permission; without it the app icon is all there is.
 enum Thumbnails {
     private static var cache: [WindowID: NSImage] = [:]
     private static let queue = DispatchQueue(label: "betterwm.thumbnails", qos: .userInitiated)

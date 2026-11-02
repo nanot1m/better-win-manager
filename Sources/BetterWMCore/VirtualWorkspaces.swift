@@ -14,11 +14,7 @@ public final class VirtualWorkspaces {
     /// Real frames of floating windows while parked, restored when their workspace returns.
     private var parkedFrames: [WindowID: CGRect] = [:]
     private var parked: Set<WindowID> = []
-    /// Apps hidden with the native Hide because every window they have lives on an inactive workspace. Windows
-    /// already parked stay in the corner while hidden: moving them back would race the unhide later.
-    private var hiddenByPid: [pid_t: Set<WindowID>] = [:]
     public var knownWindows: [WindowID] { Array(membership.keys) }
-    public var hiddenPids: [pid_t] { Array(hiddenByPid.keys) }
     /// Last workspace each app had a window in, kept after the window is gone: an app that recreates its only
     /// window (Unity on scene reload or Play mode) has no siblings to follow, but it still has a home.
     public private(set) var homeByPid: [pid_t: Int] = [:]
@@ -182,26 +178,22 @@ public final class VirtualWorkspaces {
         }
     }
 
-    /// Restores every parked floating window's real frame, unhides hidden apps, and forgets the parking state.
-    public func unparkAll(setFrame: (WindowID, CGRect) -> Void, unhide: (pid_t) -> Void, fit: (WindowID, CGRect) -> CGRect = { $1 }) {
+    /// Restores every parked floating window's real frame and forgets the parking state.
+    public func unparkAll(setFrame: (WindowID, CGRect) -> Void, fit: (WindowID, CGRect) -> CGRect = { $1 }) {
         for (w, f) in parkedFrames { setFrame(w, fit(w, f)) }
-        for pid in hiddenByPid.keys { unhide(pid) }
-        hiddenByPid.removeAll()
         parkedFrames.removeAll()
         parked.removeAll()
     }
 
-    /// Park/unpark according to membership, as a plan for the executor. An app whose windows are all on desktops
-    /// not shown (and nowhere else, per `hideable`) is hidden natively; otherwise those windows go to the corner.
-    /// `frame(of:)` reads the current frame; `parkOrigin` and `fit` place a window for its desktop's display.
+    /// Park/unpark according to membership, as a plan for the executor: windows of desktops not shown go to the
+    /// corner. `frame(of:)` reads the current frame; `parkOrigin` and `fit` place a window for its desktop's display.
     /// `refusals` is how often the executor saw a window ignore its park; one that will not leave the screen is
     /// claimed for the active desktop when `claimAllowed` (not while macOS is waking or rearranging displays).
     /// Tiled windows are not restored here: their grid is laid out by the reconciler once the desktop shows.
     /// A `follows` window belongs to whichever desktop its display shows and is never parked.
-    public func apply(windows: [WindowID], pid: (WindowID) -> pid_t?, hideable: (pid_t) -> Bool,
-                      isTiled: (WindowID) -> Bool, frame: (WindowID) -> CGRect?,
+    public func apply(windows: [WindowID], isTiled: (WindowID) -> Bool, frame: (WindowID) -> CGRect?,
                       parkOrigin: (WindowID, CGRect) -> CGPoint, isInCorner: (WindowID, CGRect) -> Bool,
-                      fit: (WindowID, CGRect) -> CGRect, hide: (pid_t) -> Void, unhide: (pid_t) -> Void,
+                      fit: (WindowID, CGRect) -> CGRect,
                       refusals: (WindowID) -> Int, claimAllowed: Bool, follows: (WindowID) -> Bool = { _ in false }) -> Plan {
         var plan = Plan()
         for w in windows { adopt(w) }
@@ -213,33 +205,8 @@ public final class VirtualWorkspaces {
             // Parked before the option was on: back to where it was.
             if parked.remove(w) != nil, let f = parkedFrames.removeValue(forKey: w) { plan.ops.append(Op(window: w, frame: fit(w, f), intent: .unpark)) }
         }
-        // Hidden apps come back as soon as one of their windows is on a shown desktop, whether or not that
-        // window is in this snapshot (floating windows of a hidden app are not on screen).
-        for (p, ws) in hiddenByPid where ws.contains(where: { shown.contains(workspace(of: $0)) }) {
-            unhide(p)
-            hiddenByPid[p] = nil
-            ws.forEach { parked.remove($0) }
-            log("unhide app \(p)")
-        }
-        var byPid: [pid_t: [WindowID]] = [:]
-        for w in windows { if let p = pid(w) { byPid[p, default: []].append(w) } }
-        for (p, group) in byPid {
-            let allInactive = group.allSatisfy { !shown.contains(workspace(of: $0)) }
-            if allInactive, hideable(p) {
-                if hiddenByPid[p] == nil {
-                    hide(p)
-                    log("hide app \(p) (\(group.count) window(s), all on desktops not shown)")
-                }
-                hiddenByPid[p] = Set(group)
-                parked.formUnion(group)
-                continue
-            }
-            if let ws = hiddenByPid.removeValue(forKey: p) {
-                unhide(p)
-                ws.forEach { parked.remove($0) }
-                log("unhide app \(p)")
-            }
-            for w in group {
+        do {
+            for w in windows {
                 let shouldPark = !shown.contains(workspace(of: w))
                 if shouldPark, !parked.contains(w), let f = frame(w) {
                     if !isTiled(w) { parkedFrames[w] = f }

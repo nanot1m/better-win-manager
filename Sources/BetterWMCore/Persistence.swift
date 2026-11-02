@@ -48,7 +48,7 @@ public struct SavedLayout: Codable, Equatable {
     public static let schemaVersion = 3
     public var version: Int = SavedLayout.schemaVersion
     public var spaces: [Space] = []
-    /// Apps hidden by the window manager at the time of the save; unhidden at launch if a run ended without cleanup.
+    /// Written by versions that hid apps natively; read once so a run killed back then leaves nothing hidden.
     public var hiddenPids: [Int32] = []
     /// v2 only: active workspace per macOS desktop (real Space id as a string); read by the migration.
     public var activeWorkspaces: [String: Int] = [:]
@@ -77,7 +77,6 @@ public struct SavedLayout: Codable, Equatable {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(version, forKey: .version)
         try c.encode(spaces, forKey: .spaces)
-        try c.encode(hiddenPids, forKey: .hiddenPids)
         try c.encode(desktopHomes, forKey: .desktopHomes)
         try c.encode(shownOnDisplays, forKey: .shownOnDisplays)
         try c.encode(activeDesktop, forKey: .activeDesktop)

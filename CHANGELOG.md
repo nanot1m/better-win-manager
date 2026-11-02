@@ -6,6 +6,18 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-11-02
+
+### Changed
+- Tiling a floating window (⌃⌥T, the ring button, or a move hotkey on a floating window) gives every column an equal width again; the new column used to inherit whatever weights earlier drags had left, which could make it a sliver. A move hotkey that tiles a floating window no longer also cycles its column width when it lands at that edge.
+
+### Fixed
+- Tabs no longer slide left while nothing has focus: the strip's clearance from the ring's corner was dropped whenever the ring was hidden.
+- Closing the focused floating window hands the focus to the desktop's top window. macOS left the closed window's app frontmost with no window, so nothing had focus: the ring vanished and the tab strip dropped to its unfocused position.
+
+### Removed
+- The `hideApps` setting and native app hiding. Windows of desktops not shown are always parked past the screen corner, so every window stays live for the overview and nothing is left hidden if the app is killed. A `hideApps` line in `config.conf` is ignored.
+
 ## [0.34.7] - 2026-11-02
 
 ### Changed

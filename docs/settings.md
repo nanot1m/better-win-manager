@@ -22,7 +22,6 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `autoTileStrategy` | rightmost | Where an auto-tiled window goes: `rightmost`, `leftmost`, `position` (where it appeared), `nextToFocused` (i3 default), `stackFocused` (below the focused window), `autoSplit` (beside if the focused window is wider than tall, else below; i3 autotiling), `spiral` (alternately beside and below the last tiled window) |
 | `tileExistingOnStart` | true | When a desktop is first seen, tile the windows already on it, left to right |
 | `restoreLayouts` | true | Save grids, floating windows and the active workspace to `state.json` and restore them on launch |
-| `hideApps` | true | Hide an app whose windows are all on other desktops; off parks every window in the screen corner instead, keeping them on screen for live previews |
 | `floatingOnAllDesktops` | true | Floating (untiled) windows follow to whichever desktop is shown instead of staying on one; tiling a window pins it to its desktop again |
 | `dragModifiers` | alt | Keys held while dragging to tile: `cmd`, `alt`, `ctrl`, `shift` joined with `+` |
 | `stackOffset` | 48 | Horizontal shift between cascaded windows in stacked layout |

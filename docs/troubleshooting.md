@@ -42,7 +42,7 @@ Windows that were parked in the old screen's corner are pulled onto the remainin
 | --- | --- |
 | `hotkey`, `popup`, `menu` | Every action you trigger and how |
 | `tile`, `layout`, `reconcile` | Tiles, untiles, moves, and windows added to or dropped from a grid |
-| `desktop`, `park` | Workspace switches, focus-follow decisions, hide/unhide/park/unpark |
+| `desktop`, `park` | Workspace switches, focus-follow decisions, park/unpark |
 | `adopt`, `restore` | Which workspace a new window joined and why; what was restored from `state.json` |
 | `snapshot` | Windows carried from cache while unreadable, and why a tracked window left the snapshot |
 | `ax` | Apps skipped for not responding |

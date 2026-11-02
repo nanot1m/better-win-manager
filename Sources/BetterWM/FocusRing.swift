@@ -52,8 +52,9 @@ final class FocusRing {
     /// the ring's reach plus the largest corner radius in the stack. One value for the whole stack, so the row
     /// does not shift when a window with a different corner comes to the front.
     func clearance(for id: CGWindowID) -> CGFloat { (stackMates(id).map(radius(for:)).max() ?? radius(for: id)) + pad }
+    /// Independent of whether the ring is up right now: a strip that moved every time the ring hid would jump.
     func tabClearance(for ids: [CGWindowID]) -> CGFloat {
-        guard shown, let any = ids.first else { return 0 }
+        guard config.focusRing, let any = ids.first else { return 0 }
         return clearance(for: any)
     }
     /// The ring is on the window focus will come back to, greyed: no window has focus right now.

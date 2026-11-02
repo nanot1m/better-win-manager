@@ -560,6 +560,17 @@ struct ReconcilerTests {
         expect(next.grid(for: space).canMove(1, .right) && !next.grid(for: space).canMove(1, .mergeRight), #function, #line)
     }
 
+    func testEqualizeWidthsKeepsHeightsAndMinimums() {
+        var g = Grid()
+        g.columns = [Column([1, 2], weight: 3), Column([3], weight: 1)]
+        g.heightWeights[1] = 400
+        g.minSizes[3] = CGSize(width: 500, height: 0)
+        g.apply(.newColumn(index: 2), to: 4)
+        g.equalizeWidths()
+        expect(g.columns.map(\.weight) == [1, 1, 1], #function, #line)
+        expect(g.heightWeights[1] == 400 && g.minSizes[3]?.width == 500, #function, #line)
+    }
+
     func testUnstackingRestoresTheColumns() {
         var g = Grid()
         g.columns = [Column([1, 2], weight: 2), Column([3], weight: 1)]
@@ -684,18 +695,17 @@ struct ReconcilerTests {
     /// go through an executor as they do in the app.
     final class FakeScreen {
         var frames: [WindowID: CGRect] = [:]
-        var hidden: Set<pid_t> = []
         var ignoresMoves: Set<WindowID> = []
         var executor = Executor()
         let corner = CGPoint(x: 1598, y: 998)
         var follows: Set<WindowID> = []
-        func park(_ v: VirtualWorkspaces, now: Date, hideable: Bool = false, countRefusals: Bool = true) {
+        func park(_ v: VirtualWorkspaces, now: Date, countRefusals: Bool = true) {
             executor.observe(actual: { self.frames[$0] }, now: now)
-            let plan = v.apply(windows: Array(frames.keys).sorted(), pid: { pid_t($0) }, hideable: { _ in hideable },
+            let plan = v.apply(windows: Array(frames.keys).sorted(),
                                isTiled: { _ in false }, frame: { self.frames[$0] },
                                parkOrigin: { _, _ in self.corner },
                                isInCorner: { _, f in abs(f.minX - self.corner.x) <= 100 && abs(f.minY - self.corner.y) <= 100 },
-                               fit: { $1 }, hide: { self.hidden.insert($0) }, unhide: { self.hidden.remove($0) },
+                               fit: { $1 },
                                refusals: { self.executor.refused[$0]?.count ?? 0 }, claimAllowed: countRefusals,
                                follows: { self.follows.contains($0) })
             for op in executor.submit(plan, actual: { self.frames[$0] }, now: now).ops where !ignoresMoves.contains(op.window) {
@@ -761,18 +771,6 @@ struct ReconcilerTests {
         v.switchTo(1)
         screen.park(v, now: t0)
         expect(v.isParked(1) && !v.isParked(2) && screen.frames[2] == home, #function, #line)
-    }
-
-    func testHideableAppIsHiddenNotParked() {
-        let v = desktops(2)
-        let screen = FakeScreen()
-        screen.frames = [3: CGRect(x: 0, y: 0, width: 300, height: 300)]
-        v.move(3, to: 1)
-        screen.park(v, now: Date(timeIntervalSinceReferenceDate: 0), hideable: true)
-        expect(screen.hidden == [3] && v.hiddenPids == [3], #function, #line)
-        v.switchTo(1)
-        screen.park(v, now: Date(timeIntervalSinceReferenceDate: 0), hideable: true)
-        expect(screen.hidden.isEmpty && v.hiddenPids.isEmpty, #function, #line)
     }
 
     func testFollowingWindowMovesToShownDesktopInsteadOfParking() {
@@ -930,6 +928,7 @@ let tests: [(String, () -> Void)] = [
     ("stackedModeSurvivesSaveWithoutWindows", t.testStackedModeSurvivesSaveWithoutWindows),
     ("focusedWindowLeadsTheStackBeforeZOrderCatchesUp", t.testFocusedWindowLeadsTheStackBeforeZOrderCatchesUp),
     ("unstackingRestoresTheColumns", t.testUnstackingRestoresTheColumns),
+    ("equalizeWidthsKeepsHeightsAndMinimums", t.testEqualizeWidthsKeepsHeightsAndMinimums),
     ("rememberedColumnsSurviveSaving", t.testRememberedColumnsSurviveSaving),
     ("barWidgetsCompatibility", t.testBarWidgetsCompatibility),
     ("savedLayoutV1Migration", t.testSavedLayoutV1Migration),
@@ -942,7 +941,6 @@ let tests: [(String, () -> Void)] = [
     ("awayWindowKeepsSlotAndIsLeftAlone", t.testAwayWindowKeepsSlotAndIsLeftAlone),
     ("parkingAvoidsNeighbouringDisplay", t.testParkingAvoidsNeighbouringDisplay),
     ("parkingFollowsActiveWorkspace", t.testParkingFollowsActiveWorkspace),
-    ("hideableAppIsHiddenNotParked", t.testHideableAppIsHiddenNotParked),
     ("windowRefusingToParkJoinsActiveWorkspace", t.testWindowRefusingToParkJoinsActiveWorkspace),
     ("followingWindowMovesToShownDesktopInsteadOfParking", t.testFollowingWindowMovesToShownDesktopInsteadOfParking),
     ("refusalsDoNotCountWhileSuspended", t.testRefusalsDoNotCountWhileSuspended),

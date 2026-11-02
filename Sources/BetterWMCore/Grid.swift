@@ -74,10 +74,13 @@ public struct Grid: Equatable {
     }
 
     public mutating func equalize() {
-        for i in columns.indices { columns[i].weight = 1 }
+        equalizeWidths()
         heightWeights.removeAll()
         minSizes.removeAll()
     }
+
+    /// Every column an equal share of the width; row heights and learned minimums stay.
+    public mutating func equalizeWidths() { for i in columns.indices { columns[i].weight = 1 } }
 
     public mutating func apply(_ zone: DropZone, to w: WindowID) {
         // A cascade has no stacks: anything that would stack becomes a deck position just after the target.
