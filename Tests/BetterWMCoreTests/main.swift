@@ -566,6 +566,20 @@ struct ReconcilerTests {
         expect(restored.columns.map(\.windows) == [[1, 2], [3]] && restored.columns[0].weight == 2, #function, #line)
     }
 
+    func testFocusedWindowLeadsTheStackBeforeZOrderCatchesUp() {
+        let r = Reconciler(config: config)
+        var state = DesiredState()
+        var g = Grid()
+        g.setMode(.stacked)
+        g.columns = [Column([1]), Column([2]), Column([3])]
+        state.grids[space] = g
+        state.seen[space] = [1, 2, 3]
+        // ⌘Tab gave 3 the focus; the window list still has 1 in front.
+        let (_, plan) = r.reconcile(state, snapshot([win(1, area), win(2, area), win(3, area)], focused: 3))
+        expect(plan.frame(of: 3)?.minX == area.minX, #function, #line)
+        expect(plan.frame(of: 1)?.minX == area.maxX - 2, #function, #line)
+    }
+
     func testStackedModeSurvivesSaveWithoutWindows() {
         var state = DesiredState()
         var g = Grid(); g.setMode(.stacked)
@@ -891,6 +905,7 @@ let tests: [(String, () -> Void)] = [
     ("stackedModeGeometry", t.testStackedModeGeometry),
     ("stackedDeckKeepsPositions", t.testStackedDeckKeepsPositions),
     ("stackedModeSurvivesSaveWithoutWindows", t.testStackedModeSurvivesSaveWithoutWindows),
+    ("focusedWindowLeadsTheStackBeforeZOrderCatchesUp", t.testFocusedWindowLeadsTheStackBeforeZOrderCatchesUp),
     ("unstackingRestoresTheColumns", t.testUnstackingRestoresTheColumns),
     ("rememberedColumnsSurviveSaving", t.testRememberedColumnsSurviveSaving),
     ("barWidgetsCompatibility", t.testBarWidgetsCompatibility),

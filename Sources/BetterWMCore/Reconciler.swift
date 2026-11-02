@@ -54,8 +54,12 @@ public struct Reconciler {
         GridGeometry(grid: grid, area: screen.area, config: config, front: front)
     }
 
-    /// The frontmost window of `grid` in `snapshot`, whose windows are front to back.
-    func front(of grid: Grid, in snapshot: Snapshot) -> WindowID? { snapshot.windows.first { grid.contains($0.id) }?.id }
+    /// The window of `grid` to show in front: the focused one when it is in the grid (right after ⌘Tab the
+    /// window has the focus before macOS has reordered it), else the frontmost in `snapshot`'s front-to-back order.
+    func front(of grid: Grid, in snapshot: Snapshot) -> WindowID? {
+        if let f = snapshot.focused, grid.contains(f) { return f }
+        return snapshot.windows.first { grid.contains($0.id) }?.id
+    }
 
     public func isIgnored(_ w: WindowInfo) -> Bool {
         if let id = w.bundleID, config.ignoreApps.contains(id) { return true }
