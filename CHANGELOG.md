@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Changed
+- Floating windows follow to whichever desktop is shown by default (`floatingOnAllDesktops` now on). Turn it off in Settings › Other desktops to keep an untiled window on one desktop.
+
 ## [0.33.0] - 2026-11-02
 
 ### Fixed

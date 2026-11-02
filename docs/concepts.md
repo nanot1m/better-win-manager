@@ -16,7 +16,7 @@ How a stacked screen looks is `stackStyle`, tabs along the top by default: a **c
 
 ## Floating windows
 
-Windows float when you untile them, when their app is on the ignore list, when they are smaller than `smallWindowSize` (dialogs), or when auto-tiling is off. A window you untile by hand stays floating until you tile it again, even across workspace switches and relaunches. Toggling tiling off puts the window back where it floated before, and a drag or resize by hand that ends untiled settles a new floating spot.
+Windows float when you untile them, when their app is on the ignore list, when they are smaller than `smallWindowSize` (dialogs), or when auto-tiling is off. A window you untile by hand stays floating until you tile it again, even across workspace switches and relaunches. Floating windows go along to whichever desktop you switch to (`floatingOnAllDesktops`, on by default); turn it off to keep each on its own desktop, parked like tiled windows when that desktop is not shown. Toggling tiling off puts the window back where it floated before, and a drag or resize by hand that ends untiled settles a new floating spot.
 
 ## Workspaces
 

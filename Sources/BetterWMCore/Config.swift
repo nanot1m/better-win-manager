@@ -62,7 +62,7 @@ public struct Config {
     /// instead, which keeps it on screen for previews at the cost of a sliver showing in the corner.
     public var hideApps: Bool = true
     /// Floating windows belong to no desktop: they follow to whichever desktop shows instead of being parked.
-    public var floatingOnAllDesktops: Bool = false
+    public var floatingOnAllDesktops: Bool = true
     /// Action log at ~/.config/betterwm/log.txt (menu: Open Log File / Copy Diagnostics Report).
     public var debugLog: Bool = true
     /// Ask GitHub once a day whether a newer release exists; `autoUpdate` installs it without asking.
