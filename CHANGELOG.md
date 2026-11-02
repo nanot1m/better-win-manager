@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-11-02
+
+### Changed
+- Transitions, all under `fadeAnimations` and off with Reduce Motion: the ring cross-fades between grey and its colour instead of snapping; switching tabs in a stack swells the ring line briefly rather than moving it; a grey ring arrives a beat after the main ring has left; the ring buttons grow out of the ring just after it lands; a new tab grows into the strip and its neighbours slide over; the strip's hop onto an unfocused window (attached style) slides.
+
 ## [0.30.2] - 2026-11-02
 
 ### Fixed

@@ -3,8 +3,34 @@ import Cocoa
 /// Shows and hides the chrome windows (ring, tab strips, action buttons) through a short alpha fade. A hide
 /// that is still fading when the window is shown again is cancelled, so quick toggles never leave one hidden.
 enum Fade {
-    static var enabled = true
+    /// The `fadeAnimations` setting; Reduce Motion in System Settings turns every transition off as well.
+    static var configured = true
+    static var enabled: Bool { configured && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
     static let duration = 0.15
+    static let curve = CAMediaTimingFunction(name: .easeOut)
+
+    /// Animates a layer property from its current (presented) value to `to`, which is also set as the model value.
+    static func animate(_ layer: CALayer, _ keyPath: String, to: Any, duration: TimeInterval = duration) {
+        if enabled, let from = layer.presentation()?.value(forKeyPath: keyPath) ?? layer.value(forKeyPath: keyPath) {
+            let anim = CABasicAnimation(keyPath: keyPath)
+            anim.fromValue = from
+            anim.toValue = to
+            anim.duration = duration
+            anim.timingFunction = curve
+            layer.add(anim, forKey: keyPath)
+        }
+        layer.setValue(to, forKeyPath: keyPath)
+    }
+
+    /// Moves a window to `frame` with an eased slide when fades are on and the window is already up.
+    static func move(_ w: NSWindow, to frame: NSRect) {
+        guard enabled, w.isVisible, w.frame != frame else { w.setFrame(frame, display: false); return }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = duration
+            ctx.timingFunction = curve
+            w.animator().setFrame(frame, display: false)
+        }
+    }
     private static var generation: [Int: Int] = [:]
     /// Windows mid fade-out: still visible, and `alphaValue` reads 1 until the animation writes it back.
     private static var hiding: Set<Int> = []
@@ -19,6 +45,7 @@ enum Fade {
         order()
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = duration
+            ctx.timingFunction = curve
             w.animator().alphaValue = 1
         }
     }

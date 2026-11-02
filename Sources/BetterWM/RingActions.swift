@@ -73,10 +73,21 @@ final class RingActions {
         // shape, and nothing of the pill hangs over the window.
         let origin = NSPoint(x: ring.maxX - inset - 10 - size.width, y: ring.maxY - ringWidth)
         if panel.frame.origin != origin { panel.setFrameOrigin(origin) }
-        Fade.show(panel) { if !panel.isVisible { panel.orderFrontRegardless() } }
+        if panel.isVisible || !Fade.enabled {
+            Fade.show(panel) { if !panel.isVisible { panel.orderFrontRegardless() } }
+        } else {
+            // The ring lands first; the buttons follow, so the ring stays the thing the eye tracks.
+            showGeneration += 1
+            let generation = showGeneration
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+                guard let self, generation == self.showGeneration else { return }
+                Fade.show(self.panel) { if !self.panel.isVisible { self.panel.orderFrontRegardless() } }
+            }
+        }
     }
+    private var showGeneration = 0
 
-    func hide() { Fade.hide(panel); tip.hide() }
+    func hide() { showGeneration += 1; Fade.hide(panel); tip.hide() }
 }
 
 /// A small dark label under a pill button.

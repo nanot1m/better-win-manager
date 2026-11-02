@@ -245,14 +245,21 @@ final class FocusRing {
         isInactive = inactive
         if targetChanged { onFocusChange?() }
         let color = inactive ? Self.inactiveColor : config.ringColor(floating: floating)
+        let colorChanged = currentColor != color
         currentColor = color
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         layer.cornerRadius = radius(for: id) + pad
-        layer.borderWidth = config.focusRingWidth
-        layer.borderColor = color.cgColor
         layer.backgroundColor = nil
+        if wasHidden || !colorChanged { layer.borderColor = color.cgColor }
+        if wasHidden || !targetChanged { layer.borderWidth = config.focusRingWidth }
         CATransaction.commit()
+        if !wasHidden {
+            // The ring stays where it is: grey to colour (and back) is a cross-fade, and a new window in the same
+            // frame (the next tab of a stack) is marked by a short swell of the line.
+            if colorChanged { Fade.animate(layer, "borderColor", to: color.cgColor) }
+            if targetChanged { pulse() }
+        }
         place(frame: frame)
         // Above every normal window: the outline is drawn outside the window's frame, so it covers nothing of
         // the window itself, and it never has to chase the window's depth through raises and unhides.
@@ -266,8 +273,10 @@ final class FocusRing {
 
     /// Grey rings around `ids`, skipping the one the main ring is on; empty hides them all. The manager owns
     /// them through the tab strips; the main ring only takes them down when it is itself switched off.
+    private var secondaryGeneration = 0
     func showSecondary(_ ids: [CGWindowID]) {
         secondaryIDs = ids
+        secondaryGeneration += 1
         let shown: [(CGWindowID, CGRect)] = config.focusRing && !suspended && !hiddenForSystemReveal
             ? ids.compactMap { id in
                 guard id != current, CGWindowInfo.isOnScreen(id), let f = WindowServerEvents.bounds(of: id) else { return nil }
@@ -290,8 +299,30 @@ final class FocusRing {
             // Right above its own window and so below the one that has the focus: a grey ring is a mark on the
             // window, not an outline over everything.
             s.window.level = .normal
-            Fade.show(s.window) { s.window.order(.above, relativeTo: Int(id)) }
+            let order = { s.window.order(.above, relativeTo: Int(id)) }
+            if s.window.isVisible || !Fade.enabled {
+                Fade.show(s.window, order)
+            } else {
+                // A beat after the main ring has moved on, so the hand-off reads as one motion rather than two flashes.
+                let generation = secondaryGeneration
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
+                    guard let self, generation == self.secondaryGeneration, self.secondaryIDs.contains(id) else { return }
+                    Fade.show(s.window, order)
+                }
+            }
         }
+    }
+
+    private func pulse() {
+        let w = config.focusRingWidth
+        guard Fade.enabled else { layer.borderWidth = w; return }
+        let anim = CAKeyframeAnimation(keyPath: "borderWidth")
+        anim.values = [layer.presentation()?.borderWidth ?? w, w + 2, w]
+        anim.keyTimes = [0, 0.4, 1]
+        anim.duration = Fade.duration * 1.5
+        anim.timingFunction = Fade.curve
+        layer.add(anim, forKey: "borderWidth")
+        layer.borderWidth = w
     }
 
     private func radius(for id: CGWindowID) -> CGFloat {

@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func boot() {
         handleSigterm()
         let config = Config.load()
-        Fade.enabled = config.fadeAnimations
+        Fade.configured = config.fadeAnimations
         manager = WindowManager(config: config)
         updater = Updater(config: config)
         popup = ActionPopup(manager: manager)
@@ -557,7 +557,7 @@ extension AppDelegate {
         configWindow.show(config: manager.config) { [weak self] cfg in
             guard let self else { return }
             self.manager.config = cfg
-            Fade.enabled = cfg.fadeAnimations
+            Fade.configured = cfg.fadeAnimations
             self.updater.config = cfg
             self.drag.refreshState()
             self.bar.apply(cfg)

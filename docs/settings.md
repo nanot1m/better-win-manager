@@ -49,7 +49,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `focusRingPadding` | 0 | Gap between a window and its ring; tiled windows shrink inside their slot by it, the ring stays put |
 | `focusRingAutoRadius` | true | Measure each window's own corner radius |
 | `focusRingActions` | true | Small icon buttons on the ring's top edge near the right corner |
-| `fadeAnimations` | true | The ring, tab strips and action buttons fade in and out instead of popping |
+| `fadeAnimations` | true | Transitions for the ring, tab strips and action buttons: fades in and out, the ring's colour cross-fade, tabs growing in and sliding over. Off with Reduce Motion in System Settings |
 | `focusRingActionKeys` | toggleTile, toggleStack, sendToNextDesktop, popup | Which actions the buttons run, left to right; any of toggleTile, toggleStack, grow, shrink, equalize, retile, sendToPreviousDesktop, sendToNextDesktop, overview, popup |
 | `focusRingRadius` | 24 | Corner radius when measuring is not possible |
 

@@ -53,7 +53,11 @@ final class TabStripWindow {
     /// `inactive`: the front window has no focus; its tab is greyed like the ring. `clearance`: how far the
     /// first tab stays from the strip's start, at least the ring's corner radius so it does not hang over the curve.
     func show(frame: CGRect, items: [Item], focused: WindowID?, inactive: Bool, clearance: CGFloat, side: Side, config: Config) {
-        panel.setFrame(frame.toCocoa(), display: false)
+        let target = frame.toCocoa()
+        // A short move at the same size is the strip settling onto or lifting off its window; it slides. Anything
+        // larger is a new place, taken at once.
+        let hop = panel.frame.size == target.size && hypot(panel.frame.minX - target.minX, panel.frame.minY - target.minY) <= 12
+        if hop { Fade.move(panel, to: target) } else { panel.setFrame(target, display: false) }
         view.configure(items: items, focused: focused, inactive: inactive, clearance: clearance, side: side, config: config)
         Fade.show(panel) { if !panel.isVisible { panel.orderBack(nil) } }
     }
@@ -98,7 +102,11 @@ private final class TabStripView: NSView, NSTextFieldDelegate {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     func configure(items: [TabStripWindow.Item], focused: WindowID?, inactive: Bool, clearance: CGFloat, side: TabStripWindow.Side, config: Config) {
+        let before = self.items.map(\.id)
         self.items = items
+        // Tabs that were not there grow in from nothing where they land; the others slide over to make room.
+        let arrived = Set(items.map(\.id)).subtracting(before)
+        animateNextLayout = Fade.enabled && !before.isEmpty && before != items.map(\.id) && drag == nil && settling == nil
         self.side = side
         pad = max(16, clearance)
         maxLength = config.tabWidth
@@ -131,9 +139,11 @@ private final class TabStripView: NSView, NSTextFieldDelegate {
             let title = item.label.map { NSAttributedString(string: $0, attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: color]) }
                 ?? BarView.formatTitle(config.tabTitleFormat, app: item.app, title: item.title, color: color)
             t.configure(title: title, active: active, accent: accent, side: side)
+            t.isNew = arrived.contains(item.id)
         }
         needsLayout = true
         layoutTabs()
+        animateNextLayout = false
         // A refresh re-adds the active tab on top; the rename field, if any, stays above all of them.
         if let editor { addSubview(editor, positioned: .above, relativeTo: nil) }
     }
@@ -269,23 +279,39 @@ private final class TabStripView: NSView, NSTextFieldDelegate {
 
     /// Tabs share the strip, with a cap so a lone tab does not span the screen. Every tab gets the full height; an
     /// inactive one sits a little lower, which is the tab's own business so it can animate the change.
+    private var animateNextLayout = false
     private func layoutTabs() {
         let n = CGFloat(max(1, items.count)), gap: CGFloat = 4
+        var frames: [CGRect] = []
         if side != .top {
             // Sideways tabs: as long along the strip as a top tab is wide, as thick as the strip. On the left they
             // read bottom to top, so the deck runs that way too; on the right, top to bottom.
             let h = min(maxLength, (bounds.height - pad * 2 - gap * (n - 1)) / n)
-            for (i, t) in tabs.enumerated() where i < items.count {
+            for i in 0..<items.count {
                 let slot = side == .left ? CGFloat(items.count - 1 - i) : CGFloat(i)
                 let y = pad + slot * (h + gap)
-                t.frame = side == .left ? CGRect(x: 1, y: y, width: bounds.width - 1, height: h)
-                                        : CGRect(x: 0, y: y, width: bounds.width - 1, height: h)
+                frames.append(side == .left ? CGRect(x: 1, y: y, width: bounds.width - 1, height: h)
+                                            : CGRect(x: 0, y: y, width: bounds.width - 1, height: h))
             }
         } else {
             let w = min(maxLength, (bounds.width - pad * 2 - gap * (n - 1)) / n)
-            for (i, t) in tabs.enumerated() where i < items.count {
-                t.frame = CGRect(x: pad + CGFloat(i) * (w + gap), y: 1, width: w, height: bounds.height - 1)
+            for i in 0..<items.count { frames.append(CGRect(x: pad + CGFloat(i) * (w + gap), y: 1, width: w, height: bounds.height - 1)) }
+        }
+        guard animateNextLayout else {
+            for (t, f) in zip(tabs, frames) { t.frame = f; t.isNew = false }
+            return
+        }
+        for (t, f) in zip(tabs, frames) {
+            if t.isNew {
+                // From a sliver at its own place to full size, so it reads as growing out of the strip.
+                t.frame = side == .top ? CGRect(x: f.midX, y: f.minY, width: 0, height: f.height) : CGRect(x: f.minX, y: f.midY, width: f.width, height: 0)
+                t.isNew = false
             }
+        }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = Fade.duration
+            ctx.timingFunction = Fade.curve
+            for (t, f) in zip(tabs, frames) where t.frame != f { t.animator().frame = f }
         }
     }
 }
@@ -302,6 +328,8 @@ private final class TabView: NSView {
     var onDragMoved: ((CGFloat) -> Void)?
     var onDragEnded: (() -> Void)?
     var horizontal = true
+    /// Just added to the strip; the next animated layout grows it in.
+    var isNew = false
     private let body = NSView()
     private let label = NSTextField(labelWithString: "")
     private var active = false
