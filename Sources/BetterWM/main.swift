@@ -93,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.desktopApps = { [weak self] in self?.manager.appsByDesktop() ?? [:] }
         bar.focusedWindow = { [weak self] in self?.manager.focusRing.currentWindowID }
         bar.focusedAXWindow = { [weak self] in self?.manager.system.focused }
+        bar.tabLabel = { [weak self] in self?.manager.tabLabel(for: $0) }
         bar.isInteracting = { [weak self] in self?.manager.interacting ?? false }
         manager.onInteractionEnd = { [weak self] in self?.bar.interactionEnded() }
         manager.onWindowsChange = { [weak self] in self?.bar.focusChanged() }
@@ -370,7 +371,11 @@ extension AppDelegate {
         menu.addItem(.separator())
         addTabItems(to: menu, stacked: manager.isStacked(desktop: desktop))
         menu.autoenablesItems = false
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.bounds.minY - 4), in: view)
+        // Right under the chip, in screen coordinates. macOS keeps a menu out of the menu bar's zone even while that
+        // bar is hidden, scrolling the menu instead; the anchor stays below the zone so every item shows.
+        let chip = view.window.map { $0.convertToScreen(view.convert(view.bounds, to: nil)) } ?? .zero
+        let zone = view.window?.screen?.visibleFrame.maxY ?? chip.minY
+        menu.popUp(positioning: nil, at: NSPoint(x: chip.minX, y: min(chip.minY - 4, zone - 1)), in: nil)
     }
 
     private func desktop(of sender: NSMenuItem) -> Int? { sender.representedObject as? Int }

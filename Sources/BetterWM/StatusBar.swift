@@ -28,6 +28,8 @@ final class StatusBar {
     var shownOn: (NSScreen) -> Int? = { _ in nil }
     var activeDesktop: () -> Int? = { nil }
     var focusedAXWindow: () -> AXWindow? = { nil }
+    /// The name given to a window's tab, if any; shown in place of the formatted title.
+    var tabLabel: (WindowID) -> String? = { _ in nil }
     var desktopApps: () -> [Int: [(pid: pid_t, windows: [WindowID])]] = { [:] }
     var focusedWindow: () -> WindowID? = { nil }
     /// While the user drags a window the bar stays as it is; any work on the main thread stalls the event tap.
@@ -189,6 +191,7 @@ final class StatusBar {
         let app = focused.flatMap { NSRunningApplication(processIdentifier: $0.pid)?.localizedName }
             ?? NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
         let title = focused?.title ?? ""
+        let label = focused?.windowID.flatMap(tabLabel)
         var model = BarView.Model(
             desktops: [],
             current: nil,
@@ -198,6 +201,7 @@ final class StatusBar {
             fullscreen: config.barDesktopApps ? fullscreenSpaces() : [],
             app: app,
             title: title,
+            label: label,
             clock: config.barClock ? clockFormatter.string(from: Date()) : nil,
             weather: weather.reading.map { r in
                 (String(format: "%.0f°", r.temperature), r.symbol)
@@ -394,6 +398,7 @@ final class BarView: NSView {
         var fullscreen: [(space: UInt64, pids: [pid_t])]
         var app: String
         var title: String
+        var label: String?
         var clock: String?
         var weather: (String, String)?
         var battery: SystemStatus.Battery?
@@ -728,7 +733,8 @@ final class BarView: NSView {
             left.addArrangedSubview(titleLabel)
         }
         appLabel.isHidden = true
-        titleLabel.attributedStringValue = BarView.formatTitle(m.titleFormat, app: m.app, title: m.title, color: textColor)
+        titleLabel.attributedStringValue = m.label.map { BarView.formatTitle("{app}", app: $0, title: "", color: textColor) }
+            ?? BarView.formatTitle(m.titleFormat, app: m.app, title: m.title, color: textColor)
         show(.media, m.media != nil)
         show(.sound, m.sound != nil)
         if let s = m.sound { soundButton.image = NSImage(systemSymbolName: s, accessibilityDescription: "Sound") }

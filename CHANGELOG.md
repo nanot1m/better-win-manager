@@ -6,6 +6,14 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.35.1] - 2026-11-02
+
+### Changed
+- The status bar's active window label shows a renamed tab's name instead of the app and title.
+
+### Fixed
+- The desktop chip's right-click menu opens right under the chip; it used to land a bar's height too low, and could be clipped and scrolled by macOS's menu bar zone.
+
 ## [0.35.0] - 2026-11-02
 
 ### Changed

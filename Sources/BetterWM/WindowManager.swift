@@ -1592,11 +1592,13 @@ final class WindowManager {
     var tabMenuItems: ((NSMenu, Bool) -> Void)?
     /// Names given to tabs in place of their windows' titles; saved with the layout.
     private var tabLabels: [WindowID: String] = [:]
+    func tabLabel(for id: WindowID) -> String? { tabLabels[id] }
     func setTabLabel(_ id: WindowID, _ label: String?) {
         let trimmed = label?.trimmingCharacters(in: .whitespacesAndNewlines)
         tabLabels[id] = (trimmed?.isEmpty ?? true) ? nil : trimmed
         Log.write("tabs", "\(describe(id)) tab named \(tabLabels[id].map { "\"\($0)\"" } ?? "by its title again")")
         refreshTabStrips()
+        onFocusChange?()
         if let full = pendingSnapshot { scheduleSave(full) }
     }
 

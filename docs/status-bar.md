@@ -6,7 +6,7 @@ One bar per screen at the top edge, where the hidden system menu bar lives. Enab
 
 **Desktop chips**, one per workspace living on this screen. The one you are working on uses `barActiveColor`; one merely shown on another screen is marked more lightly. Each chip shows one icon per window open there (`barDesktopApps`), in a stable order: an app keeps its slot while it has a window there and newcomers append. Click a chip to switch; drag it to reorder workspaces; right-click it for a menu: switch, send the focused window there, move left or right, send the desktop to the next screen, and for a stacked desktop pick the stacked look (cascade or tabs), for a columns desktop show or hide the tabs above its windows. Drag a window onto a chip to send the window to that desktop; the chip lights up while the window is over it. The bar stays above app windows, so a dragged window never hides it.
 
-**Active window label**, formatted by `barTitleFormat`. `{app}` and `{title}` are replaced, anything else is printed as is; the app name is bold. With no title, or a title equal to the app name, only the app is shown. The default is `{app}`.
+**Active window label**, formatted by `barTitleFormat`; a window whose tab was renamed shows that name instead. `{app}` and `{title}` are replaced, anything else is printed as is; the app name is bold. With no title, or a title equal to the app name, only the app is shown. The default is `{app}`.
 
 **Cats** roam whatever is free between the left and right content; see [Cats](cats.md).
 
