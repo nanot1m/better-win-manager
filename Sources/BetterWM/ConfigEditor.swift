@@ -656,8 +656,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             group("Content", [
                 row("App icons on desktop chips", "One icon per window open on that desktop.", [barDesktopAppsSwitch]),
                 row("Active window label", "{app} and {title} are replaced; the rest is shown as is.", [barTitleField]),
-                row("Clock format", "Unicode date pattern, for example EEE d MMM  HH:mm.", [barClockField]),
-                row("Battery percentage", "Show the number next to the battery icon.", [barBatteryPercentSwitch]),
             ]),
             group("Appearance", [
                 row("Background", "A translucent blur, or a solid colour.", [barBackgroundMode, barBgColor]),
@@ -669,10 +667,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 row("Padding", "Space between the bar's edges and its content.", [barPaddingField, unit("pt")]),
                 row("Side margin", "Above zero the bar floats away from the screen sides.", [barMarginField, unit("pt")]),
                 row("Top offset", "Distance from the top edge; 0 sits where the hidden menu bar lives.", [barTopOffsetField, unit("pt")]),
-            ]),
-            group("Weather", [
-                row("Fahrenheit", nil, [barFahrenheit]),
-                row("Location", "Weather comes from Open-Meteo.", [barLocationPopup, barLocationField]),
             ]),
         ]
     }
@@ -691,8 +685,25 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         return [box]
     }
 
+    /// The rows of a widget's own settings, shown under it when disclosed; nil for a widget with none.
+    private func widgetSettings(_ w: Config.BarWidget) -> [NSView]? {
+        switch w {
+        case .clock: return [row("Format", "Unicode date pattern, for example EEE d MMM  HH:mm.", [barClockField])]
+        case .battery: return [row("Percentage", "Show the number next to the battery icon.", [barBatteryPercentSwitch])]
+        case .weather: return [row("Fahrenheit", nil, [barFahrenheit]),
+                               row("Location", "Weather comes from Open-Meteo.", [barLocationPopup, barLocationField])]
+        default: return nil
+        }
+    }
+
+    private var expandedWidgets: Set<Config.BarWidget> = []
+    /// The row view of each widget, in list order, for the drag to measure.
+    private var widgetRowViews: [NSView] = []
+    private let widgetDropLine = NSView()
+
     private func rebuildWidgetRows() {
         widgetList.arrangedSubviews.forEach { widgetList.removeArrangedSubview($0); $0.removeFromSuperview() }
+        widgetRowViews = []
         for (i, (w, on)) in widgetOrder.enumerated() {
             if i > 0 {
                 let line = NSBox(); line.boxType = .separator
@@ -711,13 +722,42 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             sw.tag = i
             sw.target = self
             sw.action = #selector(widgetToggled(_:))
-            let up = NSButton(image: NSImage(systemSymbolName: "chevron.up", accessibilityDescription: "Move up")!, target: self, action: #selector(widgetMoved(_:)))
-            let down = NSButton(image: NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Move down")!, target: self, action: #selector(widgetMoved(_:)))
-            up.tag = i * 2; down.tag = i * 2 + 1
-            up.isEnabled = i > 0; down.isEnabled = i < widgetOrder.count - 1
-            for b in [up, down] { b.bezelStyle = .texturedRounded; b.setButtonType(.momentaryPushIn) }
-            widgetList.addArrangedSubview(row(w.title, nil, [up, down, sw]))
+            let grip = DragGrip()
+            grip.onDrag = { [weak self] phase, point in self?.widgetDrag(index: i, phase: phase, at: point) }
+            var controls: [NSView] = [sw]
+            let settings = widgetSettings(w)
+            if settings != nil {
+                let disclose = NSButton(image: NSImage(systemSymbolName: expandedWidgets.contains(w) ? "chevron.down" : "chevron.right", accessibilityDescription: "Settings")!,
+                                        target: self, action: #selector(widgetDisclosed(_:)))
+                disclose.bezelStyle = .texturedRounded
+                disclose.setButtonType(.momentaryPushIn)
+                disclose.tag = i
+                controls.insert(disclose, at: 0)
+            }
+            let r = row(w.title, nil, controls)
+            let line = NSStackView(views: [grip, r])
+            line.spacing = 0
+            line.alignment = .centerY
+            r.translatesAutoresizingMaskIntoConstraints = false
+            grip.widthAnchor.constraint(equalToConstant: 28).isActive = true
+            grip.heightAnchor.constraint(equalTo: line.heightAnchor).isActive = true
+            widgetList.addArrangedSubview(line)
+            widgetRowViews.append(line)
+            if let settings, expandedWidgets.contains(w) {
+                let inner = NSStackView(views: settings)
+                inner.orientation = .vertical
+                inner.alignment = .width
+                inner.spacing = 0
+                inner.edgeInsets = NSEdgeInsets(top: 0, left: 28, bottom: 6, right: 0)
+                widgetList.addArrangedSubview(inner)
+            }
         }
+        widgetDropLine.wantsLayer = true
+        widgetDropLine.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        widgetDropLine.layer?.cornerRadius = 1
+        widgetDropLine.isHidden = true
+        widgetDropLine.removeFromSuperview()
+        widgetList.addSubview(widgetDropLine)
     }
 
     @objc private func widgetToggled(_ sender: NSSwitch) {
@@ -725,12 +765,48 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         widgetOrder[sender.tag].1 = sender.state == .on
     }
 
-    @objc private func widgetMoved(_ sender: NSButton) {
-        let i = sender.tag / 2, down = sender.tag % 2 == 1
-        let j = down ? i + 1 : i - 1
-        guard widgetOrder.indices.contains(i), widgetOrder.indices.contains(j) else { return }
-        widgetOrder.swapAt(i, j)
+    @objc private func widgetDisclosed(_ sender: NSButton) {
+        guard widgetOrder.indices.contains(sender.tag) else { return }
+        let w = widgetOrder[sender.tag].0
+        if !expandedWidgets.insert(w).inserted { expandedWidgets.remove(w) }
         rebuildWidgetRows()
+    }
+
+    /// Dragging a row by its grip: the row floats with the pointer and an accent line marks where it will land.
+    private func widgetDrag(index: Int, phase: DragGrip.Phase, at point: NSPoint) {
+        guard widgetRowViews.indices.contains(index) else { return }
+        let dragged = widgetRowViews[index]
+        // Rows run top to bottom; in the list's coordinates that is descending y unless the view is flipped.
+        let mids = widgetRowViews.map { $0.frame.midY }
+        let descending = mids.count > 1 && mids[0] > mids[1]
+        let y = widgetList.convert(point, from: nil).y
+        let others = widgetRowViews.indices.filter { $0 != index }
+        // The new index is how many other rows the pointer has passed below.
+        let target = others.filter { descending ? mids[$0] > y : mids[$0] < y }.count
+        switch phase {
+        case .began:
+            dragged.alphaValue = 0.6
+        case .moved:
+            widgetDropLine.isHidden = target == index
+            guard target != index else { return }
+            // The gap the row lands in: the top edge of the row that will follow it, or below the last one.
+            let gapY: CGFloat
+            if target < others.count {
+                let f = widgetRowViews[others[target]].frame
+                gapY = descending ? f.maxY : f.minY
+            } else {
+                let f = widgetRowViews[others[others.count - 1]].frame
+                gapY = descending ? f.minY : f.maxY
+            }
+            widgetDropLine.frame = NSRect(x: 14, y: gapY - 1, width: widgetList.bounds.width - 28, height: 2)
+        case .ended:
+            dragged.alphaValue = 1
+            widgetDropLine.isHidden = true
+            guard target != index else { return }
+            let item = widgetOrder.remove(at: index)
+            widgetOrder.insert(item, at: target)
+            rebuildWidgetRows()
+        }
     }
 
     private func catGroups() -> [NSView] {
@@ -1207,5 +1283,39 @@ final class KeyRecorderView: NSView {
             default: return part.uppercased()
             }
         }.joined()
+    }
+}
+
+/// A grip of three lines; dragging it reports the pointer in window coordinates through the drag.
+private final class DragGrip: NSView {
+    enum Phase { case began, moved, ended }
+    var onDrag: ((Phase, NSPoint) -> Void)?
+    private let icon = NSImageView(image: NSImage(systemSymbolName: "line.3.horizontal", accessibilityDescription: "Drag to reorder")!)
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        icon.contentTintColor = .tertiaryLabelColor
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(icon)
+        NSLayoutConstraint.activate([icon.centerXAnchor.constraint(equalTo: centerXAnchor, constant: 4), icon.centerYAnchor.constraint(equalTo: centerYAnchor)])
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let window else { return }
+        var began = false
+        NSCursor.closedHand.push()
+        defer { NSCursor.pop() }
+        while let e = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+            if e.type == .leftMouseDragged {
+                if !began { began = true; onDrag?(.began, e.locationInWindow) }
+                onDrag?(.moved, e.locationInWindow)
+            } else {
+                if began { onDrag?(.ended, e.locationInWindow) }
+                return
+            }
+        }
     }
 }

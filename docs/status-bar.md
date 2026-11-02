@@ -12,7 +12,7 @@ One bar per screen at the top edge, where the hidden system menu bar lives. Enab
 
 ## Right side: widgets
 
-`barWidgets` is the ordered list of what appears, left to right. Toggle and reorder them in Settings › Widgets.
+`barWidgets` is the ordered list of what appears, left to right. In Settings › Widgets each widget has a switch and a grip to drag it into place; a widget with settings of its own (clock format, battery percentage, weather units and location) shows them under a disclosure in its row.
 
 | Widget | Shows | Notes |
 | --- | --- | --- |
