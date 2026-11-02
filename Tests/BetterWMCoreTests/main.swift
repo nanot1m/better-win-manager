@@ -513,6 +513,35 @@ struct ReconcilerTests {
         expect(next.grid(for: space).canMove(1, .right) && !next.grid(for: space).canMove(1, .mergeRight), #function, #line)
     }
 
+    func testUnstackingRestoresTheColumns() {
+        var g = Grid()
+        g.columns = [Column([1, 2], weight: 2), Column([3], weight: 1)]
+        g.setMode(.stacked)
+        expect(g.columns.map(\.windows) == [[1], [2], [3]], #function, #line)
+        // Meanwhile one window left and one arrived.
+        g.remove(2)
+        g.columns.append(Column([4]))
+        g.setMode(.columns)
+        expect(g.columns.map(\.windows) == [[1], [3], [4]], #function, #line)
+        expect(g.columns.map(\.weight) == [2, 1, 1], #function, #line)
+        expect(g.columnsBeforeStack == nil, #function, #line)
+    }
+
+    func testRememberedColumnsSurviveSaving() {
+        var state = DesiredState()
+        var g = Grid()
+        g.columns = [Column([1, 2], weight: 2), Column([3])]
+        g.setMode(.stacked)
+        state.grids[space] = g
+        let snap = snapshot([win(1, area), win(2, area), win(3, area)])
+        let data = try! JSONEncoder().encode(SavedLayout.capture(state, snap))
+        let saved = try! JSONDecoder().decode(SavedLayout.self, from: data)
+        var restored = saved.restore(space: space, candidates: snap.windows)!
+        expect(restored.mode == .stacked && restored.columnsBeforeStack?.map(\.windows) == [[1, 2], [3]], #function, #line)
+        restored.setMode(.columns)
+        expect(restored.columns.map(\.windows) == [[1, 2], [3]] && restored.columns[0].weight == 2, #function, #line)
+    }
+
     func testStackedModeSurvivesSaveWithoutWindows() {
         var state = DesiredState()
         var g = Grid(); g.setMode(.stacked)
@@ -837,6 +866,8 @@ let tests: [(String, () -> Void)] = [
     ("stackedModeGeometry", t.testStackedModeGeometry),
     ("stackedDeckKeepsPositions", t.testStackedDeckKeepsPositions),
     ("stackedModeSurvivesSaveWithoutWindows", t.testStackedModeSurvivesSaveWithoutWindows),
+    ("unstackingRestoresTheColumns", t.testUnstackingRestoresTheColumns),
+    ("rememberedColumnsSurviveSaving", t.testRememberedColumnsSurviveSaving),
     ("barWidgetsCompatibility", t.testBarWidgetsCompatibility),
     ("savedLayoutV1Migration", t.testSavedLayoutV1Migration),
     ("refusedFrameGivesUpThenRetries", t.testRefusedFrameGivesUpThenRetries),

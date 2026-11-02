@@ -895,7 +895,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 "popup", "overview",
             ]),
             ("Desktops", [
-                "desktopNext", "desktopPrevious",
+                "desktopNext", "desktopPrevious", "sendToDesktop",
                 "desktopMoveLeft", "desktopMoveRight",
                 "desktopToNextScreen",
                 "sendToNextDesktop", "sendToPreviousDesktop",

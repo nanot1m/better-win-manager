@@ -235,6 +235,8 @@ final class WindowManager {
     }
 
     var desktopCount: Int { desktops.count }
+    /// The desktop of the focused window, if one has the focus.
+    var focusedWindowDesktop: Int? { system.focused.flatMap(id).map(desktops.workspace(of:)) }
     func desktop(of id: WindowID) -> Int { desktops.workspace(of: id) }
     var currentDesktop: Int? { desktops.active }
     /// Desktops living on `screen`, and the one it shows; for the bar on that screen.

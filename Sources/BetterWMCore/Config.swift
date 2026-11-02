@@ -108,10 +108,10 @@ public struct Config {
     public var fadeAnimations: Bool = true
     /// Which actions the ring buttons run, in order; keys from `actions`.
     public var focusRingActionKeys: [String] = Config.defaultRingActionKeys
-    public static let defaultRingActionKeys = ["toggleTile", "toggleStack", "toggleTabs", "sendToNextDesktop", "popup"]
+    public static let defaultRingActionKeys = ["toggleTile", "toggleStack", "toggleTabs", "retile", "sendToDesktop"]
     /// Actions that make sense as a ring button, in the order they appear.
     public static let ringActionChoices = ["toggleTile", "toggleStack", "toggleTabs", "grow", "shrink", "equalize", "retile",
-                                           "sendToPreviousDesktop", "sendToNextDesktop", "overview", "popup"]
+                                           "sendToDesktop", "sendToPreviousDesktop", "sendToNextDesktop", "overview", "popup"]
     /// Measure each window's real corner radius once and match it; `focusRingRadius` is the fallback.
     public var focusRingAutoRadius: Bool = true
     public var focusRingColor: String = "FF9300"
@@ -247,6 +247,7 @@ public struct Config {
         ("desktopMoveLeft", "Move this desktop left"), ("desktopMoveRight", "Move this desktop right"),
         ("desktopToNextScreen", "Send this desktop to the next screen"),
         ("sendToNextDesktop", "Send focused window to next desktop"),
+        ("sendToDesktop", "Send focused window to a desktop… (menu)"),
         ("sendToPreviousDesktop", "Send focused window to previous desktop"),
     ] + (1...9).map { ("desktop\($0)", "Switch to desktop \($0)") }
       + (1...9).map { ("sendToDesktop\($0)", "Send focused window to desktop \($0)") }

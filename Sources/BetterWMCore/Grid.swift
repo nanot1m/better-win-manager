@@ -16,6 +16,8 @@ public struct Column: Equatable {
 public struct Grid: Equatable {
     public var mode: LayoutMode = .columns
     public var columns: [Column] = []
+    /// The columns as they were before the screen was stacked; switching back restores them.
+    public var columnsBeforeStack: [Column]?
     public var heightWeights: [WindowID: CGFloat] = [:]
     /// Sizes windows refused to shrink below; the layout distributes space around them.
     public var minSizes: [WindowID: CGSize] = [:]
@@ -52,10 +54,23 @@ public struct Grid: Equatable {
         self.mode = mode
     }
 
-    /// Stacked mode keeps one window per column (the deck order); switching to it flattens any stacks.
+    /// Stacked mode keeps one window per column (the deck order); switching to it flattens any stacks but
+    /// remembers them, and switching back puts every window still present where it was, newcomers in columns of
+    /// their own at the end.
     public mutating func setMode(_ m: LayoutMode) {
+        guard m != mode else { return }
         mode = m
-        if m == .stacked { columns = windows.map { Column([$0]) } }
+        if m == .stacked {
+            columnsBeforeStack = columns
+            columns = windows.map { Column([$0]) }
+        } else if let before = columnsBeforeStack {
+            let present = Set(windows)
+            var restored = before.map { Column($0.windows.filter(present.contains), weight: $0.weight) }.filter { !$0.windows.isEmpty }
+            let placed = Set(restored.flatMap(\.windows))
+            for w in windows where !placed.contains(w) { restored.append(Column([w])) }
+            columns = restored
+            columnsBeforeStack = nil
+        }
     }
 
     public mutating func equalize() {

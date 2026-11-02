@@ -6,7 +6,14 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-02
+
+### Added
+- `sendToDesktop` action, a ring button by default: a menu of every desktop plus a new one, under the button, to send the focused window to. From a hotkey the menu opens at the pointer.
+
 ### Changed
+- The default ring buttons are tile / untile, toggle stacked layout, tabs, retile, and send to desktop; Send to next desktop and the popup are no longer in the default set (they stay available in Settings).
+- Stacking a screen remembers its columns: toggling the stacked layout off puts every window back where it was, with the column widths it had; windows that arrived meanwhile get columns of their own at the end. The memory survives a relaunch.
 - Floating windows follow to whichever desktop is shown by default (`floatingOnAllDesktops` now on). Turn it off in Settings › Other desktops to keep an untiled window on one desktop.
 
 ## [0.33.0] - 2026-11-02

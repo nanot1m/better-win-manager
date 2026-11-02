@@ -28,17 +28,20 @@ public struct SavedLayout: Codable, Equatable {
         public var mode: LayoutMode
         /// Untiled windows living on this space, with their real frames (not the parking spot).
         public var floating: [Window]
-        public init(id: SpaceID, columns: [Column], mode: LayoutMode = .columns, floating: [Window] = []) {
-            self.id = id; self.columns = columns; self.mode = mode; self.floating = floating
+        /// A stacked space's columns from before it was stacked, to come back to.
+        public var columnsBeforeStack: [Column]?
+        public init(id: SpaceID, columns: [Column], mode: LayoutMode = .columns, floating: [Window] = [], columnsBeforeStack: [Column]? = nil) {
+            self.id = id; self.columns = columns; self.mode = mode; self.floating = floating; self.columnsBeforeStack = columnsBeforeStack
         }
 
-        enum CodingKeys: String, CodingKey { case id, columns, mode, floating }
+        enum CodingKeys: String, CodingKey { case id, columns, mode, floating, columnsBeforeStack }
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             id = try c.decode(SpaceID.self, forKey: .id)
             columns = try c.decode([Column].self, forKey: .columns)
             mode = try c.decodeIfPresent(LayoutMode.self, forKey: .mode) ?? .columns
             floating = try c.decodeIfPresent([Window].self, forKey: .floating) ?? []
+            columnsBeforeStack = try c.decodeIfPresent([Column].self, forKey: .columnsBeforeStack)
         }
     }
     /// Bumped when the meaning of stored ids changes; `migrated(currentSpace:)` upgrades older files.
@@ -117,14 +120,19 @@ public struct SavedLayout: Codable, Equatable {
         var out = SavedLayout()
         // Empty grids are still worth saving when their mode isn't the default.
         for (space, grid) in state.grids.sorted(by: { $0.key < $1.key }) where !grid.isEmpty || grid.mode != .columns {
-            let columns = grid.columns.compactMap { col -> Column? in
-                let windows = col.windows.compactMap { id -> Window? in
-                    guard let w = snapshot.window(id) else { return nil }
-                    return Window(bundleID: w.bundleID, title: w.title, frame: w.frame, heightWeight: grid.heightWeights[id] ?? 1, id: id, label: label(id))
+            func describe(_ cols: [BetterWMCore.Column]) -> [Column] {
+                cols.compactMap { col -> Column? in
+                    let windows = col.windows.compactMap { id -> Window? in
+                        guard let w = snapshot.window(id) else { return nil }
+                        return Window(bundleID: w.bundleID, title: w.title, frame: w.frame, heightWeight: grid.heightWeights[id] ?? 1, id: id, label: label(id))
+                    }
+                    return windows.isEmpty ? nil : Column(weight: col.weight, windows: windows)
                 }
-                return windows.isEmpty ? nil : Column(weight: col.weight, windows: windows)
             }
-            if !columns.isEmpty || grid.mode != .columns { out.spaces.append(Space(id: space, columns: columns, mode: grid.mode)) }
+            let columns = describe(grid.columns)
+            if !columns.isEmpty || grid.mode != .columns {
+                out.spaces.append(Space(id: space, columns: columns, mode: grid.mode, columnsBeforeStack: grid.columnsBeforeStack.map(describe)))
+            }
         }
         for w in snapshot.windows where !state.isTiled(w.id) {
             guard let space = floatingSpace(w) else { continue }
@@ -177,15 +185,25 @@ public struct SavedLayout: Codable, Equatable {
         }
         var grid = Grid()
         grid.mode = saved.mode
+        // Saved window id → the window it was matched to, so the remembered columns can name the same windows.
+        var matched: [WindowID: WindowID] = [:]
         for col in saved.columns {
             var ids: [WindowID] = []
             for slot in col.windows {
                 guard let w = take(slot) else { continue }
                 ids.append(w.id)
+                if let saved = slot.id { matched[saved] = w.id }
                 grid.heightWeights[w.id] = slot.heightWeight
                 if let label = slot.label { labels[w.id] = label }
             }
             if !ids.isEmpty { grid.columns.append(BetterWMCore.Column(ids, weight: col.weight)) }
+        }
+        if let before = saved.columnsBeforeStack {
+            let cols = before.compactMap { col -> BetterWMCore.Column? in
+                let ids = col.windows.compactMap { $0.id.flatMap { matched[$0] } }
+                return ids.isEmpty ? nil : BetterWMCore.Column(ids, weight: col.weight)
+            }
+            if !cols.isEmpty { grid.columnsBeforeStack = cols }
         }
         return grid.isEmpty ? nil : grid
     }

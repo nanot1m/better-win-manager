@@ -299,6 +299,7 @@ extension AppDelegate {
             "desktopMoveRight": { [weak self] in self?.manager.moveCurrentDesktop(left: false) },
             "desktopToNextScreen": { [weak self] in self?.manager.sendDesktopToNextScreen() },
             "sendToNextDesktop": { [weak self] in self?.manager.sendFocusedWindow(toNext: true) },
+            "sendToDesktop": { [weak self] in self?.showSendToDesktopMenu() },
             "sendToPreviousDesktop": { [weak self] in self?.manager.sendFocusedWindow(toNext: false) },
             "desktopPrevious": { [weak self] in self?.manager.switchDesktopOrSpace(next: false) },
         ]
@@ -605,6 +606,26 @@ extension AppDelegate {
         updateConfig { $0.stackStyle = style }
     }
     @objc func menuToggleTiledTabs() { updateConfig { $0.tiledTabs.toggle() } }
+
+    /// Every desktop plus a new one, under the ring button when it is up, else at the pointer; the focused
+    /// window's own desktop is greyed.
+    func showSendToDesktopMenu() {
+        guard manager.system.focused != nil else { return }
+        let menu = NSMenu()
+        let current = manager.focusedWindowDesktop
+        let count = manager.desktopCount
+        for d in 0..<min(9, count + 1) {
+            let item = menu.addItem(withTitle: d < count ? "Desktop \(d + 1)" : "New Desktop \(d + 1)", action: #selector(menuSendFocusedToDesktop(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = d
+            item.isEnabled = d != current
+            if let spec = manager.config.hotkeys["sendToDesktop\(d + 1)"] { HotKey.applyKeyEquivalent(spec, to: item) }
+        }
+        menu.autoenablesItems = false
+        let at = ringActions.screenFrame(of: "sendToDesktop").map { NSPoint(x: $0.minX, y: $0.minY - 4) } ?? NSEvent.mouseLocation
+        menu.popUp(positioning: nil, at: at, in: nil)
+    }
+    @objc func menuSendFocusedToDesktop(_ s: NSMenuItem) { if let d = s.representedObject as? Int { manager.sendFocusedWindow(toDesktop: d) } }
     /// The ring button and hotkey: what the menus offer, for the screen in use. A stacked screen steps through
     /// the looks, so one button reaches them all; a columns screen shows or hides the tabs above its windows.
     func toggleTabs() {

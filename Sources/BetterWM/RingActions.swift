@@ -12,7 +12,7 @@ final class RingActions {
     static let symbols: [String: String] = [
         "toggleTile": "rectangle.split.2x1", "toggleStack": "rectangle.stack", "toggleTabs": "rectangle.topthird.inset.filled", "grow": "plus.magnifyingglass",
         "shrink": "minus.magnifyingglass", "equalize": "equal.square", "retile": "arrow.triangle.2.circlepath",
-        "sendToPreviousDesktop": "arrow.left.square", "sendToNextDesktop": "arrow.right.square",
+        "sendToPreviousDesktop": "arrow.left.square", "sendToNextDesktop": "arrow.right.square", "sendToDesktop": "rectangle.portrait.and.arrow.right",
         "overview": "square.grid.2x2", "popup": "ellipsis.circle",
     ]
     static func button(for key: String) -> Button {
@@ -41,7 +41,7 @@ final class RingActions {
         // Dark whatever is behind it: white icons on a translucent material vanish over a light window.
         panel.appearance = NSAppearance(named: .darkAqua)
         panel.contentView = view
-        view.onAction = { [weak self] key in self?.perform(key) }
+        view.onAction = { [weak self] key in self?.tip.hide(); self?.perform(key) }
         view.onHover = { [weak self] inside in if !inside { self?.tip.hide() } }
         // Tooltips of our own: AppKit shows none for a panel of an app that is not active.
         view.onHoverButton = { [weak self] button in
@@ -88,6 +88,12 @@ final class RingActions {
     private var showGeneration = 0
 
     func hide() { showGeneration += 1; Fade.hide(panel); tip.hide() }
+
+    /// A button's frame on screen, for anchoring a menu to it; nil when the pill is not up.
+    func screenFrame(of action: String) -> NSRect? {
+        guard panel.isVisible, let f = view.frame(of: action) else { return nil }
+        return panel.convertToScreen(f)
+    }
 }
 
 /// AppKit keeps a panel below the menu bar; the pill stands on a ring that may reach right under the status bar.

@@ -38,6 +38,7 @@ Hotkeys are registered globally with Carbon. A combination macOS already uses, s
 | `desktopNext` / `desktopPrevious` (past the last or first desktop: the neighbouring macOS Space, e.g. a fullscreen app; from a fullscreen Space: back) | ⌃→ / ⌃← | Switch to the next or previous desktop on the same screen |
 | `sendToDesktop1` … `sendToDesktop9` | ⌃⌥1 … ⌃⌥9 | Send the focused window; it is tiled there if it was tiled here |
 | `sendToNextDesktop` / `sendToPreviousDesktop` | unbound | Send relative to the current desktop |
+| `sendToDesktop` | unbound; a ring button by default | A menu of every desktop plus a new one; pick where the focused window goes |
 | `desktopMoveLeft` / `desktopMoveRight` | unbound | Reorder the current desktop among its neighbours |
 | `desktopToNextScreen` | unbound | Move the current desktop, windows and all, to the next screen, where it stays shown |
 
