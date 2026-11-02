@@ -8,6 +8,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ### Changed
 - Settings › Widgets: widgets are reordered by dragging their grip, with a line showing where the row will land, instead of up and down buttons. A widget's own settings (clock format, battery percentage, weather units and location) sit under a disclosure in its row rather than on the Status Bar page.
+- Switching between windows of a stack no longer jitters the ring and tabs: the ring's corner radius eases to the new window's instead of snapping, and the tabs keep a constant distance from the strip's start (from the configured ring radius) rather than shifting with each window's measured radius.
 
 ### Removed
 - The grey ring around a window whose tabs are not the focused ones, and the `unfocusedTabs` setting with it. The tabs now always move over the ring's gap to touch their window, which reads clearly on its own; an `unfocusedTabs` line in `config.conf` is ignored.

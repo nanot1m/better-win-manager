@@ -1623,7 +1623,7 @@ final class WindowManager {
                 }
             }
             s.show(frame: frame, items: items, focused: front, inactive: focusRing.isInactive || front != focused,
-                   clearance: focusRing.cornerRadius, side: side, config: config)
+                   clearance: focusRing.tabClearance, side: side, config: config)
         }
     }
 

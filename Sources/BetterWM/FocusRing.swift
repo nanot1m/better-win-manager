@@ -34,6 +34,10 @@ final class FocusRing {
     private var placedFrame: NSRect = .zero
     /// The ring's outer corner radius as drawn; nothing should hang over the curve.
     var cornerRadius: CGFloat { shown ? layer.cornerRadius : 0 }
+    /// How far the tabs keep from the strip's start so they never hang over the ring's curve. From the
+    /// configured radius rather than the window's measured one: a value that changed with each window would
+    /// shift the whole row of tabs on every switch.
+    var tabClearance: CGFloat { shown ? config.focusRingRadius + pad : 0 }
     /// The ring is on the window focus will come back to, greyed: no window has focus right now.
     private(set) var isInactive = false
     static let inactiveColor = NSColor(white: 0.55, alpha: 1)
@@ -242,15 +246,18 @@ final class FocusRing {
         currentColor = color
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        layer.cornerRadius = radius(for: id) + pad
+        let r = radius(for: id) + pad
+        if wasHidden { layer.cornerRadius = r }
         layer.backgroundColor = nil
         if wasHidden || !colorChanged { layer.borderColor = color.cgColor }
         if wasHidden || !targetChanged { layer.borderWidth = config.focusRingWidth }
         CATransaction.commit()
         if !wasHidden {
-            // The ring stays where it is: grey to colour (and back) is a cross-fade, and a new window in the same
-            // frame (the next tab of a stack) is marked by a short swell of the line.
+            // The ring stays where it is: grey to colour (and back) is a cross-fade, a new corner radius (the next
+            // tab of a stack, another app) eases over, and a new window in the same frame is marked by a short
+            // swell of the line.
             if colorChanged { Fade.animate(layer, "borderColor", to: color.cgColor) }
+            if layer.cornerRadius != r { Fade.animate(layer, "cornerRadius", to: r) }
             if targetChanged { pulse() }
         }
         place(frame: frame)
