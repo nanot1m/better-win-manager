@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.38.3] - 2026-11-03
+
+### Fixed
+- Clicking a tab made the strip the key window for a moment, which recoloured every inactive tab; the strip takes key status only while a tab is being renamed.
+
 ## [0.38.2] - 2026-11-03
 
 ### Changed

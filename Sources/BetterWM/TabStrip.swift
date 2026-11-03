@@ -90,8 +90,11 @@ final class TabStripWindow {
 }
 
 /// Key status for the rename field, without activating the app.
+/// Key only while a tab is being renamed: a click on a tab must not make the strip the key window, which would
+/// change how its glass and colours render.
 private final class EditablePanel: NSPanel {
-    override var canBecomeKey: Bool { true }
+    var allowsKey = false
+    override var canBecomeKey: Bool { allowsKey }
 }
 
 private final class TabStripView: NSView, NSTextFieldDelegate {
@@ -287,6 +290,7 @@ private final class TabStripView: NSView, NSTextFieldDelegate {
     /// late re-take covers that.
     private func takeFocus() {
         guard let field = editor, let host = field.window else { return }
+        (host as? EditablePanel)?.allowsKey = true
         host.makeKeyAndOrderFront(nil)
         host.makeFirstResponder(field)
         field.currentEditor()?.selectAll(nil)
@@ -298,6 +302,8 @@ private final class TabStripView: NSView, NSTextFieldDelegate {
         editor = nil
         editing = nil
         field.window?.makeFirstResponder(nil)
+        (field.window as? EditablePanel)?.allowsKey = false
+        (window as? EditablePanel)?.allowsKey = false
         if let panel = editorPanel {
             panel.orderOut(nil)
             editorPanel = nil
