@@ -419,16 +419,16 @@ private final class TabView: NSView {
     private var onGlass = false
 
     private func setGlass(_ on: Bool, clear: Bool) {
-        guard #available(macOS 26, *) else { return }
-        onGlass = on
         if on, glass == nil {
-            let g = NSGlassEffectView(frame: body.bounds)
+            guard let g = Glass.makeView() else { return }
+            g.frame = body.bounds
             g.autoresizingMask = [.width, .height]
             body.addSubview(g, positioned: .below, relativeTo: label)
             glass = g
         }
+        onGlass = on && glass != nil
         glass?.isHidden = !on
-        if let g = glass as? NSGlassEffectView { g.style = clear ? .clear : .regular }
+        if let g = glass { Glass.set(g, clear: clear) }
     }
     private static let duration = 0.16
 

@@ -470,7 +470,7 @@ final class DesktopChipsView: NSStackView {
                 .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
             ])
             let glass = style.config.barChipStyle == "glass"
-            if #available(macOS 26, *), glass {
+            if glass, Glass.makeView() != nil {
                 c.setGlass(true, tint: isCurrent ? style.activeColor : nil, clear: style.config.glassStyle == "clear")
                 c.layer?.backgroundColor = nil
             } else {

@@ -278,10 +278,9 @@ final class ChipView: NSView {
 
     /// `tint` colours the active chip; nil leaves the glass clear. Flat chips keep their layer colour.
     func setGlass(_ on: Bool, tint: NSColor?, clear: Bool = false) {
-        guard #available(macOS 26, *) else { return }
         if on, glass == nil {
-            let g = NSGlassEffectView()
-            g.cornerRadius = 5
+            guard let g = Glass.makeView() else { return }
+            Glass.set(g, cornerRadius: 5)
             wash.wantsLayer = true
             wash.layer?.cornerRadius = 5
             for v in [g, wash] {
@@ -295,7 +294,7 @@ final class ChipView: NSView {
             glass = g
         }
         glass?.isHidden = !on
-        if let g = glass as? NSGlassEffectView { g.style = clear ? .clear : .regular }
+        if let g = glass { Glass.set(g, clear: clear) }
         wash.isHidden = !on || tint == nil
         wash.layer?.backgroundColor = tint?.withAlphaComponent(0.8).cgColor
         if layer?.borderWidth != 2 {
@@ -377,10 +376,7 @@ final class BarView: NSView {
     private let background = NSVisualEffectView()
     private let solid = NSView()
     /// Liquid Glass, where the system has it.
-    private let glass: NSView? = {
-        if #available(macOS 26, *) { return NSGlassEffectView() }
-        return nil
-    }()
+    private let glass: NSView? = Glass.makeView()
     private var avoidNotch = false
     private var notchPortals = true
     private(set) var textColor: NSColor = .labelColor
@@ -458,9 +454,9 @@ final class BarView: NSView {
         let blur = mode == "blur" || (mode == "glass" && glass == nil)
         background.isHidden = !blur
         glass?.isHidden = !glassOn
-        if #available(macOS 26, *), let g = glass as? NSGlassEffectView {
-            g.cornerRadius = config.barRadius
-            g.style = config.glassStyle == "clear" ? .clear : .regular
+        if let g = glass {
+            Glass.set(g, cornerRadius: config.barRadius)
+            Glass.set(g, clear: config.glassStyle == "clear")
         }
         solid.isHidden = blur || glassOn
         solid.layer?.backgroundColor = blur || glassOn ? nil : (NSColor(hex: config.barBackground) ?? .windowBackgroundColor).cgColor

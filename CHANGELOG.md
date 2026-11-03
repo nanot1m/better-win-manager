@@ -6,6 +6,12 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.38.1] - 2026-11-03
+
+### Fixed
+- The focus ring is a border again, its whole width outside the window, rather than a filled card: the card showed through translucent windows (a terminal with a transparent background).
+- The release build failed on the build machine's older SDK: Liquid Glass is now reached by name at run time, so the app builds with any SDK and uses glass where the system has it.
+
 ## [0.38.0] - 2026-11-03
 
 ### Changed

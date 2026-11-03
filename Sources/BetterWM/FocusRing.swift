@@ -331,12 +331,15 @@ final class FocusRing {
         CATransaction.setDisableActions(true)
         let r = radius(for: id) + pad
         if wasHidden { layer.cornerRadius = r }
-        if wasHidden || !colorChanged { layer.backgroundColor = color.cgColor }
+        // A border as wide as the ring's reach, its inner edge at the window's edge: nothing lies under the window,
+        // so a translucent window shows no ring colour through.
+        layer.borderWidth = pad
+        if wasHidden || !colorChanged { layer.borderColor = color.cgColor }
         CATransaction.commit()
         if !wasHidden {
             // The ring stays where it is: grey to colour (and back) is a cross-fade, a new corner radius (the next
             // tab of a stack, another app) eases over.
-            if colorChanged { Fade.animate(layer, "backgroundColor", to: color.cgColor) }
+            if colorChanged { Fade.animate(layer, "borderColor", to: color.cgColor) }
             if layer.cornerRadius != r { Fade.animate(layer, "cornerRadius", to: r) }
         }
         place(frame: frame)
