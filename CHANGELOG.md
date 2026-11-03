@@ -6,6 +6,14 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.38.2] - 2026-11-03
+
+### Changed
+- The action buttons sit just under their window with the ring, so the window hides the part reaching over its edge and the pill grows out from behind it, like the tabs.
+
+### Fixed
+- Side tab strips (tabs on the left or right) started at the top of the outer gap while the window and its ring sat lower, below the room kept for the ring buttons; the strip now spans exactly the ring's height.
+
 ## [0.38.1] - 2026-11-03
 
 ### Fixed

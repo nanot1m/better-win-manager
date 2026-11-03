@@ -18,7 +18,8 @@ final class FocusRing {
     /// and how far its inner edge is from the frame.
     /// Frame, greyed, corner clearance (how far in from the ring's outer corner anything standing on the ring
     /// should start), line width, colour.
-    var onChange: ((NSRect?, Bool, CGFloat, CGFloat, NSColor) -> Void)?
+    /// Frame, greyed, clearance, overlap, colour, and the window the buttons go right under.
+    var onChange: ((NSRect?, Bool, CGFloat, CGFloat, NSColor, CGWindowID?) -> Void)?
     private var currentColor = NSColor.controlAccentColor
     /// A floating window with the ring turned off for floating windows: no ring, but the buttons still want a
     /// place and a colour, so the frame the ring would have had is kept for them.
@@ -29,9 +30,9 @@ final class FocusRing {
 
     private func notify() {
         if let a = buttonsAnchor {
-            onChange?(a.frame, false, radius(for: a.id) + pad, config.ringButtonsOverlap, config.ringColor(floating: true))
+            onChange?(a.frame, false, radius(for: a.id) + pad, config.ringButtonsOverlap, config.ringColor(floating: true), a.id)
         } else {
-            onChange?(shown ? placedFrame : nil, isInactive, current.map(clearance(for:)) ?? pad, config.ringButtonsOverlap, currentColor)
+            onChange?(shown ? placedFrame : nil, isInactive, current.map(clearance(for:)) ?? pad, config.ringButtonsOverlap, currentColor, shown ? current : nil)
         }
         if shown != notifiedShown { notifiedShown = shown; onFocusChange?() }
     }
@@ -225,6 +226,7 @@ final class FocusRing {
     func reorder() {
         guard current != nil, shown, !suspended else { return }
         orderFront()
+        notify()
     }
 
     /// The focused window as the last snapshot saw it; the ring never asks Accessibility itself.

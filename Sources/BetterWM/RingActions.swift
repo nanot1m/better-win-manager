@@ -34,8 +34,8 @@ final class RingActions {
         panel.backgroundColor = .clear
         panel.hasShadow = false
         panel.animationBehavior = .none
-        // One step above the ring, which sits at floating level and orders itself front on every focus change.
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
+        // Right under the window it serves, above the ring: the window hides the part that reaches over its edge.
+        panel.level = .normal
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         panel.acceptsMouseMovedEvents = true
         // Dark whatever is behind it: white icons on a translucent material vanish over a light window.
@@ -66,24 +66,26 @@ final class RingActions {
     /// edge is from it. The pill grows out of the ring's top edge near the right corner, in the ring's colour,
     /// above the window so it never covers an app's own toolbar. Nil hides the pill.
     /// `clearance`: how far in from the ring's outer corner the pill ends, so it clears the curve. `overlap`: how far
-    /// the pill reaches down into the ring's band.
-    func follow(ring: NSRect?, clearance: CGFloat, overlap: CGFloat, color: NSColor, enabled: Bool) {
+    /// the pill reaches down into the ring's band. `under`: the window the pill goes right beneath, above the ring,
+    /// so the window hides the overlap and the pill grows out from behind it.
+    func follow(ring: NSRect?, clearance: CGFloat, overlap: CGFloat, color: NSColor, under: CGWindowID?, enabled: Bool) {
         guard enabled, !keys.isEmpty, let ring else { Fade.hide(panel); return }
         view.setColor(color)
         let size = panel.frame.size
-        // Standing on the ring: its bottom edge meets the ring's inner edge, so pill and ring read as one shape,
-        // and nothing of the pill hangs over the window.
         let origin = NSPoint(x: ring.maxX - clearance - size.width, y: ring.maxY - overlap)
         if panel.frame.origin != origin { panel.setFrameOrigin(origin) }
+        let order = { [panel] in
+            if let under { panel.order(.below, relativeTo: Int(under)) } else if !panel.isVisible { panel.orderFrontRegardless() }
+        }
         if panel.isVisible || !Fade.enabled {
-            Fade.show(panel) { if !panel.isVisible { panel.orderFrontRegardless() } }
+            Fade.show(panel, order)
         } else {
             // The ring lands first; the buttons follow, so the ring stays the thing the eye tracks.
             showGeneration += 1
             let generation = showGeneration
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
                 guard let self, generation == self.showGeneration else { return }
-                Fade.show(self.panel) { if !self.panel.isVisible { self.panel.orderFrontRegardless() } }
+                Fade.show(self.panel, order)
             }
         }
     }

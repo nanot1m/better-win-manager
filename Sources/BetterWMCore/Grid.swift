@@ -419,12 +419,13 @@ public struct GridGeometry {
         guard grid.mode == .stacked else { return nil }
         // The strip runs the full length of the outer gap's inside; only across is it bound to the slots. It reaches
         // over the ring as far as the ring buttons do, so tabs and buttons stand on the same line.
-        let t = config.tabHeight + config.ringButtonsOverlap
+        // A side strip spans the ring's height, which starts below any room kept for the ring buttons.
+        let t = config.tabHeight + config.ringButtonsOverlap, o = config.focusRingOutset
         switch config.stackStyle {
         case .cascade: return nil
         case .tabsTop: return CGRect(x: outer.minX, y: inner.minY, width: outer.width, height: t)
-        case .tabsLeft: return CGRect(x: inner.minX, y: outer.minY, width: t, height: outer.height)
-        case .tabsRight: return CGRect(x: inner.maxX - t, y: outer.minY, width: t, height: outer.height)
+        case .tabsLeft: return CGRect(x: inner.minX, y: inner.minY - o, width: t, height: inner.height + 2 * o)
+        case .tabsRight: return CGRect(x: inner.maxX - t, y: inner.minY - o, width: t, height: inner.height + 2 * o)
         }
     }
 
