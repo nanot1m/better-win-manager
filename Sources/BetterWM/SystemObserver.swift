@@ -34,8 +34,6 @@ final class SystemObserver {
     private(set) var closedByApp: Set<WindowID> = []
     /// The frontmost app's focused standard window as of the last snapshot or `refreshFocused`.
     private(set) var focused: AXWindow?
-    /// The focused dialog or sheet when no standard window has focus; for the ring only.
-    private(set) var focusedDialog: AXWindow?
 
     /// Space to keep free at the top of each screen (the status bar), in points.
     var topInset: (NSScreen) -> CGFloat = { _ in 0 }
@@ -237,11 +235,9 @@ final class SystemObserver {
     func refreshFocused(_ completion: @escaping () -> Void) {
         AX.queue.async {
             let f = AXWindow.focused()
-            let dialog = f == nil ? AXWindow.focused(dialogs: true) : nil
             if let f, let id = f.windowID { self.ax[id] = f }
             DispatchQueue.main.async {
                 self.focused = f
-                self.focusedDialog = dialog
                 if let f, let id = f.windowID { self.axMain[id] = f }
                 completion()
             }

@@ -7,11 +7,15 @@ final class WindowObserver {
     private let onNewWindow: (AXWindow) -> Void
     private let onFocusChange: () -> Void
     private let onTitleChange: (pid_t) -> Void
+    /// A window of the app was destroyed; the element is gone, so only the app is known.
+    private let onDestroyed: (pid_t) -> Void
 
-    init(onNewWindow: @escaping (AXWindow) -> Void, onFocusChange: @escaping () -> Void, onTitleChange: @escaping (pid_t) -> Void) {
+    init(onNewWindow: @escaping (AXWindow) -> Void, onFocusChange: @escaping () -> Void, onTitleChange: @escaping (pid_t) -> Void,
+         onDestroyed: @escaping (pid_t) -> Void) {
         self.onNewWindow = onNewWindow
         self.onFocusChange = onFocusChange
         self.onTitleChange = onTitleChange
+        self.onDestroyed = onDestroyed
         for app in NSWorkspace.shared.runningApplications { observe(app) }
         let nc = NSWorkspace.shared.notificationCenter
         nc.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] n in
@@ -50,6 +54,12 @@ final class WindowObserver {
                 var pid: pid_t = 0
                 AXUIElementGetPid(element, &pid)
                 me.onTitleChange(pid)
+                return
+            case kAXUIElementDestroyedNotification:
+                var pid: pid_t = 0
+                AXUIElementGetPid(element, &pid)
+                me.onDestroyed(pid)
+                me.onFocusChange()
                 return
             default: me.onFocusChange(); return
             }

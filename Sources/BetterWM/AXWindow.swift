@@ -159,8 +159,11 @@ final class AXWindow: Hashable {
         AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &sub)
         var minimized: CFTypeRef?
         AXUIElementCopyAttributeValue(element, kAXMinimizedAttribute as CFString, &minimized)
+        // File pickers and other panels call themselves standard windows too; what they lack is a close button.
+        var close: CFTypeRef?
+        let hasClose = AXUIElementCopyAttributeValue(element, kAXCloseButtonAttribute as CFString, &close) == .success && close != nil
         let standard = role as? String == kAXWindowRole && sub as? String == kAXStandardWindowSubrole
-            && (minimized as? Bool) != true
+            && (minimized as? Bool) != true && hasClose
         cached { lastStandard = standard }
         return standard
     }
@@ -219,25 +222,16 @@ final class AXWindow: Hashable {
 
     /// Queue only: the frontmost app's focused window, if it is a standard one. Never our own: an Accessibility
     /// request into this process runs AppKit's accessibility code on the asking thread, racing the main thread.
-    /// `dialogs` also accepts a dialog or sheet (a file picker, an alert), which only the focus ring wants.
-    static func focused(dialogs: Bool = false) -> AXWindow? {
+    static func focused() -> AXWindow? {
         guard let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != getpid(),
               !AXResponsiveness.isUnresponsive(app.processIdentifier) else { return nil }
         var v: CFTypeRef?
         let err = AXUIElementCopyAttributeValue(AXResponsiveness.application(app.processIdentifier), kAXFocusedWindowAttribute as CFString, &v)
         guard err == .success, let v else { AXResponsiveness.noteFailure(app.processIdentifier, err); return nil }
         let w = AXWindow(element: v as! AXUIElement, pid: app.processIdentifier)
-        guard w.isStandard || (dialogs && w.isDialog) else { return nil }
+        guard w.isStandard else { return nil }
         w.warm()
         return w
-    }
-
-    /// A window of the app that is not a standard one: a dialog, a sheet, a file picker.
-    var isDialog: Bool {
-        var role: CFTypeRef?, minimized: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role) == .success else { return false }
-        AXUIElementCopyAttributeValue(element, kAXMinimizedAttribute as CFString, &minimized)
-        return (role as? String == kAXWindowRole || role as? String == kAXSheetRole) && (minimized as? Bool) != true
     }
 
     /// Queue only. Top-left-origin global coordinates, matching what AX uses.

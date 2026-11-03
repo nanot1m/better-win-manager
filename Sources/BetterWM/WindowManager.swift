@@ -605,7 +605,7 @@ final class WindowManager {
         focusRing.isTiledID = { [unowned self] id in self.state.isTiled(id) }
         focusRing.isShown = { [unowned self] id in self.desktops.isShown(self.desktops.workspace(of: id)) }
         focusRing.tiledWindows = { [unowned self] in self.state.grids.values.flatMap(\.windows) }
-        focusRing.focusedWindow = { [unowned self] in self.system.focused ?? self.system.focusedDialog }
+        focusRing.focusedWindow = { [unowned self] in self.system.focused }
         focusRing.onReorder = { [unowned self] in self.stackHandles() }
         if config.restoreLayouts, let data = try? Data(contentsOf: Config.statePath),
            let layout = try? JSONDecoder().decode(SavedLayout.self, from: data) {
@@ -709,6 +709,13 @@ final class WindowManager {
                                         self?.system.titlesChanged(for: pid)
                                         self?.system.refreshFocused { self?.onFocusChange?() }
                                         self?.scheduleTick()
+                                    },
+                                    // Accessibility reports a window's destruction even when the app keeps the
+                                    // window object (Ghostty); the window server stays silent then.
+                                    onDestroyed: { [weak self] _ in
+                                        self?.focusRing.update()
+                                        self?.windowWentAway()
+                                        self?.scheduleTick(after: 0.05)
                                     })
         tick()
         // Window creation, destruction, focus and Space changes all arrive as events; the timer is a safety net.
@@ -850,7 +857,7 @@ final class WindowManager {
     /// The focused window closing leaves its app frontmost with nothing to focus (macOS does not pick another
     /// app's window): the desktop's top window takes the focus, so ring and tabs stay sensible. Also for a window
     /// its app keeps alive after closing (Ghostty), which sends no destroy event.
-    private func windowWentAway(_ id: WindowID) {
+    private func windowWentAway(_ id: WindowID? = nil) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
             guard let self, let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != getpid() else { return }
             // Accessibility may still name the closed window as focused (the app keeps it alive); what counts is

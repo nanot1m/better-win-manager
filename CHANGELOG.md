@@ -6,6 +6,14 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.35.3] - 2026-11-03
+
+### Changed
+- File pickers and other panels are no longer treated as windows: no focus ring (it stays, greyed, on the window behind), no tiling, no tab. They report themselves as standard windows but have no close button, which is now part of the test. BetterWM's own windows keep their ring.
+
+### Fixed
+- A window its app keeps alive after closing (Ghostty) loses the focus ring and hands the focus on at once, on the Accessibility destroyed notification; the window server sends nothing for these, so it used to wait for the next pass.
+
 ## [0.35.2] - 2026-11-03
 
 ### Changed
