@@ -19,8 +19,9 @@ refresh triggers. `StatusBar` keeps the list, lays it out and forwards configura
 2. **Left side as widgets** — done. Desktop chips, fullscreen chips and the active window title are widgets with a
    `barLeftWidgets` order, switchable and reorderable in Settings. Chip drag-to-reorder, the drop highlight and the
    chip menu live in the chips widget; `BarContext` carries the manager callbacks.
-3. **Cats as a widget with a layout rule** — the cats need the free span between the sides and the notch portals;
-   they become a free-floating widget positioned after the sides are laid out, reading the spans from the layout.
+3. **Cats as a widget with a layout rule** — done. `CatsWidget` owns one `BarCat` per bar and the reactions; its
+   view is the bar's `BarFreeView`, handed the free span and the notch gap after each layout. It is switched by
+   `barCat`, not by either order list.
 4. **Settings from a schema** — done. `Config.BarWidget.settings` describes each widget's settings (config key, title,
    note, kind: toggle, text, auto-or-text); the Widgets page renders them under the widget's disclosure, reading and
    writing through `Config.value(forKey:)` and `Config.set(_:to:)`. The keys stay the existing ones (`barClockFormat`,

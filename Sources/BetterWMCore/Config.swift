@@ -134,8 +134,10 @@ public struct Config {
     public enum BarWidget: String, CaseIterable {
         case desktops, fullscreen, title
         case weather, cpu, memory, disk, keyboard, wifi, battery, clock, menu, media, sound
+        /// Roams the free span between the sides; ordered by neither list.
+        case cats
         public static let leftKinds: [BarWidget] = [.desktops, .fullscreen, .title]
-        public static let rightKinds: [BarWidget] = allCases.filter { !leftKinds.contains($0) }
+        public static let rightKinds: [BarWidget] = allCases.filter { !leftKinds.contains($0) && $0 != .cats }
         public var title: String {
             switch self {
             case .desktops: return "Desktop chips"
@@ -152,6 +154,7 @@ public struct Config {
             case .menu: return "BetterWM menu button"
             case .media: return "Now playing (Music, Spotify)"
             case .sound: return "Sound (volume, output and input devices)"
+            case .cats: return "Cats"
             }
         }
         /// The widget's own settings, shown under it in Settings › Widgets.

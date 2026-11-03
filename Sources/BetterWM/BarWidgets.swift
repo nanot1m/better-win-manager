@@ -7,6 +7,16 @@ struct BarStyle {
     let activeColor: NSColor
     let focusOutline: NSColor?
     let config: Config
+
+    static func textColor(of config: Config) -> NSColor {
+        config.barTextColor.lowercased() == "auto" ? .labelColor : (NSColor(hex: config.barTextColor) ?? .labelColor)
+    }
+}
+
+/// A view laid over the whole bar that lives in the span left free by the sides.
+protocol BarFreeView: NSView {
+    var roam: ClosedRange<CGFloat> { get set }
+    var gap: ClosedRange<CGFloat>? { get set }
 }
 
 /// What the left-side widgets ask of the window manager, and what they tell it.
@@ -594,7 +604,71 @@ enum BarWidgets {
     static func make(config: Config, context: BarContext) -> [Config.BarWidget: BarWidget] {
         let all: [BarWidget] = [DesktopsWidget(context: context), FullscreenWidget(context: context), TitleWidget(context: context),
                                 WeatherWidget(config: config), CpuWidget(), MemoryWidget(), DiskWidget(), KeyboardWidget(),
-                                WifiWidget(), BatteryWidget(), ClockWidget(), MenuWidget(), MediaWidget(), SoundWidget()]
+                                WifiWidget(), BatteryWidget(), ClockWidget(), MenuWidget(), MediaWidget(), SoundWidget(),
+                                CatsWidget(context: context)]
         return Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+    }
+}
+
+extension BarCat: BarFreeView {}
+
+/// The cats: one `BarCat` per bar, roaming the span the layout leaves free, reacting to what the other
+/// widgets show (a new desktop, a low battery, a busy machine).
+final class CatsWidget: BarWidget {
+    let id = Config.BarWidget.cats
+    var wantsRefresh: (() -> Void)?
+    /// The widgets the cats watch, looked up by id; set by the bar once every widget exists.
+    var peer: (Config.BarWidget) -> BarWidget? = { _ in nil }
+    private let context: BarContext
+    private var config: Config?
+    private var cats: [(screen: NSScreen, view: BarCat)] = []
+    private var lastDesktop: [ObjectIdentifier: Int] = [:]
+    private var warnedBatteryLow = false
+    private var lastLoadReaction = Date.distantPast
+
+    init(context: BarContext) { self.context = context }
+
+    func makeView(for screen: NSScreen) -> NSView {
+        let v = BarCat(frame: .zero)
+        if let c = config { v.configure(sheets: c.barCatSheets, color: BarStyle.textColor(of: c), barHeight: c.barHeight) }
+        cats.append((screen, v))
+        return v
+    }
+    func dropViews() { cats.removeAll(); lastDesktop = [:] }
+    func start() {}
+    func stop() {}
+    func apply(_ config: Config) {
+        self.config = config
+        cats.forEach { $0.view.configure(sheets: config.barCatSheets, color: BarStyle.textColor(of: config), barHeight: config.barHeight) }
+    }
+
+    func render(_ style: BarStyle) {
+        let battery = peer(.battery) as? BatteryWidget
+        let chips = peer(.desktops) as? DesktopsWidget
+        let load = (peer(.cpu) as? CpuWidget)?.load
+        for (screen, cat) in cats where !cat.isHidden {
+            let key = ObjectIdentifier(cat)
+            if let current = context.shownOn(screen), current != lastDesktop[key] {
+                if lastDesktop[key] != nil, let x = chips?.views.first(where: { $0.window === cat.window })?.chipMidX(for: current, in: cat) {
+                    cat.react(.desktopSwitched(towardX: x))
+                }
+                lastDesktop[key] = current
+            }
+            if let b = battery?.battery, let w = battery?.views.first(where: { $0.row.window === cat.window })?.row {
+                if b.percent <= 15, !b.charging, !warnedBatteryLow, !w.isHidden {
+                    warnedBatteryLow = true
+                    cat.react(.batteryLow(x: w.convert(w.bounds, to: cat).midX))
+                } else if warnedBatteryLow, b.charging {
+                    warnedBatteryLow = false
+                    cat.react(.charging(x: w.convert(w.bounds, to: cat).midX))
+                } else if b.percent > 20 {
+                    warnedBatteryLow = false
+                }
+            }
+            if let load, load > 0.8, Date().timeIntervalSince(lastLoadReaction) > 120 {
+                lastLoadReaction = Date()
+                cat.react(.load)
+            }
+        }
     }
 }

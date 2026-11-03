@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Changed
+- The cats are a bar widget like the rest, reading the free span from the bar's layout; nothing visible changes.
+
 ## [0.36.1] - 2026-11-03
 
 ### Fixed

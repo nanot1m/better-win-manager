@@ -37,6 +37,7 @@ final class StatusBar {
     init(config: Config) {
         self.config = config
         widgets = BarWidgets.make(config: config, context: context)
+        (widgets[.cats] as? CatsWidget)?.peer = { [weak self] in self?.widgets[$0] }
         context.desktopsOn = { [unowned self] in self.desktopsOn($0) }
         context.shownOn = { [unowned self] in self.shownOn($0) }
         context.activeDesktop = { [unowned self] in self.activeDesktop() }
@@ -68,11 +69,13 @@ final class StatusBar {
 
     /// Starts the widgets in the bar and stops the rest, so a widget that is off costs nothing.
     private func runWidgets() {
-        let inUse = config.barWidgets + config.barLeftWidgets
+        let inUse = inUseWidgets
         for (id, w) in widgets {
             if config.bar && inUse.contains(id) { w.apply(config); w.start() } else { w.stop() }
         }
     }
+
+    private var inUseWidgets: [Config.BarWidget] { config.barLeftWidgets + config.barWidgets + (config.barCat ? [.cats] : []) }
 
     /// Distance from the screen's top edge to the bar's bottom edge; zero when the bar is off.
     func inset(for screen: NSScreen) -> CGFloat { config.bar ? config.barTopOffset + height(for: screen) : 0 }
@@ -137,8 +140,9 @@ final class StatusBar {
             let frame = NSRect(x: screen.frame.minX + m, y: screen.frame.maxY - config.barTopOffset - h, width: screen.frame.width - 2 * m, height: h)
             let w = BarWindow(frame: frame, screen: screen)
             w.view.apply(config, avoidNotch: atScreenTop(screen))
-            w.view.setLeftWidgets(config.barLeftWidgets.compactMap { id in widgets[id].map { (id, $0.makeView(for: screen)) } })
-            w.view.setRightWidgets(config.barWidgets.compactMap { id in widgets[id].map { (id, $0.makeView(for: screen)) } })
+            w.view.setLeftWidgets(config.barLeftWidgets.compactMap { widgets[$0]?.makeView(for: screen) })
+            w.view.setRightWidgets(config.barWidgets.compactMap { widgets[$0]?.makeView(for: screen) })
+            w.view.setFreeView(config.barCat ? widgets[.cats]?.makeView(for: screen) as? BarFreeView : nil)
             windows.append(w)
             // Entering fullscreen hides the menu bar, which lands here too: a fullscreen screen gets no bar.
             if !Spaces.showsFullscreen(screen) { w.orderFrontRegardless() }
@@ -178,19 +182,10 @@ final class StatusBar {
             let fullscreen = Spaces.showsFullscreen(w.targetScreen) || hiddenForSystemReveal
             if fullscreen { w.orderOut(nil) } else if !w.isVisible { w.orderFrontRegardless() }
         }
-        // Widgets first: the cats read the battery and CPU from the widgets' fresh readings.
+        // The cats come last: they read the battery and CPU from the other widgets' fresh readings.
         if let v = windows.first?.view {
             let style = BarStyle(textColor: v.textColor, activeColor: v.activeColor, focusOutline: v.focusOutline, config: config)
-            for id in config.barLeftWidgets + config.barWidgets { widgets[id]?.render(style) }
-        }
-        var model = BarView.Model(
-            current: nil,
-            battery: config.barWidgets.contains(.battery) ? (widgets[.battery] as? BatteryWidget)?.battery : nil,
-            cpu: config.barWidgets.contains(.cpu) ? (widgets[.cpu] as? CpuWidget)?.load : nil
-        )
-        for w in windows {
-            model.current = shownOn(w.targetScreen)
-            w.view.render(model)
+            for id in inUseWidgets { widgets[id]?.render(style) }
         }
     }
 
@@ -341,33 +336,18 @@ final class ChipView: NSView {
 }
 
 final class BarView: NSView {
-    /// What the cats react to; the widgets draw everything else.
-    struct Model {
-        /// The desktop this screen shows.
-        var current: Int?
-        var battery: SystemStatus.Battery?
-        var cpu: Double?
-    }
-
     private let screen: NSScreen
     private let background = NSVisualEffectView()
     private let solid = NSView()
     private var avoidNotch = false
     private var notchPortals = true
-    private var catsEnabled = true
     private(set) var textColor: NSColor = .labelColor
     private(set) var activeColor: NSColor = .controlAccentColor
     private(set) var focusOutline: NSColor?
     private var padding: CGFloat = 12
     private let left = NSStackView()
     private let right = NSStackView()
-    private let cat = BarCat(frame: .zero)
-    /// The widget views by widget; the cats aim at some of them.
-    private var leftViews: [Config.BarWidget: NSView] = [:]
-    private var rightViews: [Config.BarWidget: NSView] = [:]
-    private var lastDesktop: Int?
-    private var warnedBatteryLow = false
-    private var lastLoadReaction = Date.distantPast
+    private var free: (any BarFreeView)?
     private var leftLeading: NSLayoutConstraint!
     private var leftTrailing: NSLayoutConstraint!
     private var rightTrailing: NSLayoutConstraint!
@@ -394,12 +374,6 @@ final class BarView: NSView {
         right.alignment = .centerY
         right.spacing = 12
         for v in [left, right] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
-        cat.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(cat)
-        NSLayoutConstraint.activate([
-            cat.topAnchor.constraint(equalTo: topAnchor), cat.bottomAnchor.constraint(equalTo: bottomAnchor),
-            cat.leadingAnchor.constraint(equalTo: leadingAnchor), cat.trailingAnchor.constraint(equalTo: trailingAnchor),
-        ])
         leftLeading = left.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12)
         leftTrailing = left.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12)
         rightTrailing = right.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12)
@@ -421,7 +395,7 @@ final class BarView: NSView {
         padding = config.barPadding
         leftLeading.constant = padding
         rightTrailing.constant = -padding
-        textColor = config.barTextColor.lowercased() == "auto" ? .labelColor : (NSColor(hex: config.barTextColor) ?? .labelColor)
+        textColor = BarStyle.textColor(of: config)
         activeColor = config.barActiveColor.lowercased() == "accent" ? .controlAccentColor : (NSColor(hex: config.barActiveColor) ?? .controlAccentColor)
         focusOutline = config.barFocusOutlineColor.lowercased() == "auto" ? nil : NSColor(hex: config.barFocusOutlineColor)
         let blur = config.barBackground.lowercased() == "blur"
@@ -431,32 +405,35 @@ final class BarView: NSView {
         layer?.cornerRadius = config.barRadius
         layer?.borderWidth = config.barBorderWidth
         layer?.borderColor = (NSColor(hex: config.barBorderColor) ?? .separatorColor).cgColor
-        cat.isHidden = !config.barCat
-        catsEnabled = config.barCat
         notchPortals = config.barNotchPortals
-        cat.configure(sheets: config.barCatSheets, color: textColor, barHeight: config.barHeight)
+        needsLayout = true
+    }
+
+    /// The view spanning the whole bar that gets the free span after each layout; nil for none.
+    func setFreeView(_ v: (any BarFreeView)?) {
+        free?.removeFromSuperview()
+        free = v
+        guard let v else { return }
+        v.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(v)
+        NSLayoutConstraint.activate([
+            v.topAnchor.constraint(equalTo: topAnchor), v.bottomAnchor.constraint(equalTo: bottomAnchor),
+            v.leadingAnchor.constraint(equalTo: leadingAnchor), v.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
         needsLayout = true
     }
 
     /// The left side, in display order; each view belongs to a widget that updates it.
-    func setLeftWidgets(_ views: [(Config.BarWidget, NSView)]) {
+    func setLeftWidgets(_ views: [NSView]) {
         left.arrangedSubviews.forEach { left.removeArrangedSubview($0); $0.removeFromSuperview() }
-        leftViews = [:]
-        for (id, v) in views {
-            left.addArrangedSubview(v)
-            leftViews[id] = v
-        }
+        views.forEach(left.addArrangedSubview)
         needsLayout = true
     }
 
     /// The right side, in display order; each view belongs to a widget that updates it.
-    func setRightWidgets(_ views: [(Config.BarWidget, NSView)]) {
+    func setRightWidgets(_ views: [NSView]) {
         right.arrangedSubviews.forEach { right.removeArrangedSubview($0); $0.removeFromSuperview() }
-        rightViews = [:]
-        for (id, v) in views {
-            right.addArrangedSubview(v)
-            rightViews[id] = v
-        }
+        views.forEach(right.addArrangedSubview)
         needsLayout = true
     }
 
@@ -465,13 +442,14 @@ final class BarView: NSView {
         // Keep content out of the notch: the auxiliary areas are the usable strips either side of it.
         if avoidNotch, let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea {
             // A long title would otherwise run right up to the notch and leave the cats nowhere to stand.
-            let catRoom: CGFloat = catsEnabled ? 110 : 0
+            let catRoom: CGFloat = free != nil ? 110 : 0
             leftTrailing.constant = -(bounds.width - (l.maxX - screen.frame.minX)) - 8 - catRoom
             rightLeading.constant = (r.minX - screen.frame.minX) + 8
         } else {
             leftTrailing.constant = -padding
             rightLeading.constant = padding
         }
+        guard let cat = free else { return }
         // The cats roam whatever is free between the left content and the right content; the notch in between is
         // crossed through portals rather than avoided.
         var freeStart = left.frame.maxX + 16
@@ -492,34 +470,6 @@ final class BarView: NSView {
             cat.gap = nil
         }
         cat.roam = freeStart...max(freeStart, freeEnd)
-    }
-
-    func render(_ m: Model) { notifyCats(m) }
-
-    /// Hands the cats the things worth reacting to: a new active desktop, a low battery, a busy machine.
-    private func notifyCats(_ m: Model) {
-        guard !cat.isHidden else { return }
-        if let current = m.current, current != lastDesktop {
-            if lastDesktop != nil, let x = (leftViews[.desktops] as? DesktopChipsView)?.chipMidX(for: current, in: cat) {
-                cat.react(.desktopSwitched(towardX: x))
-            }
-            lastDesktop = current
-        }
-        if let b = m.battery {
-            if b.percent <= 15, !b.charging, !warnedBatteryLow, let w = rightViews[.battery], !w.isHidden {
-                warnedBatteryLow = true
-                cat.react(.batteryLow(x: w.convert(w.bounds, to: cat).midX))
-            } else if warnedBatteryLow, b.charging, let w = rightViews[.battery] {
-                warnedBatteryLow = false
-                cat.react(.charging(x: w.convert(w.bounds, to: cat).midX))
-            } else if b.percent > 20 {
-                warnedBatteryLow = false
-            }
-        }
-        if let load = m.cpu, load > 0.8, Date().timeIntervalSince(lastLoadReaction) > 120 {
-            lastLoadReaction = Date()
-            cat.react(.load)
-        }
     }
 
     /// Expands {app} and {title} in `format`; the app name is bold, everything else dimmer. With no title (or a
