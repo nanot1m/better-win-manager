@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Added
+- `parkingMat` (Settings › Layout › Hide the parking corner): a patch of wallpaper over the bottom-right corner, where windows of other desktops and hidden tabs wait with two points showing, hiding those slivers and their shadows. Needs Screen Recording; off by default.
+
 ### Fixed
 - Tab strips sat behind the app windows, where the focused window's shadow fell on them and made the active tab a shade darker than the ring. They now sit above app windows like the ring.
 

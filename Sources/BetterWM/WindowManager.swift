@@ -75,6 +75,7 @@ final class WindowManager {
     let overlay: ZoneOverlay
     let focusRing: FocusRing
     private var handles: [HandleWindow] = []
+    private var parkingMats: [ParkingMatWindow] = []
     private var timer: Timer?
     private var axObserver: WindowObserver?
     /// Set while a Space switch is in flight; the window list mixes both desktops during the slide.
@@ -1125,16 +1126,46 @@ final class WindowManager {
         guard NSScreen.screens.contains(where: Spaces.showsFullscreen) else { return }
         tabStrips.forEach { $0.hide() }
         handles.forEach { $0.orderOut(nil) }
+        parkingMats.forEach { $0.hide() }
         focusRing.update()
         // macOS shoves parked windows onto the screen during the transition; that is no refusal of theirs.
         if claimsSuspendedUntil < Date() { suspendClaims(until: Date().addingTimeInterval(5)) }
     }
 
     private func refreshChrome() {
+        refreshParkingMats()
         refreshHandles()
         refreshTabStrips()
         focusRing.update()
         stackHandles()
+    }
+
+    /// One mat per screen over the parking corner: the corner as it looks without the parked windows, so the
+    /// shadows of the windows on the desktop stay and the seam is invisible. Tiled windows reaching in are cut out.
+    private func refreshParkingMats() {
+        var needed: [(area: CGRect, cutouts: [(CGRect, CGFloat)])] = []
+        if config.parkingMat, CGPreflightScreenCaptureAccess() {
+            for (space, geo) in activeGeometries() {
+                if let ws = VirtualWorkspaces.workspace(of: space), let s = screen(ofDesktop: ws), Spaces.showsFullscreen(s) { continue }
+                let cutouts = geo.windowFrames().filter { !geo.waitsAside($0.1) }.map { ($0.1, config.ringRadius(for: $0.0)) }
+                needed.append((geo.area, cutouts))
+            }
+        }
+        while parkingMats.count < needed.count { parkingMats.append(ParkingMatWindow()) }
+        guard !needed.isEmpty else { parkingMats.forEach { $0.hide() }; return }
+        // A parked window shows a sliver at most on any screen; macOS clamps some short of the exact corner.
+        let screens = NSScreen.screens.map { $0.frame.toCocoa() }
+        func sliver(_ b: CGRect) -> Bool {
+            screens.allSatisfy { let v = b.intersection($0); return v.isNull || v.width <= 3 || v.height <= 3 }
+        }
+        let shown = CGWindowInfo.list(.optionOnScreenOnly).filter { $0.pid != getpid() && !sliver($0.bounds) }.map(\.id)
+        for (i, m) in parkingMats.enumerated() {
+            guard i < needed.count else { m.hide(); continue }
+            let corner = CGRect(x: needed[i].area.maxX - ParkingMatWindow.size, y: needed[i].area.maxY - ParkingMatWindow.size,
+                                width: ParkingMatWindow.size, height: ParkingMatWindow.size)
+            guard let image = CGWindowInfo.image(of: shown, in: corner) else { m.hide(); continue }
+            m.show(area: needed[i].area, cutouts: needed[i].cutouts, wallpaper: image)
+        }
     }
 
     /// Handles go right above the focus ring (or the frontmost tiled window), so the ring never covers the grip

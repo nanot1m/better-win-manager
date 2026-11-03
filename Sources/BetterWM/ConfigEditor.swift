@@ -51,6 +51,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var stackStylePopup: NSPopUpButton!
     private var tabHeightField: NSTextField!
     private var tiledTabsSwitch: NSSwitch!
+    private var parkingMatSwitch: NSSwitch!
     private var tabWidthField: NSTextField!
     private var tabTitleField: NSTextField!
     private var resizeStepField: NSTextField!
@@ -463,6 +464,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         desktopSwipeSwitch = toggle()
         gestureFingersPopup = choice(["Three fingers", "Four fingers"], #selector(overviewChanged))
         overlaySwitch = toggle()
+        parkingMatSwitch = toggle()
         edgeGapFields = (numberField("", width: 48), numberField("", width: 48), numberField("", width: 48), numberField("", width: 48))
         for f in [edgeGapFields.0, edgeGapFields.1, edgeGapFields.2, edgeGapFields.3] { f.placeholderString = "same" }
         return [
@@ -471,6 +473,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 sliderRow("Gap around the screen", nil, \.outerGap, 0...64),
                 row("Gap per edge", "Top, left, bottom, right. Blank takes the gap around the screen.",
                     [edgeGapFields.0, edgeGapFields.1, edgeGapFields.2, edgeGapFields.3, unit("pt")]),
+                row("Hide the parking corner", "Windows of other desktops and hidden tabs wait just past the bottom-right corner, two points showing. A patch of wallpaper covers them and their shadows. Needs Screen Recording permission.", [parkingMatSwitch]),
                 sliderRow("Resize handle width", "The draggable bar in each gap.", \.handleWidth, 4...32),
             ]),
             group("Launch", [
@@ -1056,6 +1059,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         stackStylePopup.selectItem(at: Config.StackStyle.allCases.firstIndex(of: config.stackStyle) ?? 0)
         tabHeightField.stringValue = String(Int(config.tabHeight))
         on(tiledTabsSwitch, config.tiledTabs)
+        on(parkingMatSwitch, config.parkingMat)
         tabWidthField.stringValue = String(Int(config.tabWidth))
         tabTitleField.stringValue = config.tabTitleFormat
         resizeStepField.stringValue = String(Int(config.resizeStep))
@@ -1149,6 +1153,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         if let raw = stackStylePopup.selectedItem?.representedObject as? String, let st = Config.StackStyle(rawValue: raw) { config.stackStyle = st }
         config.tabHeight = max(16, number(tabHeightField, or: defaults.tabHeight))
         config.tiledTabs = isOn(tiledTabsSwitch)
+        config.parkingMat = isOn(parkingMatSwitch)
         config.tabWidth = max(60, number(tabWidthField, or: defaults.tabWidth))
         config.tabTitleFormat = tabTitleField.stringValue.isEmpty ? defaults.tabTitleFormat : tabTitleField.stringValue
         config.resizeStep = max(1, number(resizeStepField, or: defaults.resizeStep))
