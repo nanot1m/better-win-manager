@@ -544,6 +544,16 @@ struct ReconcilerTests {
         expect(legacy.spaces[0].floating.isEmpty, #function, #line)
     }
 
+    func testDroppedWindowSharesTheColumnsWeightScale() {
+        var g = Grid()
+        g.columns = [Column([1, 2])]
+        g.heightWeights = [1: 400, 2: 300]
+        g.apply(.stack(column: 0, index: 2), to: 3)
+        expect(g.heightWeights[3] == 350, #function, #line)
+        let frames = Dictionary(uniqueKeysWithValues: GridGeometry(grid: g, area: area, config: config).windowFrames())
+        expect(frames[3]!.height > 100 && abs(frames[3]!.height - frames[2]!.height) < frames[2]!.height, #function, #line)
+    }
+
     func testStackedModeGeometry() {
         var c = config
         c.stackStyle = .cascade
@@ -989,6 +999,7 @@ let tests: [(String, () -> Void)] = [
     ("ringButtonsGetRoomWhenNoTabsAbove", t.testRingButtonsGetRoomWhenNoTabsAbove),
     ("edgeGapsOverrideTheOuterGap", t.testEdgeGapsOverrideTheOuterGap),
     ("tiledTabsLeaveRoomAboveEachWindow", t.testTiledTabsLeaveRoomAboveEachWindow),
+    ("droppedWindowSharesTheColumnsWeightScale", t.testDroppedWindowSharesTheColumnsWeightScale),
 ]
 for (name, run) in tests {
     let before = failures

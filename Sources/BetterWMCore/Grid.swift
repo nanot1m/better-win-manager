@@ -100,6 +100,10 @@ public struct Grid: Equatable {
         case let .stack(ci, i):
             let idx = adjusted(ci)
             if idx < columns.count {
+                // Weights are on whatever scale a row drag left them (pixel heights): a newcomer at weight 1 next to
+                // a 400 would get a sliver, so it takes the column's average and shares the height like the others.
+                let others = columns[idx].windows.map { heightWeights[$0] ?? 1 }
+                heightWeights[w] = others.reduce(0, +) / CGFloat(max(1, others.count))
                 columns[idx].windows.insert(w, at: min(i, columns[idx].windows.count))
             } else {
                 columns.append(Column([w]))

@@ -6,11 +6,14 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-11-03
+
 ### Changed
 - The focus ring is a card lying right under the focused window, its whole width showing around the edge, instead of a line drawn over the edge; it is put back beneath the window on every reorder of it.
 - The tab strips show while the focus ring does: when the ring is gone (nothing on screen to mark), the tabs hide too, and they come back with it.
 
 ### Fixed
+- A window dropped into a column whose rows had been resized by hand could come out a point tall: row weights are stored on the scale the drag left them, and the newcomer started at 1. It now takes the column's average weight.
 - A slow-starting app (System Settings) could come up behind the tiled windows: with no window of its own on screen yet, it was taken for an app whose last window had closed, and focus was handed to the top tiled window. Only a closed window of the frontmost app itself hands focus on now.
 - With "Also highlight floating windows" off, a focused floating window still gets the ring's action buttons, standing where the ring's top edge would be, in the floating colour, while the tiled window behind keeps its ring and tabs in grey; before, ring, tabs and buttons all went.
 - The Settings window (and the Welcome window) got a ring even with "Also highlight floating windows" off; they follow that setting like any floating window.
