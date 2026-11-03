@@ -6,6 +6,12 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Fixed
+- Tab strips sat behind the app windows, where the focused window's shadow fell on them and made the active tab a shade darker than the ring. They now sit above app windows like the ring.
+
+### Added
+- `focusRingStyle = filled` (Settings › Focus ring › Style): a band of the ring colour around the focused window, the whole thickness outside it with the action buttons standing on top, instead of a line over the edge.
+
 ## [0.37.0] - 2026-11-03
 
 ### Added

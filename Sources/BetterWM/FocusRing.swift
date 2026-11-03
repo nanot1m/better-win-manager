@@ -20,7 +20,7 @@ final class FocusRing {
     /// should start), line width, colour.
     var onChange: ((NSRect?, Bool, CGFloat, CGFloat, NSColor) -> Void)?
     private var currentColor = NSColor.controlAccentColor
-    private func notify() { onChange?(shown ? placedFrame : nil, isInactive, current.map(clearance(for:)) ?? pad, config.focusRingWidth, currentColor) }
+    private func notify() { onChange?(shown ? placedFrame : nil, isInactive, current.map(clearance(for:)) ?? pad, config.ringButtonsOverlap, currentColor) }
     /// Whether the ring is meant to be on screen; `window.isVisible` lingers through a fade-out.
     private var shown = false
     private func hideRing() { shown = false; Fade.hide(window) }
@@ -42,6 +42,9 @@ final class FocusRing {
         if placedFrame != .zero, window.frame != placedFrame { window.setFrame(placedFrame, display: false, animate: false) }
         window.orderFrontRegardless()
     }
+    private var filled: Bool { config.focusRingStyle == .filled }
+    /// A filled band is a border as wide as the ring's reach, so its inner edge is the window's edge.
+    private var lineWidth: CGFloat { filled ? pad : config.focusRingWidth }
     /// The frame the ring was last put at. A WindowServer move leaves AppKit's `window.frame` stale.
     private var placedFrame: NSRect = .zero
     /// The ring's outer corner radius as drawn; nothing should hang over the curve.
@@ -281,7 +284,7 @@ final class FocusRing {
         if wasHidden { layer.cornerRadius = r }
         layer.backgroundColor = nil
         if wasHidden || !colorChanged { layer.borderColor = color.cgColor }
-        if wasHidden || !targetChanged { layer.borderWidth = config.focusRingWidth }
+        if wasHidden || !targetChanged { layer.borderWidth = lineWidth }
         CATransaction.commit()
         if !wasHidden {
             // The ring stays where it is: grey to colour (and back) is a cross-fade, a new corner radius (the next
@@ -289,11 +292,11 @@ final class FocusRing {
             // swell of the line.
             if colorChanged { Fade.animate(layer, "borderColor", to: color.cgColor) }
             if layer.cornerRadius != r { Fade.animate(layer, "cornerRadius", to: r) }
-            if targetChanged { pulse() }
+            if targetChanged, !filled { pulse() }
         }
         place(frame: frame)
-        // Above every normal window: the outline is drawn outside the window's frame, so it covers nothing of
-        // the window itself, and it never has to chase the window's depth through raises and unhides.
+        // Above every normal window: the ring is drawn outside the window's frame, so it covers nothing of the
+        // window itself, and it never has to chase the window's depth through raises and unhides.
         window.level = .floating
         if wasHidden || targetChanged {
             showRing()
@@ -303,7 +306,7 @@ final class FocusRing {
     }
 
     private func pulse() {
-        let w = config.focusRingWidth
+        let w = lineWidth
         guard Fade.enabled else { layer.borderWidth = w; return }
         let anim = CAKeyframeAnimation(keyPath: "borderWidth")
         anim.values = [layer.presentation()?.borderWidth ?? w, w + 2, w]

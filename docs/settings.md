@@ -45,6 +45,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `focusRingColor` | FF9300 | Ring colour for tiled windows |
 | `focusRingFloatingColor` | 009193 | Ring colour for floating windows, or `same` |
 | `focusRingWidth` | 6 | Thickness |
+| `focusRingStyle` | outline | `outline` draws a line over the window's edge; `filled` draws a band of the full thickness around the window, with the action buttons standing on top of it |
 | `focusRingPadding` | 0 | Gap between a window and its ring; tiled windows shrink inside their slot by it, the ring stays put |
 | `focusRingAutoRadius` | true | Measure each window's own corner radius |
 | `focusRingActions` | true | Small icon buttons on the ring's top edge near the right corner. When no tab strip sits above the ring (columns layout without `tiledTabs`, or side tabs), the layout keeps room for them under the status bar |

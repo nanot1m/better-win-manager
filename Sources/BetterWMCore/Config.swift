@@ -39,6 +39,13 @@ public struct Config {
     public var tileExistingOnStart: Bool = true
     /// Stacked mode: horizontal shift between cascaded windows, in points.
     public var stackOffset: CGFloat = 48
+    /// A line straddling the window's edge, or a band of the full width lying outside it.
+    public enum FocusRingStyle: String, CaseIterable {
+        case outline, filled
+        public var title: String { self == .outline ? "Line over the edge" : "Band around the window" }
+    }
+    public var focusRingStyle: FocusRingStyle = .outline
+
     /// How a stacked screen looks: a cascade, or every window full size behind a row of tabs.
     public enum StackStyle: String, CaseIterable {
         case cascade, tabsTop, tabsLeft, tabsRight
@@ -98,16 +105,22 @@ public struct Config {
     /// Gap between a tiled window and its ring: the window is drawn that much inside its slot while the ring stays
     /// on the slot's edge.
     public var focusRingPadding: CGFloat = 0
-    /// How far the ring reaches beyond a slot's edge; the layout keeps that much clear of the tab strip.
-    public var focusRingOutset: CGFloat { focusRing ? (focusRingWidth / 2).rounded(.up) + 1 : 0 }
+    /// How far the ring reaches beyond a slot's edge; the layout keeps that much clear of the tab strip. An outline
+    /// straddles the edge; a filled band lies wholly outside the window.
+    public var focusRingOutset: CGFloat {
+        guard focusRing else { return 0 }
+        return focusRingStyle == .filled ? focusRingWidth : (focusRingWidth / 2).rounded(.up) + 1
+    }
     /// Height of the ring's button tab, which stands on the ring's top line.
     public static let ringButtonsHeight: CGFloat = 20
     /// Extra room above the layout for the ring buttons, so the outer gap is measured to them as it is to a tab
     /// strip: nothing when a strip sits there (the buttons stand in it), else the buttons' height above the ring.
     public func ringButtonsRoom(tabsAbove: Bool) -> CGFloat {
         guard focusRing, focusRingActions, !focusRingActionKeys.isEmpty, !tabsAbove else { return 0 }
-        return max(0, Self.ringButtonsHeight - focusRingWidth)
+        return max(0, Self.ringButtonsHeight - ringButtonsOverlap)
     }
+    /// How far the buttons reach down into the ring: over an outline's line, not at all onto a filled band.
+    public var ringButtonsOverlap: CGFloat { focusRingStyle == .filled ? 0 : focusRingWidth }
     /// The inset of a tiled window within its slot. The ring's inner edge lies a little inside the slot, so the
     /// inset covers that too and the visible gap is exactly `focusRingPadding`; zero keeps the window in its slot.
     public var tileInset: CGFloat {
@@ -411,6 +424,8 @@ public struct Config {
         # Also ring floating (untiled) windows, not just tiled ones.
         focusRingFloating = \(focusRingFloating)
         focusRingWidth = \(num(focusRingWidth))
+        # outline: a line over the window's edge. filled: a band of the full width around the window.
+        focusRingStyle = \(focusRingStyle.rawValue)
         # Gap between the window and the ring.
         focusRingPadding = \(num(focusRingPadding))
         # Match each window's own corner radius (measured once per window); the radius below is the fallback.
@@ -565,7 +580,7 @@ public struct Config {
                 case "actionOverlay": cfg.actionOverlay = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRing": cfg.focusRing = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRingFloating": cfg.focusRingFloating = ["true", "yes", "1", "on"].contains(value.lowercased())
-            case "focusRingStyle": break  // the glow style was removed in 0.12.1; accepted and ignored
+            case "focusRingStyle": cfg.focusRingStyle = FocusRingStyle(rawValue: value.lowercased()) ?? (value.lowercased() == "glow" ? .filled : .outline)
             case "focusRingWidth": cfg.focusRingWidth = Double(value).map { CGFloat($0) } ?? cfg.focusRingWidth
             case "focusRingPadding": cfg.focusRingPadding = Double(value).map { CGFloat($0) } ?? cfg.focusRingPadding
             case "focusRingAutoRadius": cfg.focusRingAutoRadius = ["true", "yes", "1", "on"].contains(value.lowercased())

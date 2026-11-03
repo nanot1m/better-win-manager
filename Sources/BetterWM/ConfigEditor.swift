@@ -80,6 +80,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var ringRadius: NSSlider!
     private var ringRadiusLabel: NSTextField!
     private var ringAutoRadius: NSSwitch!
+    private var ringStylePopup: NSPopUpButton!
     private var ringFloating: NSSwitch!
     private var ringActions: NSSwitch!
     private var fadeSwitch: NSSwitch!
@@ -589,6 +590,11 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             l.widthAnchor.constraint(equalToConstant: 44).isActive = true
         }
         ringAutoRadius = toggle(#selector(autoRadiusChanged))
+        ringStylePopup = NSPopUpButton()
+        for st in Config.FocusRingStyle.allCases {
+            ringStylePopup.addItem(withTitle: st.title)
+            ringStylePopup.lastItem?.representedObject = st.rawValue
+        }
         return [
             group(nil, [
                 row("Highlight the focused window", nil, [ringSwitch]),
@@ -602,6 +608,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 row("Floating windows", "Untiled windows can get their own ring colour.", [ringFloatingMode, ringFloatingColor]),
             ]),
             group("Shape", [
+                row("Style", "A line over the window's edge, or a band of the full thickness around the window with the buttons on top of it.", [ringStylePopup]),
                 row("Thickness", nil, [ringWidth, ringWidthLabel]),
                 row("Gap to the window", "Tiled windows shrink inside their slot by this much; the ring stays on the slot's edge.", [ringPadding, ringPaddingLabel]),
                 row("Match each window's corners", "Measures the window's own corner radius.", [ringAutoRadius]),
@@ -1077,6 +1084,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         ringPadding.doubleValue = Double(config.focusRingPadding)
         ringRadius.doubleValue = Double(config.focusRingRadius)
         on(ringAutoRadius, config.focusRingAutoRadius)
+        ringStylePopup.selectItem(at: Config.FocusRingStyle.allCases.firstIndex(of: config.focusRingStyle) ?? 0)
         on(ringActions, config.focusRingActions)
         on(fadeSwitch, config.fadeAnimations)
         for (key, box) in ringActionChecks { box.state = config.focusRingActionKeys.contains(key) ? .on : .off }
@@ -1167,6 +1175,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.focusRingPadding = CGFloat(ringPadding.doubleValue.rounded())
         config.focusRingRadius = CGFloat(ringRadius.doubleValue.rounded())
         config.focusRingAutoRadius = isOn(ringAutoRadius)
+        if let raw = ringStylePopup.selectedItem?.representedObject as? String, let st = Config.FocusRingStyle(rawValue: raw) { config.focusRingStyle = st }
         config.focusRingActions = isOn(ringActions)
         config.fadeAnimations = isOn(fadeSwitch)
         config.focusRingActionKeys = ringActionChecks.filter { $0.box.state == .on }.map(\.key)

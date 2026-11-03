@@ -51,12 +51,12 @@ final class TabStripWindow {
     var isVisible: Bool { panel.isVisible }
 
     init() {
-        // Behind every app window: the strip lives in the area the layout keeps free, and a window carried over
-        // it stays on top. Not an auxiliary of fullscreen Spaces, so a fullscreen app covers it.
+        // Above app windows, like the ring: behind them the focused window's shadow fell on the tabs and tinted
+        // them against the ring. Not an auxiliary of fullscreen Spaces, so a fullscreen app covers it.
         panel = EditablePanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.level = .normal
+        panel.level = .floating
         panel.hasShadow = false
         panel.animationBehavior = .none
         panel.collectionBehavior = [.canJoinAllSpaces, .transient]

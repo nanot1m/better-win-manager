@@ -65,14 +65,15 @@ final class RingActions {
     /// Follows the ring: `ring` is the ring window's frame (Cocoa coordinates), `inset` how far the ring's inner
     /// edge is from it. The pill grows out of the ring's top edge near the right corner, in the ring's colour,
     /// above the window so it never covers an app's own toolbar. Nil hides the pill.
-    /// `clearance`: how far in from the ring's outer corner the pill ends, so it clears the curve.
-    func follow(ring: NSRect?, clearance: CGFloat, ringWidth: CGFloat, color: NSColor, enabled: Bool) {
+    /// `clearance`: how far in from the ring's outer corner the pill ends, so it clears the curve. `overlap`: how far
+    /// the pill reaches down into the ring's band.
+    func follow(ring: NSRect?, clearance: CGFloat, overlap: CGFloat, color: NSColor, enabled: Bool) {
         guard enabled, !keys.isEmpty, let ring else { Fade.hide(panel); return }
         view.setColor(color)
         let size = panel.frame.size
-        // Standing on the ring line: its bottom edge meets the line's inner edge, so pill and ring read as one
-        // shape, and nothing of the pill hangs over the window.
-        let origin = NSPoint(x: ring.maxX - clearance - size.width, y: ring.maxY - ringWidth)
+        // On an outline the pill stands on the line, its bottom at the line's inner edge, so pill and ring read as
+        // one shape; on a filled card it stands on the card's outer edge. Nothing of it hangs over the window.
+        let origin = NSPoint(x: ring.maxX - clearance - size.width, y: ring.maxY - overlap)
         if panel.frame.origin != origin { panel.setFrameOrigin(origin) }
         if panel.isVisible || !Fade.enabled {
             Fade.show(panel) { if !panel.isVisible { panel.orderFrontRegardless() } }
