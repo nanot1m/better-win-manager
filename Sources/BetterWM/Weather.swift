@@ -22,7 +22,7 @@ final class WeatherService: NSObject, CLLocationManagerDelegate {
     func apply(_ config: Config) {
         self.config = config
         timer?.invalidate()
-        guard config.bar, config.barWeather else { reading = nil; onUpdate?(nil); return }
+        guard config.bar, config.barWidgets.contains(.weather) else { reading = nil; onUpdate?(nil); return }
         resolveLocation()
         timer = Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in self?.fetch() }
     }

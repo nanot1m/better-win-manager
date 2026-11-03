@@ -202,9 +202,25 @@ public struct Config {
         public init(_ key: String, _ title: String, _ note: String? = nil, _ kind: Kind) { self.key = key; self.title = title; self.note = note; self.kind = kind }
     }
 
-    public var barWidgets: [BarWidget] = [.keyboard, .wifi, .battery, .clock, .menu]
+    /// The lists are stored as written: an id this build does not know (a widget from a newer version) keeps its
+    /// place through a save, so going back and forth between versions does not lose it.
+    public var barWidgetIDs: [String] = [BarWidget.keyboard, .wifi, .battery, .clock, .menu].map(\.rawValue)
+    public var barLeftWidgetIDs: [String] = BarWidget.leftKinds.map(\.rawValue)
+    public var barWidgets: [BarWidget] {
+        get { barWidgetIDs.compactMap(BarWidget.init).filter(BarWidget.rightKinds.contains) }
+        set { barWidgetIDs = Self.merge(newValue, into: barWidgetIDs) }
+    }
     /// Left-side widgets, in display order.
-    public var barLeftWidgets: [BarWidget] = [.desktops, .fullscreen, .title]
+    public var barLeftWidgets: [BarWidget] {
+        get { barLeftWidgetIDs.compactMap(BarWidget.init).filter(BarWidget.leftKinds.contains) }
+        set { barLeftWidgetIDs = Self.merge(newValue, into: barLeftWidgetIDs) }
+    }
+    /// The new order, with the ids `old` had that are not widgets of this build kept at their index.
+    private static func merge(_ new: [BarWidget], into old: [String]) -> [String] {
+        var ids = new.map(\.rawValue)
+        for (i, id) in old.enumerated() where BarWidget(rawValue: id) == nil { ids.insert(id, at: min(i, ids.count)) }
+        return ids
+    }
     private mutating func setWidget(_ w: BarWidget, _ on: Bool) {
         if on, !barWidgets.contains(w) {
             // Slot it where the default order would have it, after the nearest enabled predecessor.
@@ -216,14 +232,11 @@ public struct Config {
             barWidgets.removeAll { $0 == w }
         }
     }
-    public var barWeather: Bool { get { barWidgets.contains(.weather) } set { setWidget(.weather, newValue) } }
-    public var barBattery: Bool { get { barWidgets.contains(.battery) } set { setWidget(.battery, newValue) } }
-    public var barWifi: Bool { get { barWidgets.contains(.wifi) } set { setWidget(.wifi, newValue) } }
-    public var barInputSource: Bool { get { barWidgets.contains(.keyboard) } set { setWidget(.keyboard, newValue) } }
-    public var barCpu: Bool { get { barWidgets.contains(.cpu) } set { setWidget(.cpu, newValue) } }
-    public var barMemory: Bool { get { barWidgets.contains(.memory) } set { setWidget(.memory, newValue) } }
-    public var barDisk: Bool { get { barWidgets.contains(.disk) } set { setWidget(.disk, newValue) } }
-    public var barClock: Bool { get { barWidgets.contains(.clock) } set { setWidget(.clock, newValue) } }
+    /// The per-widget booleans of files before 0.37; read as aliases of the list, no longer written.
+    private static let widgetFlags: [String: BarWidget] = [
+        "barWeather": .weather, "barBattery": .battery, "barWifi": .wifi, "barInputSource": .keyboard,
+        "barCpu": .cpu, "barMemory": .memory, "barDisk": .disk, "barClock": .clock,
+    ]
     public var barDesktopApps: Bool = true
     public var barBatteryPercent: Bool = false
     /// A pixel cat wandering the empty part of the bar.
@@ -408,12 +421,10 @@ public struct Config {
         # Active window label: {app} and {title} are replaced; the rest is shown as is.
         barTitleFormat = \(barTitleFormat)
         # Left-side widgets in display order: desktops, fullscreen, title. Leave one out to hide it.
-        barLeftWidgets = \(barLeftWidgets.map(\.rawValue).joined(separator: ", "))
+        barLeftWidgets = \(barLeftWidgetIDs.joined(separator: ", "))
         # Right-side widgets in display order: weather, cpu, memory, disk, keyboard, wifi, battery, clock, menu, media, sound.
-        # Leave one out to hide it. (The barWeather/barBattery/... flags below mirror this list for older versions.)
-        barWidgets = \(barWidgets.map(\.rawValue).joined(separator: ", "))
-        barWeather = \(barWeather)
-        barBattery = \(barBattery)
+        # Leave one out to hide it.
+        barWidgets = \(barWidgetIDs.joined(separator: ", "))
         # Icons of the apps open on each desktop next to its number.
         barDesktopApps = \(barDesktopApps)
         barBatteryPercent = \(barBatteryPercent)
@@ -423,11 +434,6 @@ public struct Config {
         # One cat per entry, comma separated: a path to a sheet in Last tick's "Pixel Cats 64x64" layout
         # (not bundled; download it yourself) or "builtin" for the hand-drawn cat. Two or more cats interact.
         barCatSheets = \(barCatSheets.joined(separator: ", "))
-        barWifi = \(barWifi)
-        barInputSource = \(barInputSource)
-        barCpu = \(barCpu)
-        barMemory = \(barMemory)
-        barDisk = \(barDisk)
         barWeatherFahrenheit = \(barWeatherFahrenheit)
         # "auto" asks Location Services; or a fixed "latitude,longitude" such as 52.52,13.40.
         barWeatherLocation = \(barWeatherLocation)
@@ -490,6 +496,10 @@ public struct Config {
             return String(line[..<hash])
         }
         return line
+    }
+
+    private static func ids(_ value: String) -> [String] {
+        value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.filter { !$0.isEmpty }
     }
 
     public static func parse(_ text: String) -> Config {
@@ -557,16 +567,10 @@ public struct Config {
             case "barCat": cfg.barCat = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barNotchPortals": cfg.barNotchPortals = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barBatteryPercent": cfg.barBatteryPercent = ["true", "yes", "1", "on"].contains(value.lowercased())
-            case "barBattery": cfg.barBattery = ["true", "yes", "1", "on"].contains(value.lowercased())
-            case "barWidgets": cfg.barWidgets = value.split(separator: ",").compactMap { BarWidget(rawValue: $0.trimmingCharacters(in: .whitespaces).lowercased()) }.filter(BarWidget.rightKinds.contains)
-            case "barLeftWidgets": cfg.barLeftWidgets = value.split(separator: ",").compactMap { BarWidget(rawValue: $0.trimmingCharacters(in: .whitespaces).lowercased()) }.filter(BarWidget.leftKinds.contains)
+            case "barWidgets": cfg.barWidgetIDs = ids(value).filter { BarWidget(rawValue: $0).map(BarWidget.rightKinds.contains) ?? true }
+            case "barLeftWidgets": cfg.barLeftWidgetIDs = ids(value).filter { BarWidget(rawValue: $0).map(BarWidget.leftKinds.contains) ?? true }
+            case _ where widgetFlags[key] != nil: cfg.setWidget(widgetFlags[key]!, ["true", "yes", "1", "on"].contains(value.lowercased()))
             case "barDesktopApps": cfg.barDesktopApps = ["true", "yes", "1", "on"].contains(value.lowercased())
-            case "barCpu": cfg.barCpu = ["true", "yes", "1", "on"].contains(value.lowercased())
-            case "barMemory": cfg.barMemory = ["true", "yes", "1", "on"].contains(value.lowercased())
-            case "barDisk": cfg.barDisk = ["true", "yes", "1", "on"].contains(value.lowercased())
-            case "barInputSource": cfg.barInputSource = ["true", "yes", "1", "on"].contains(value.lowercased())
-            case "barWifi": cfg.barWifi = ["true", "yes", "1", "on"].contains(value.lowercased())
-            case "barWeather": cfg.barWeather = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barWeatherFahrenheit": cfg.barWeatherFahrenheit = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barWeatherLocation": cfg.barWeatherLocation = value
             case "barBackground": cfg.barBackground = value

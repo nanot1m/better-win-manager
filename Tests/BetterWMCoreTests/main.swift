@@ -473,18 +473,28 @@ struct ReconcilerTests {
         // Old files only have the flags: the list is derived from them in the default order.
         let old = Config.parse("version = 3\nbarWifi = false\nbarCpu = false\n")
         expect(old.barWidgets == Config().barWidgets.filter { $0 != .wifi && $0 != .cpu }, #function, #line)
-        // New files carry the order; the flags mirror it for older versions reading the file.
+        // A flag after the list still edits it, slotting the widget at its default position.
+        let flagged = Config.parse("version = 3\nbarWidgets = clock, battery, weather\nbarCpu = true\n")
+        expect(flagged.barWidgets == [.clock, .battery, .weather, .cpu], #function, #line)
         // A v2 file with an explicit list gains the menu widget added in v3; a v3 file is taken as is.
         let v2 = Config.parse("version = 2\nbarWidgets = clock, battery, weather\n")
         expect(v2.barWidgets == [.clock, .battery, .weather, .menu], #function, #line)
         let new = Config.parse("version = 3\nbarWidgets = clock, battery, weather\n")
-        expect(new.barWidgets == [.clock, .battery, .weather] && !new.barCpu && new.barWeather, #function, #line)
+        expect(new.barWidgets == [.clock, .battery, .weather], #function, #line)
         let text = new.serialized()
-        expect(text.contains("barWidgets = clock, battery, weather") && text.contains("barCpu = false"), #function, #line)
+        expect(text.contains("barWidgets = clock, battery, weather") && !text.contains("barCpu"), #function, #line)
         expect(Config.parse(text).barWidgets == [.clock, .battery, .weather], #function, #line)
-        // Re-enabling a flag slots the widget back at its default position.
-        var c = new; c.barCpu = true
-        expect(c.barWidgets == [.clock, .battery, .weather, .cpu] || c.barWidgets.contains(.cpu), #function, #line)
+    }
+
+    func testUnknownWidgetIDsKeepTheirPlace() {
+        // A widget from a newer version is unknown here; it survives a save and a reorder of the known ones.
+        var c = Config.parse("version = 3\nbarWidgets = clock, moon, battery\nbarLeftWidgets = desktops, sun\n")
+        expect(c.barWidgets == [.clock, .battery] && c.barLeftWidgets == [.desktops], #function, #line)
+        expect(c.serialized().contains("barWidgets = clock, moon, battery") && c.serialized().contains("barLeftWidgets = desktops, sun"), #function, #line)
+        c.barWidgets = [.battery, .clock, .wifi]
+        expect(c.barWidgetIDs == ["battery", "moon", "clock", "wifi"], #function, #line)
+        c.barLeftWidgets = []
+        expect(c.barLeftWidgetIDs == ["sun"], #function, #line)
     }
 
     func testSavedLayoutV1Migration() {
@@ -944,6 +954,7 @@ let tests: [(String, () -> Void)] = [
     ("equalizeWidthsKeepsHeightsAndMinimums", t.testEqualizeWidthsKeepsHeightsAndMinimums),
     ("rememberedColumnsSurviveSaving", t.testRememberedColumnsSurviveSaving),
     ("barWidgetsCompatibility", t.testBarWidgetsCompatibility),
+    ("unknownWidgetIDsKeepTheirPlace", t.testUnknownWidgetIDsKeepTheirPlace),
     ("savedLayoutV1Migration", t.testSavedLayoutV1Migration),
     ("refusedFrameGivesUpThenRetries", t.testRefusedFrameGivesUpThenRetries),
     ("forgetClearsEveryRecord", t.testForgetClearsEveryRecord),
