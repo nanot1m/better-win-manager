@@ -11,7 +11,8 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `gap` | 16 | Space between tiled windows |
-| `outerGap` | 16 | Space between tiled windows and the screen edge (and the bar) |
+| `outerGap` | 16 | Space between the screen edge (and the bar) and the outermost thing at it: the focus ring, a tab strip or the ring's action pills |
+| `outerGapTop`, `outerGapLeft`, `outerGapBottom`, `outerGapRight` | blank | Gap to that edge; blank takes `outerGap` |
 | `handleWidth` | 16 | Width of the draggable bar in each gap |
 
 ## Tiling

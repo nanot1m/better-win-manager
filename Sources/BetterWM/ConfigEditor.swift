@@ -87,6 +87,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var barSwitch: NSSwitch!
     private var barHeightField: NSTextField!
     private var barCatSwitch: NSSwitch!
+    private var edgeGapFields: (NSTextField, NSTextField, NSTextField, NSTextField)!
     private var barNotchPortalsSwitch: NSSwitch!
     private var barCatSheets: NSTextView!
     private var barBackgroundMode: NSPopUpButton!
@@ -461,10 +462,14 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         desktopSwipeSwitch = toggle()
         gestureFingersPopup = choice(["Three fingers", "Four fingers"], #selector(overviewChanged))
         overlaySwitch = toggle()
+        edgeGapFields = (numberField("", width: 48), numberField("", width: 48), numberField("", width: 48), numberField("", width: 48))
+        for f in [edgeGapFields.0, edgeGapFields.1, edgeGapFields.2, edgeGapFields.3] { f.placeholderString = "same" }
         return [
             group("Layout", [
                 sliderRow("Gap between windows", nil, \.gap, 0...64),
                 sliderRow("Gap around the screen", nil, \.outerGap, 0...64),
+                row("Gap per edge", "Top, left, bottom, right. Blank takes the gap around the screen.",
+                    [edgeGapFields.0, edgeGapFields.1, edgeGapFields.2, edgeGapFields.3, unit("pt")]),
                 sliderRow("Resize handle width", "The draggable bar in each gap.", \.handleWidth, 4...32),
             ]),
             group("Launch", [
@@ -1038,6 +1043,9 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         on(checkUpdatesSwitch, config.checkForUpdates)
         on(autoUpdateSwitch, config.autoUpdate)
         stackOffsetField.stringValue = String(Int(config.stackOffset))
+        for (f, v) in zip([edgeGapFields.0, edgeGapFields.1, edgeGapFields.2, edgeGapFields.3], [config.outerGapTop, config.outerGapLeft, config.outerGapBottom, config.outerGapRight]) {
+            f.stringValue = v.map { String(Int($0)) } ?? ""
+        }
         stackStylePopup.selectItem(at: Config.StackStyle.allCases.firstIndex(of: config.stackStyle) ?? 0)
         tabHeightField.stringValue = String(Int(config.tabHeight))
         on(tiledTabsSwitch, config.tiledTabs)
@@ -1125,6 +1133,11 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.checkForUpdates = isOn(checkUpdatesSwitch)
         config.autoUpdate = isOn(autoUpdateSwitch)
         config.stackOffset = number(stackOffsetField, or: defaults.stackOffset)
+        func optional(_ f: NSTextField) -> CGFloat? { Double(f.stringValue).map { CGFloat($0) } }
+        config.outerGapTop = optional(edgeGapFields.0)
+        config.outerGapLeft = optional(edgeGapFields.1)
+        config.outerGapBottom = optional(edgeGapFields.2)
+        config.outerGapRight = optional(edgeGapFields.3)
         if let raw = stackStylePopup.selectedItem?.representedObject as? String, let st = Config.StackStyle(rawValue: raw) { config.stackStyle = st }
         config.tabHeight = max(16, number(tabHeightField, or: defaults.tabHeight))
         config.tiledTabs = isOn(tiledTabsSwitch)

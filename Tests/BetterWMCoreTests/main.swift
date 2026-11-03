@@ -25,6 +25,19 @@ struct ReconcilerTests {
         return c
     }
 
+    func testEdgeGapsOverrideTheOuterGap() {
+        var c = config
+        c.outerGap = 10
+        c.outerGapTop = 40
+        c.outerGapRight = 0
+        var g = Grid()
+        g.columns = [Column([1])]
+        let inner = GridGeometry(grid: g, area: area, config: c).inner
+        expect(inner.minY == area.minY + 40 && inner.minX == area.minX + 10 && inner.maxY == area.maxY - 10 && inner.maxX == area.maxX, #function, #line)
+        let back = Config.parse(c.serialized())
+        expect(back.outerGapTop == 40 && back.outerGapLeft == nil && back.outerGapRight == 0, #function, #line)
+    }
+
     func testRingButtonsGetRoomWhenNoTabsAbove() {
         var c = config
         c.focusRing = true
@@ -32,7 +45,7 @@ struct ReconcilerTests {
         var g = Grid()
         g.columns = [Column([1])]
         let plain = GridGeometry(grid: g, area: area, config: c)
-        // No outer gap, so the buttons (20 high, standing on a 4-point line) need their whole height less the line.
+        // The buttons (20 high, standing on the 4-point ring line) need their height less the line, whatever the gap.
         expect(plain.inner.minY == area.minY + c.focusRingOutset + c.ringButtonsRoom(tabsAbove: false) && c.ringButtonsRoom(tabsAbove: false) > 0, #function, #line)
         c.tiledTabs = true
         expect(GridGeometry(grid: g, area: area, config: c).inner.minY == area.minY, #function, #line)
@@ -974,6 +987,7 @@ let tests: [(String, () -> Void)] = [
     ("sendingLastDesktopLeavesANewOne", t.testSendingLastDesktopLeavesANewOne),
     ("directionalFocusInGrid", t.testDirectionalFocusInGrid),
     ("ringButtonsGetRoomWhenNoTabsAbove", t.testRingButtonsGetRoomWhenNoTabsAbove),
+    ("edgeGapsOverrideTheOuterGap", t.testEdgeGapsOverrideTheOuterGap),
     ("tiledTabsLeaveRoomAboveEachWindow", t.testTiledTabsLeaveRoomAboveEachWindow),
 ]
 for (name, run) in tests {

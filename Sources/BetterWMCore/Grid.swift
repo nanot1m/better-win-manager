@@ -312,7 +312,7 @@ public struct GridGeometry {
     /// where one runs. Slots are inset by the ring's reach on every side but the strip's.
     public var inner: CGRect {
         let o = config.focusRingOutset
-        var r = area.insetBy(dx: config.outerGap + o, dy: config.outerGap + o)
+        var r = outer.insetBy(dx: o, dy: o)
         switch stripSide {
         case .tabsTop: r.origin.y -= o; r.size.height += o
         case .tabsLeft: r.origin.x -= o; r.size.width += o
@@ -404,11 +404,16 @@ public struct GridGeometry {
         return out
     }
 
+    /// The area inside the gaps to the screen edges.
+    private var outer: CGRect {
+        let g = config.outerGaps
+        return CGRect(x: area.minX + g.left, y: area.minY + g.top, width: area.width - g.left - g.right, height: area.height - g.top - g.bottom)
+    }
+
     /// The strip the tabs occupy on a stacked screen, or nil for a cascade (and for other layouts).
     public func tabStripFrame() -> CGRect? {
         guard grid.mode == .stacked else { return nil }
         // The strip runs the full length of the outer gap's inside; only across is it bound to the slots.
-        let outer = area.insetBy(dx: config.outerGap, dy: config.outerGap)
         switch config.stackStyle {
         case .cascade: return nil
         case .tabsTop: return CGRect(x: outer.minX, y: inner.minY, width: outer.width, height: config.tabHeight)

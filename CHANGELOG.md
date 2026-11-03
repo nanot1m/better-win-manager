@@ -6,7 +6,13 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-11-03
+
+### Added
+- `outerGapTop`, `outerGapLeft`, `outerGapBottom`, `outerGapRight` (Settings › Layout › Gap per edge): the gap to each screen edge on its own; blank keeps `outerGap`.
+
 ### Changed
+- The outer gap is measured to the ring's action pills when they are the topmost thing, as it already was to a tab strip; the layout starts lower by the pills' height instead of the pills eating into the gap.
 - The cats are a bar widget like the rest, reading the free span from the bar's layout; nothing visible changes.
 
 ## [0.36.1] - 2026-11-03

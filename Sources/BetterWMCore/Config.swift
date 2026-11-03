@@ -6,6 +6,14 @@ public struct Config {
     public init() {}
     public var gap: CGFloat = 16
     public var outerGap: CGFloat = 16
+    /// Per-edge overrides of `outerGap`; nil takes it.
+    public var outerGapTop: CGFloat?
+    public var outerGapLeft: CGFloat?
+    public var outerGapBottom: CGFloat?
+    public var outerGapRight: CGFloat?
+    public var outerGaps: (top: CGFloat, left: CGFloat, bottom: CGFloat, right: CGFloat) {
+        (outerGapTop ?? outerGap, outerGapLeft ?? outerGap, outerGapBottom ?? outerGap, outerGapRight ?? outerGap)
+    }
     public var handleWidth: CGFloat = 16
     public var dragModifiers: String = "alt"
     public var hotkeys: [String: String] = Config.defaultHotkeys
@@ -94,11 +102,11 @@ public struct Config {
     public var focusRingOutset: CGFloat { focusRing ? (focusRingWidth / 2).rounded(.up) + 1 : 0 }
     /// Height of the ring's button tab, which stands on the ring's top line.
     public static let ringButtonsHeight: CGFloat = 20
-    /// Extra room to keep above the layout so the ring buttons clear whatever is above: nothing when a tab strip
-    /// sits there (the strip is room enough), else what the buttons need beyond the outer gap above the ring.
+    /// Extra room above the layout for the ring buttons, so the outer gap is measured to them as it is to a tab
+    /// strip: nothing when a strip sits there (the buttons stand in it), else the buttons' height above the ring.
     public func ringButtonsRoom(tabsAbove: Bool) -> CGFloat {
         guard focusRing, focusRingActions, !focusRingActionKeys.isEmpty, !tabsAbove else { return 0 }
-        return max(0, Self.ringButtonsHeight - focusRingWidth + 2 - outerGap)
+        return max(0, Self.ringButtonsHeight - focusRingWidth)
     }
     /// The inset of a tiled window within its slot. The ring's inner edge lies a little inside the slot, so the
     /// inset covers that too and the visible gap is exactly `focusRingPadding`; zero keeps the window in its slot.
@@ -341,6 +349,11 @@ public struct Config {
         # Space between tiled windows and around the screen edge, in points.
         gap = \(num(gap))
         outerGap = \(num(outerGap))
+        # Per-edge gap to the screen; blank takes outerGap.
+        outerGapTop = \(outerGapTop.map(num) ?? "")
+        outerGapLeft = \(outerGapLeft.map(num) ?? "")
+        outerGapBottom = \(outerGapBottom.map(num) ?? "")
+        outerGapRight = \(outerGapRight.map(num) ?? "")
         # Width of the draggable bar sitting in each gap.
         handleWidth = \(num(handleWidth))
 
@@ -517,6 +530,10 @@ public struct Config {
             case "version": fileVersion = Int(value) ?? 1
             case "gap": cfg.gap = Double(value).map { CGFloat($0) } ?? cfg.gap
             case "outerGap": cfg.outerGap = Double(value).map { CGFloat($0) } ?? cfg.outerGap
+            case "outerGapTop": cfg.outerGapTop = Double(value).map { CGFloat($0) }
+            case "outerGapLeft": cfg.outerGapLeft = Double(value).map { CGFloat($0) }
+            case "outerGapBottom": cfg.outerGapBottom = Double(value).map { CGFloat($0) }
+            case "outerGapRight": cfg.outerGapRight = Double(value).map { CGFloat($0) }
             case "handleWidth": cfg.handleWidth = Double(value).map { CGFloat($0) } ?? cfg.handleWidth
             case "dragModifiers": cfg.dragModifiers = value
             case "workspaces": break  // native Spaces mode was removed in 0.12; the key is accepted and ignored
