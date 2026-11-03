@@ -8,8 +8,10 @@ struct BarStyle {
     let focusOutline: NSColor?
     let config: Config
 
+    /// On glass the text always follows the system: the glass itself turns light or dark with the theme.
     static func textColor(of config: Config) -> NSColor {
-        config.barTextColor.lowercased() == "auto" ? .labelColor : (NSColor(hex: config.barTextColor) ?? .labelColor)
+        guard config.barBackground.lowercased() != "glass", config.barTextColor.lowercased() != "auto" else { return .labelColor }
+        return NSColor(hex: config.barTextColor) ?? .labelColor
     }
 }
 
@@ -467,7 +469,14 @@ final class DesktopChipsView: NSStackView {
                 .foregroundColor: isCurrent ? style.activeColor.contrastingText : style.textColor.withAlphaComponent(shownHere ? 1 : 0.7),
                 .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
             ])
-            c.layer?.backgroundColor = isCurrent ? style.activeColor.cgColor : style.textColor.withAlphaComponent(shownHere ? 0.3 : 0.1).cgColor
+            let glass = style.config.barChipStyle == "glass"
+            if #available(macOS 26, *), glass {
+                c.setGlass(true, tint: isCurrent ? style.activeColor : nil, clear: style.config.glassStyle == "clear")
+                c.layer?.backgroundColor = nil
+            } else {
+                c.setGlass(false, tint: nil)
+                c.layer?.backgroundColor = isCurrent ? style.activeColor.cgColor : style.textColor.withAlphaComponent(shownHere ? 0.3 : 0.1).cgColor
+            }
             c.setApps(apps[d] ?? [], focused: focused, color: style.focusOutline ?? (isCurrent ? style.activeColor.contrastingText : style.activeColor))
         }
     }

@@ -385,7 +385,7 @@ public struct GridGeometry {
         guard grid.mode == .columns, config.tiledTabs else { return [] }
         // As wide as the ring around the window below, so strip and ring share their edges.
         let o = config.focusRingOutset
-        return tiledSlots().map { w, f in (w, CGRect(x: f.minX - o, y: f.minY, width: f.width + 2 * o, height: config.tabHeight)) }
+        return tiledSlots().map { w, f in (w, CGRect(x: f.minX - o, y: f.minY, width: f.width + 2 * o, height: config.tabHeight + config.ringButtonsOverlap)) }
     }
 
     /// The columns layout's slots, tab strips included.
@@ -413,12 +413,14 @@ public struct GridGeometry {
     /// The strip the tabs occupy on a stacked screen, or nil for a cascade (and for other layouts).
     public func tabStripFrame() -> CGRect? {
         guard grid.mode == .stacked else { return nil }
-        // The strip runs the full length of the outer gap's inside; only across is it bound to the slots.
+        // The strip runs the full length of the outer gap's inside; only across is it bound to the slots. It reaches
+        // over the ring as far as the ring buttons do, so tabs and buttons stand on the same line.
+        let t = config.tabHeight + config.ringButtonsOverlap
         switch config.stackStyle {
         case .cascade: return nil
-        case .tabsTop: return CGRect(x: outer.minX, y: inner.minY, width: outer.width, height: config.tabHeight)
-        case .tabsLeft: return CGRect(x: inner.minX, y: outer.minY, width: config.tabHeight, height: outer.height)
-        case .tabsRight: return CGRect(x: inner.maxX - config.tabHeight, y: outer.minY, width: config.tabHeight, height: outer.height)
+        case .tabsTop: return CGRect(x: outer.minX, y: inner.minY, width: outer.width, height: t)
+        case .tabsLeft: return CGRect(x: inner.minX, y: outer.minY, width: t, height: outer.height)
+        case .tabsRight: return CGRect(x: inner.maxX - t, y: outer.minY, width: t, height: outer.height)
         }
     }
 

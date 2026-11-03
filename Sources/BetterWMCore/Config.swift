@@ -39,13 +39,6 @@ public struct Config {
     public var tileExistingOnStart: Bool = true
     /// Stacked mode: horizontal shift between cascaded windows, in points.
     public var stackOffset: CGFloat = 48
-    /// A line straddling the window's edge, or a band of the full width lying outside it.
-    public enum FocusRingStyle: String, CaseIterable {
-        case outline, filled
-        public var title: String { self == .outline ? "Line over the edge" : "Band around the window" }
-    }
-    public var focusRingStyle: FocusRingStyle = .outline
-
     /// How a stacked screen looks: a cascade, or every window full size behind a row of tabs.
     public enum StackStyle: String, CaseIterable {
         case cascade, tabsTop, tabsLeft, tabsRight
@@ -61,14 +54,14 @@ public struct Config {
     public var stackStyle: StackStyle = .tabsTop
     /// Thickness of the tab strip (height on top, width on the left; left tabs read sideways).
     public var tabHeight: CGFloat = 30
+    /// Inactive tabs: "flat" grey, or "glass" (macOS 26; flat before).
+    public var tabStyle: String = "flat"
     /// Longest a single tab gets along the strip.
     public var tabWidth: CGFloat = 240
     /// Tab label; {app} and {title} are replaced.
     public var tabTitleFormat: String = "{app} — {title}"
     /// A tab above every tiled window too, so renamed tabs and titles read outside the stacked layout.
     public var tiledTabs: Bool = false
-    /// Cover the parking corner with the wallpaper, hiding the two points of the windows waiting there.
-    public var parkingMat: Bool = false
     /// How much the grow and shrink actions change a window, in points.
     public var resizeStep: CGFloat = 40
     /// Screens narrower than this start in stacked mode (0 = never). Handy for a laptop panel next to a big display.
@@ -107,12 +100,9 @@ public struct Config {
     /// Gap between a tiled window and its ring: the window is drawn that much inside its slot while the ring stays
     /// on the slot's edge.
     public var focusRingPadding: CGFloat = 0
-    /// How far the ring reaches beyond a slot's edge; the layout keeps that much clear of the tab strip. An outline
-    /// straddles the edge; a filled band lies wholly outside the window.
-    public var focusRingOutset: CGFloat {
-        guard focusRing else { return 0 }
-        return focusRingStyle == .filled ? focusRingWidth : (focusRingWidth / 2).rounded(.up) + 1
-    }
+    /// How far the ring reaches beyond a slot's edge; the layout keeps that much clear of the tab strip. The ring is
+    /// a card under the window, so its whole width lies outside the window.
+    public var focusRingOutset: CGFloat { focusRing ? focusRingWidth : 0 }
     /// Height of the ring's button tab, which stands on the ring's top line.
     public static let ringButtonsHeight: CGFloat = 20
     /// Extra room above the layout for the ring buttons, so the outer gap is measured to them as it is to a tab
@@ -121,8 +111,8 @@ public struct Config {
         guard focusRing, focusRingActions, !focusRingActionKeys.isEmpty, !tabsAbove else { return 0 }
         return max(0, Self.ringButtonsHeight - ringButtonsOverlap)
     }
-    /// How far the buttons reach down into the ring: over an outline's line, not at all onto a filled band.
-    public var ringButtonsOverlap: CGFloat { focusRingStyle == .filled ? 0 : focusRingWidth }
+    /// How far the buttons and the tabs reach down over the ring, by its width.
+    public var ringButtonsOverlap: CGFloat { focusRing ? focusRingWidth : 0 }
     /// The inset of a tiled window within its slot. The ring's inner edge lies a little inside the slot, so the
     /// inset covers that too and the visible gap is exactly `focusRingPadding`; zero keeps the window in its slot.
     public var tileInset: CGFloat {
@@ -142,6 +132,7 @@ public struct Config {
                                            "sendToDesktop", "sendToPreviousDesktop", "sendToNextDesktop", "overview", "popup"]
     /// Measure each window's real corner radius once and match it; `focusRingRadius` is the fallback.
     public var focusRingAutoRadius: Bool = true
+    /// Hex, or "accent" for the system accent colour.
     public var focusRingColor: String = "FF9300"
     /// Ring colour for a focused window that is floating (untiled); "same" uses focusRingColor.
     public var focusRingFloatingColor: String = "009193"
@@ -271,8 +262,12 @@ public struct Config {
     public var barWeatherFahrenheit: Bool = false
     /// "auto" uses Location Services; otherwise "lat,lon".
     public var barWeatherLocation: String = "auto"
-    /// "blur" for a translucent material, or a hex colour such as 1E1E1ECC.
+    /// "blur" for a translucent material, "glass" for Liquid Glass (macOS 26; blur before), or a hex colour such as 1E1E1ECC.
     public var barBackground: String = "000000"
+    /// Desktop chips: "flat" colour fills, or "glass" capsules (macOS 26; flat before).
+    public var barChipStyle: String = "flat"
+    /// Liquid Glass everywhere it is used: "regular", or "clear" for a more transparent glass.
+    public var glassStyle: String = "regular"
     /// "auto" follows the system label colour, or a hex colour.
     public var barTextColor: String = "FFFFFF"
     public var barBorderColor: String = "424242"
@@ -405,12 +400,12 @@ public struct Config {
         # a tab is at most tabWidth points long, and shows tabTitleFormat, where {app} and {title} are replaced.
         stackStyle = \(stackStyle.rawValue)
         tabHeight = \(num(tabHeight))
+        # Inactive tabs: "flat" or "glass".
+        tabStyle = \(tabStyle)
         tabWidth = \(num(tabWidth))
         tabTitleFormat = \(tabTitleFormat)
         # Also a tab above every tiled window (in the columns layout), to see titles and renamed tabs.
         tiledTabs = \(tiledTabs)
-        # Cover the bottom-right corner with the wallpaper, hiding the slivers of windows parked there (needs Screen Recording).
-        parkingMat = \(parkingMat)
         # How much the grow and shrink actions change the focused window, in points.
         resizeStep = \(num(resizeStep))
 
@@ -428,8 +423,6 @@ public struct Config {
         # Also ring floating (untiled) windows, not just tiled ones.
         focusRingFloating = \(focusRingFloating)
         focusRingWidth = \(num(focusRingWidth))
-        # outline: a line over the window's edge. filled: a band of the full width around the window.
-        focusRingStyle = \(focusRingStyle.rawValue)
         # Gap between the window and the ring.
         focusRingPadding = \(num(focusRingPadding))
         # Match each window's own corner radius (measured once per window); the radius below is the fallback.
@@ -440,9 +433,9 @@ public struct Config {
         # Fade the ring, tabs and buttons in and out instead of popping them.
         fadeAnimations = \(fadeAnimations)
         focusRingRadius = \(num(focusRingRadius))
-        # Colours are hex RRGGBB or RRGGBBAA without a leading #.
+        # Colours are hex RRGGBB or RRGGBBAA without a leading #, or "accent" for the system accent colour.
         focusRingColor = \(focusRingColor)
-        # Colour for a focused floating (untiled) window, or "same".
+        # Colour for a focused floating (untiled) window: hex, "accent", or "same" as above.
         focusRingFloatingColor = \(focusRingFloatingColor)
 
         # Status bar under the (auto-hidden) system menu bar: desktops, active window, weather, clock.
@@ -469,8 +462,12 @@ public struct Config {
         barWeatherFahrenheit = \(barWeatherFahrenheit)
         # "auto" asks Location Services; or a fixed "latitude,longitude" such as 52.52,13.40.
         barWeatherLocation = \(barWeatherLocation)
-        # Appearance: background is "blur" or a hex colour (RRGGBB or RRGGBBAA); text colour "auto" or hex.
+        # Appearance: background is "blur", "glass" (Liquid Glass) or a hex colour (RRGGBB or RRGGBBAA); text colour "auto" or hex.
         barBackground = \(barBackground)
+        # Desktop chips: "flat" or "glass".
+        barChipStyle = \(barChipStyle)
+        # Liquid Glass look wherever it is used: "regular" or "clear" (more transparent).
+        glassStyle = \(glassStyle)
         barTextColor = \(barTextColor)
         barBorderColor = \(barBorderColor)
         # Active desktop chip: "accent" or a hex colour.
@@ -575,7 +572,6 @@ public struct Config {
             case "tabWidth": cfg.tabWidth = Double(value).map { CGFloat($0) } ?? cfg.tabWidth
             case "tabTitleFormat": cfg.tabTitleFormat = value
             case "tiledTabs": cfg.tiledTabs = ["true", "yes", "1", "on"].contains(value.lowercased())
-            case "parkingMat": cfg.parkingMat = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "resizeStep": cfg.resizeStep = Double(value).map { CGFloat($0) } ?? cfg.resizeStep
             case "stackScreensNarrowerThan": cfg.stackScreensNarrowerThan = Double(value).map { CGFloat($0) } ?? cfg.stackScreensNarrowerThan
             case "animateLayout": break  // removed: Accessibility-driven frame animation was too laggy
@@ -585,7 +581,7 @@ public struct Config {
                 case "actionOverlay": cfg.actionOverlay = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRing": cfg.focusRing = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "focusRingFloating": cfg.focusRingFloating = ["true", "yes", "1", "on"].contains(value.lowercased())
-            case "focusRingStyle": cfg.focusRingStyle = FocusRingStyle(rawValue: value.lowercased()) ?? (value.lowercased() == "glow" ? .filled : .outline)
+            case "focusRingStyle": break  // outline, glow and filled styles came and went; the ring is a card under the window
             case "focusRingWidth": cfg.focusRingWidth = Double(value).map { CGFloat($0) } ?? cfg.focusRingWidth
             case "focusRingPadding": cfg.focusRingPadding = Double(value).map { CGFloat($0) } ?? cfg.focusRingPadding
             case "focusRingAutoRadius": cfg.focusRingAutoRadius = ["true", "yes", "1", "on"].contains(value.lowercased())
@@ -611,6 +607,9 @@ public struct Config {
             case "barWeatherFahrenheit": cfg.barWeatherFahrenheit = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barWeatherLocation": cfg.barWeatherLocation = value
             case "barBackground": cfg.barBackground = value
+            case "barChipStyle": cfg.barChipStyle = value.lowercased() == "glass" ? "glass" : "flat"
+            case "glassStyle": cfg.glassStyle = value.lowercased() == "clear" ? "clear" : "regular"
+            case "tabStyle": cfg.tabStyle = value.lowercased() == "glass" ? "glass" : "flat"
             case "barTextColor": cfg.barTextColor = value
             case "barBorderColor": cfg.barBorderColor = value
             case "barActiveColor": cfg.barActiveColor = value

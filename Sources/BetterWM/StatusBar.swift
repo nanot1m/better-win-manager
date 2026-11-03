@@ -61,6 +61,10 @@ final class StatusBar {
             }
         }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in self?.rebuild() }
+        // Light to dark and back: the glass and the system colours are re-read by fresh bar windows.
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { self?.rebuild() }
+        }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
             self?.stepAsideFromFullscreen()
         }
@@ -83,12 +87,12 @@ final class StatusBar {
     /// Dev aid: opens the sound popover on the first bar.
     func showSoundPopover() { (widgets[.sound] as? SoundWidget)?.showPopover() }
 
-    /// At offset zero with no side margin the bar shares the top edge with the notch.
-    private func atScreenTop(_ screen: NSScreen) -> Bool { config.barTopOffset == 0 && config.barMargin == 0 }
+    /// Whether the bar runs through the notch row: its top lies above the notch's bottom edge.
+    private func meetsNotch(_ screen: NSScreen) -> Bool { config.barTopOffset < screen.safeAreaInsets.top }
 
     private func height(for screen: NSScreen) -> CGFloat {
-        // Beside a notch the bar must be as tall as the notch, or the notch pokes below it.
-        atScreenTop(screen) ? max(config.barHeight, screen.safeAreaInsets.top) : config.barHeight
+        // Through the notch row the bar must reach the notch's bottom edge, or the notch pokes below it.
+        meetsNotch(screen) ? max(config.barHeight, screen.safeAreaInsets.top - config.barTopOffset) : config.barHeight
     }
 
     func apply(_ config: Config) {
@@ -139,7 +143,7 @@ final class StatusBar {
             let h = height(for: screen), m = config.barMargin
             let frame = NSRect(x: screen.frame.minX + m, y: screen.frame.maxY - config.barTopOffset - h, width: screen.frame.width - 2 * m, height: h)
             let w = BarWindow(frame: frame, screen: screen)
-            w.view.apply(config, avoidNotch: atScreenTop(screen))
+            w.view.apply(config, avoidNotch: meetsNotch(screen))
             w.view.setLeftWidgets(config.barLeftWidgets.compactMap { widgets[$0]?.makeView(for: screen) })
             w.view.setRightWidgets(config.barWidgets.compactMap { widgets[$0]?.makeView(for: screen) })
             w.view.setFreeView(config.barCat ? widgets[.cats]?.makeView(for: screen) as? BarFreeView : nil)
@@ -253,8 +257,8 @@ final class ChipView: NSView {
     func setDropTarget(_ on: Bool, color: NSColor) {
         CATransaction.begin()
         CATransaction.setAnimationDuration(0.12)
-        layer?.borderWidth = on ? 2 : 0
-        layer?.borderColor = color.cgColor
+        layer?.borderWidth = on ? 2 : (glass?.isHidden == false ? 1 : 0)
+        layer?.borderColor = on ? color.cgColor : BarView.glassRim.cgColor
         layer?.transform = on ? CATransform3DMakeScale(1.12, 1.12, 1) : CATransform3DIdentity
         CATransaction.commit()
     }
@@ -266,6 +270,39 @@ final class ChipView: NSView {
     private let stack = NSStackView()
     private var icons: [NSImageView] = []
     private static var iconCache: [String: NSImage] = [:]
+
+    /// Liquid Glass behind the chip, where the system has it and the style asks for it, and a wash of colour over
+    /// it for the active chip: the glass's own tint is too faint to tell the chips apart.
+    private var glass: NSView?
+    private let wash = NSView()
+
+    /// `tint` colours the active chip; nil leaves the glass clear. Flat chips keep their layer colour.
+    func setGlass(_ on: Bool, tint: NSColor?, clear: Bool = false) {
+        guard #available(macOS 26, *) else { return }
+        if on, glass == nil {
+            let g = NSGlassEffectView()
+            g.cornerRadius = 5
+            wash.wantsLayer = true
+            wash.layer?.cornerRadius = 5
+            for v in [g, wash] {
+                v.translatesAutoresizingMaskIntoConstraints = false
+                addSubview(v, positioned: .below, relativeTo: stack)
+                NSLayoutConstraint.activate([
+                    v.topAnchor.constraint(equalTo: topAnchor), v.bottomAnchor.constraint(equalTo: bottomAnchor),
+                    v.leadingAnchor.constraint(equalTo: leadingAnchor), v.trailingAnchor.constraint(equalTo: trailingAnchor),
+                ])
+            }
+            glass = g
+        }
+        glass?.isHidden = !on
+        if let g = glass as? NSGlassEffectView { g.style = clear ? .clear : .regular }
+        wash.isHidden = !on || tint == nil
+        wash.layer?.backgroundColor = tint?.withAlphaComponent(0.8).cgColor
+        if layer?.borderWidth != 2 {
+            layer?.borderWidth = on ? 1 : 0
+            layer?.borderColor = BarView.glassRim.cgColor
+        }
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -339,12 +376,19 @@ final class BarView: NSView {
     private let screen: NSScreen
     private let background = NSVisualEffectView()
     private let solid = NSView()
+    /// Liquid Glass, where the system has it.
+    private let glass: NSView? = {
+        if #available(macOS 26, *) { return NSGlassEffectView() }
+        return nil
+    }()
     private var avoidNotch = false
     private var notchPortals = true
     private(set) var textColor: NSColor = .labelColor
     private(set) var activeColor: NSColor = .controlAccentColor
     private(set) var focusOutline: NSColor?
     private var padding: CGFloat = 12
+    /// The bar's inset from the screen's sides; the notch is given in screen coordinates.
+    private var margin: CGFloat = 0
     private let left = NSStackView()
     private let right = NSStackView()
     private var free: (any BarFreeView)?
@@ -364,6 +408,14 @@ final class BarView: NSView {
         solid.wantsLayer = true
         solid.translatesAutoresizingMaskIntoConstraints = false
         addSubview(solid)
+        if let glass {
+            glass.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(glass)
+            NSLayoutConstraint.activate([
+                glass.topAnchor.constraint(equalTo: topAnchor), glass.bottomAnchor.constraint(equalTo: bottomAnchor),
+                glass.leadingAnchor.constraint(equalTo: leadingAnchor), glass.trailingAnchor.constraint(equalTo: trailingAnchor),
+            ])
+        }
         wantsLayer = true
         layer?.masksToBounds = true
 
@@ -390,21 +442,33 @@ final class BarView: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    static let glassRim = NSColor.white.withAlphaComponent(0.18)
+
     func apply(_ config: Config, avoidNotch: Bool) {
         self.avoidNotch = avoidNotch
+        margin = config.barMargin
         padding = config.barPadding
         leftLeading.constant = padding
         rightTrailing.constant = -padding
         textColor = BarStyle.textColor(of: config)
         activeColor = config.barActiveColor.lowercased() == "accent" ? .controlAccentColor : (NSColor(hex: config.barActiveColor) ?? .controlAccentColor)
         focusOutline = config.barFocusOutlineColor.lowercased() == "auto" ? nil : NSColor(hex: config.barFocusOutlineColor)
-        let blur = config.barBackground.lowercased() == "blur"
+        let mode = config.barBackground.lowercased()
+        let glassOn = mode == "glass" && glass != nil
+        let blur = mode == "blur" || (mode == "glass" && glass == nil)
         background.isHidden = !blur
-        solid.isHidden = blur
-        solid.layer?.backgroundColor = blur ? nil : (NSColor(hex: config.barBackground) ?? .windowBackgroundColor).cgColor
+        glass?.isHidden = !glassOn
+        if #available(macOS 26, *), let g = glass as? NSGlassEffectView {
+            g.cornerRadius = config.barRadius
+            g.style = config.glassStyle == "clear" ? .clear : .regular
+        }
+        solid.isHidden = blur || glassOn
+        solid.layer?.backgroundColor = blur || glassOn ? nil : (NSColor(hex: config.barBackground) ?? .windowBackgroundColor).cgColor
         layer?.cornerRadius = config.barRadius
-        layer?.borderWidth = config.barBorderWidth
-        layer?.borderColor = (NSColor(hex: config.barBorderColor) ?? .separatorColor).cgColor
+        // Glass gets a faint light rim unless a border is configured: the system draws none of its own here.
+        let rim = glassOn && config.barBorderWidth == 0
+        layer?.borderWidth = rim ? 1 : config.barBorderWidth
+        layer?.borderColor = rim ? Self.glassRim.cgColor : (NSColor(hex: config.barBorderColor) ?? .separatorColor).cgColor
         notchPortals = config.barNotchPortals
         needsLayout = true
     }
@@ -443,8 +507,8 @@ final class BarView: NSView {
         if avoidNotch, let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea {
             // A long title would otherwise run right up to the notch and leave the cats nowhere to stand.
             let catRoom: CGFloat = free != nil ? 110 : 0
-            leftTrailing.constant = -(bounds.width - (l.maxX - screen.frame.minX)) - 8 - catRoom
-            rightLeading.constant = (r.minX - screen.frame.minX) + 8
+            leftTrailing.constant = -(bounds.width - (l.maxX - screen.frame.minX - margin)) - 8 - catRoom
+            rightLeading.constant = (r.minX - screen.frame.minX - margin) + 8
         } else {
             leftTrailing.constant = -padding
             rightLeading.constant = padding
@@ -455,7 +519,7 @@ final class BarView: NSView {
         var freeStart = left.frame.maxX + 16
         var freeEnd = right.frame.minX - 16
         if avoidNotch, let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea {
-            let notchLeft = l.maxX - screen.frame.minX - 8, notchRight = r.minX - screen.frame.minX + 8
+            let notchLeft = l.maxX - screen.frame.minX - margin - 8, notchRight = r.minX - screen.frame.minX - margin + 8
             if notchPortals, freeStart < notchLeft - 70 {
                 cat.gap = notchLeft...notchRight
             } else if notchPortals {

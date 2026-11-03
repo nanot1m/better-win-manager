@@ -20,7 +20,24 @@ final class FocusRing {
     /// should start), line width, colour.
     var onChange: ((NSRect?, Bool, CGFloat, CGFloat, NSColor) -> Void)?
     private var currentColor = NSColor.controlAccentColor
-    private func notify() { onChange?(shown ? placedFrame : nil, isInactive, current.map(clearance(for:)) ?? pad, config.ringButtonsOverlap, currentColor) }
+    /// A floating window with the ring turned off for floating windows: no ring, but the buttons still want a
+    /// place and a colour, so the frame the ring would have had is kept for them.
+    private var buttonsAnchor: (id: CGWindowID, frame: NSRect)?
+
+    /// The window the ring is on right now, if it is up.
+    var ringedWindow: CGWindowID? { shown ? current : nil }
+
+    private func notify() {
+        if let a = buttonsAnchor {
+            onChange?(a.frame, false, radius(for: a.id) + pad, config.ringButtonsOverlap, config.ringColor(floating: true))
+        } else {
+            onChange?(shown ? placedFrame : nil, isInactive, current.map(clearance(for:)) ?? pad, config.ringButtonsOverlap, currentColor)
+        }
+        if shown != notifiedShown { notifiedShown = shown; onFocusChange?() }
+    }
+    private var notifiedShown = false
+    /// Whether a ring is up right now.
+    var isUp: Bool { shown }
     /// Whether the ring is meant to be on screen; `window.isVisible` lingers through a fade-out.
     private var shown = false
     private func hideRing() { shown = false; Fade.hide(window) }
@@ -40,11 +57,9 @@ final class FocusRing {
     /// so it is brought up to date first.
     private func orderFront() {
         if placedFrame != .zero, window.frame != placedFrame { window.setFrame(placedFrame, display: false, animate: false) }
-        window.orderFrontRegardless()
+        // Just beneath its window; put back there on every reorder of that window.
+        if let id = current { window.order(.below, relativeTo: Int(id)) } else { window.orderFrontRegardless() }
     }
-    private var filled: Bool { config.focusRingStyle == .filled }
-    /// A filled band is a border as wide as the ring's reach, so its inner edge is the window's edge.
-    private var lineWidth: CGFloat { filled ? pad : config.focusRingWidth }
     /// The frame the ring was last put at. A WindowServer move leaves AppKit's `window.frame` stale.
     private var placedFrame: NSRect = .zero
     /// The ring's outer corner radius as drawn; nothing should hang over the curve.
@@ -69,6 +84,8 @@ final class FocusRing {
     var isTiled: (AXWindow) -> Bool = { _ in true }
     /// Same question by window ID, for callers that only have one (workspace switches, re-measures).
     var isTiledID: (CGWindowID) -> Bool = { _ in true }
+    /// The tiled window in front on the active desktop; the grey ring's fallback when none was ringed before.
+    var topTiledWindow: () -> CGWindowID? = { nil }
     /// Fired after the ring window is (re)ordered so dependants like the gap handles can stack above it.
     var onReorder: (() -> Void)?
     /// Fired when the ringed window changes, including between windows of one app.
@@ -97,6 +114,9 @@ final class FocusRing {
         w.backgroundColor = .clear
         w.hasShadow = false
         w.ignoresMouseEvents = true
+        // A card right under its window: the window hides the card's middle, its width shows around the edge, and
+        // it stays above whatever lies behind the window.
+        w.level = .normal
         w.animationBehavior = .none
         // Bound to the current desktop so it slides away with it during a switch instead of floating over the transition.
         w.collectionBehavior = [.moveToActiveSpace, .stationary, .ignoresCycle]
@@ -128,6 +148,11 @@ final class FocusRing {
             case .windowMove:
                 // Moving a window never changes focus; only the ringed window matters, and it is followed straight
                 // from WindowServer. An ⌥-drag of an unfocused window fires this per pixel, so no AX here.
+                if let a = self.buttonsAnchor, wid == a.id, let f = WindowServerEvents.bounds(of: a.id) {
+                    self.buttonsAnchor = (a.id, f.insetBy(dx: -self.pad, dy: -self.pad).toCocoa())
+                    self.notify()
+                    return
+                }
                 guard !self.suspended, wid == self.current, let id = wid, let f = WindowServerEvents.bounds(of: id) else { return }
                 // Off to a corner (parked, or a tab set aside): no longer the window to ring. The ring hides rather
                 // than following; the next focused window brings it back.
@@ -219,7 +244,14 @@ final class FocusRing {
         }
         // Our own windows (Settings, Welcome) are never asked through Accessibility; AppKit knows them directly.
         if NSApp.isActive, let own = NSApp.keyWindow, own.styleMask.contains(.titled), own.isVisible {
-            present(id: CGWindowID(own.windowNumber), frame: own.frame.toCocoa(), floating: true)
+            // They are floating windows like any other: ringed only when floating windows are.
+            if config.focusRingFloating {
+                present(id: CGWindowID(own.windowNumber), frame: own.frame.toCocoa(), floating: true)
+            } else {
+                current = nil
+                hideRing()
+                notify()
+            }
             return
         }
         guard let w = focusedWindow() else {
@@ -247,6 +279,23 @@ final class FocusRing {
         }
         // An app can report a window it keeps alive after closing (ChatGPT) as focused; ring only what is visible.
         // A window on no Space is mid-transition to or from fullscreen.
+        buttonsAnchor = nil
+        if !config.focusRingFloating, !isTiled(w), let id = w.windowID, CGWindowInfo.isOnScreen(id),
+           case let f = WindowServerEvents.bounds(of: id) ?? w.frame, Self.onScreen(f) {
+            // The tiled window behind keeps its ring, greyed: a tabbed stack still shows which window is in front.
+            // With none ringed before (focus came straight here after a desktop switch), the front tiled one is it.
+            let behind = current.flatMap { isTiledID($0) ? $0 : nil } ?? topTiledWindow()
+            if let c = behind, CGWindowInfo.isOnScreen(c), let cf = WindowServerEvents.bounds(of: c), Self.onScreen(cf) {
+                present(id: c, frame: cf, inactive: true)
+            } else {
+                current = nil
+                hideRing()
+            }
+            buttonsAnchor = (id, f.insetBy(dx: -pad, dy: -pad).toCocoa())
+            events.watch([id] + (current.map { [$0] } ?? []))
+            notify()
+            return
+        }
         guard config.focusRingFloating || isTiled(w), let id = w.windowID, CGWindowInfo.isOnScreen(id),
               case let spaces = Spaces.spaces(of: id), !spaces.isEmpty, spaces.allSatisfy(Spaces.isDesktop),
               !NSScreen.screens.contains(where: Spaces.showsFullscreen) else {
@@ -282,39 +331,20 @@ final class FocusRing {
         CATransaction.setDisableActions(true)
         let r = radius(for: id) + pad
         if wasHidden { layer.cornerRadius = r }
-        layer.backgroundColor = nil
-        if wasHidden || !colorChanged { layer.borderColor = color.cgColor }
-        if wasHidden || !targetChanged { layer.borderWidth = lineWidth }
+        if wasHidden || !colorChanged { layer.backgroundColor = color.cgColor }
         CATransaction.commit()
         if !wasHidden {
             // The ring stays where it is: grey to colour (and back) is a cross-fade, a new corner radius (the next
-            // tab of a stack, another app) eases over, and a new window in the same frame is marked by a short
-            // swell of the line.
-            if colorChanged { Fade.animate(layer, "borderColor", to: color.cgColor) }
+            // tab of a stack, another app) eases over.
+            if colorChanged { Fade.animate(layer, "backgroundColor", to: color.cgColor) }
             if layer.cornerRadius != r { Fade.animate(layer, "cornerRadius", to: r) }
-            if targetChanged, !filled { pulse() }
         }
         place(frame: frame)
-        // Above every normal window: the ring is drawn outside the window's frame, so it covers nothing of the
-        // window itself, and it never has to chase the window's depth through raises and unhides.
-        window.level = .floating
         if wasHidden || targetChanged {
             showRing()
             onReorder?()
         }
         notify()
-    }
-
-    private func pulse() {
-        let w = lineWidth
-        guard Fade.enabled else { layer.borderWidth = w; return }
-        let anim = CAKeyframeAnimation(keyPath: "borderWidth")
-        anim.values = [layer.presentation()?.borderWidth ?? w, w + 2, w]
-        anim.keyTimes = [0, 0.4, 1]
-        anim.duration = Fade.duration * 1.5
-        anim.timingFunction = Fade.curve
-        layer.add(anim, forKey: "borderWidth")
-        layer.borderWidth = w
     }
 
     private func radius(for id: CGWindowID) -> CGFloat {
@@ -375,10 +405,15 @@ extension NSColor {
 }
 
 extension Config {
-    var ringTiledColor: NSColor { NSColor(hex: focusRingColor) ?? .controlAccentColor }
+    /// "accent" is the system accent colour.
+    var ringTiledColor: NSColor { focusRingColor.lowercased() == "accent" ? .controlAccentColor : (NSColor(hex: focusRingColor) ?? .controlAccentColor) }
     /// nil when the floating colour is "same" as the tiled one.
     var ringFloatingColorOverride: NSColor? {
-        focusRingFloatingColor.lowercased() == "same" ? nil : (NSColor(hex: focusRingFloatingColor) ?? ringTiledColor)
+        switch focusRingFloatingColor.lowercased() {
+        case "same": return nil
+        case "accent": return .controlAccentColor
+        default: return NSColor(hex: focusRingFloatingColor) ?? ringTiledColor
+        }
     }
     func ringColor(floating: Bool) -> NSColor { floating ? (ringFloatingColorOverride ?? ringTiledColor) : ringTiledColor }
     func ringRadius(for id: CGWindowID) -> CGFloat {

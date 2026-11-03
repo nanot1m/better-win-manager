@@ -6,14 +6,27 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
-### Added
-- `parkingMat` (Settings › Layout › Hide the parking corner): a patch of wallpaper over the bottom-right corner, where windows of other desktops and hidden tabs wait with two points showing, hiding those slivers and their shadows. Needs Screen Recording; off by default.
+### Changed
+- The focus ring is a card lying right under the focused window, its whole width showing around the edge, instead of a line drawn over the edge; it is put back beneath the window on every reorder of it.
+- The tab strips show while the focus ring does: when the ring is gone (nothing on screen to mark), the tabs hide too, and they come back with it.
 
 ### Fixed
-- Tab strips sat behind the app windows, where the focused window's shadow fell on them and made the active tab a shade darker than the ring. They now sit above app windows like the ring.
+- A slow-starting app (System Settings) could come up behind the tiled windows: with no window of its own on screen yet, it was taken for an app whose last window had closed, and focus was handed to the top tiled window. Only a closed window of the frontmost app itself hands focus on now.
+- With "Also highlight floating windows" off, a focused floating window still gets the ring's action buttons, standing where the ring's top edge would be, in the floating colour, while the tiled window behind keeps its ring and tabs in grey; before, ring, tabs and buttons all went.
+- The Settings window (and the Welcome window) got a ring even with "Also highlight floating windows" off; they follow that setting like any floating window.
+- Tab strips reach down over the focus ring as far as the action buttons do, so tabs and buttons stand on the same line; the tabs stopped at the ring's outer edge. The strips stay behind the app windows, which hide the overlap.
+- A floating bar (side margin or top offset) that still runs through the notch row now keeps its content out of the notch and lets the cats cross it through the portals, as the edge-to-edge bar does; before, only a bar flush with the screen edge knew about the notch.
 
 ### Added
-- `focusRingStyle = filled` (Settings › Focus ring › Style): a band of the ring colour around the focused window, the whole thickness outside it with the action buttons standing on top, instead of a line over the edge.
+- `focusRingColor` and `focusRingFloatingColor` accept `accent`, the system accent colour (Settings › Focus ring › Colour › System accent).
+- Liquid Glass: `barBackground = glass` (Settings › Status bar › Background), `barChipStyle = glass` for the desktop chips with the active one tinted with `barActiveColor`, `tabStyle = glass` for inactive tabs, and `glassStyle = clear` for a more transparent glass everywhere. macOS 26 and later; earlier systems fall back to the blur and flat looks.
+- The bar is rebuilt when macOS switches between light and dark, so glass and system colours follow the theme. On a glass bar the text colour always follows the system.
+
+### Added
+
+### Fixed
+
+### Added
 
 ## [0.37.0] - 2026-11-03
 

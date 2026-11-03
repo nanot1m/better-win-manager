@@ -34,7 +34,9 @@ Older configs have `barWeather`, `barCpu` and similar booleans. They are still r
 
 | Key | Values |
 | --- | --- |
-| `barBackground` | `blur` for a translucent material, or a hex colour `RRGGBB` / `RRGGBBAA` |
+| `barBackground` | `blur` for a translucent material, `glass` for Liquid Glass (macOS 26; a blur before), or a hex colour `RRGGBB` / `RRGGBBAA` |
+| `barChipStyle` | `flat` fills for the desktop chips, or `glass` capsules, the active one tinted with `barActiveColor` |
+| `glassStyle` | `regular` or `clear` glass, here and on the tabs |
 | `barTextColor` | `auto` for the system label colour, or hex |
 | `barActiveColor` | `accent` for the system accent, or hex |
 | `barBorderColor`, `barBorderWidth` | Border around the bar; width 0 hides it |

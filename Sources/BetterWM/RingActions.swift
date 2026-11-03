@@ -71,8 +71,8 @@ final class RingActions {
         guard enabled, !keys.isEmpty, let ring else { Fade.hide(panel); return }
         view.setColor(color)
         let size = panel.frame.size
-        // On an outline the pill stands on the line, its bottom at the line's inner edge, so pill and ring read as
-        // one shape; on a filled card it stands on the card's outer edge. Nothing of it hangs over the window.
+        // Standing on the ring: its bottom edge meets the ring's inner edge, so pill and ring read as one shape,
+        // and nothing of the pill hangs over the window.
         let origin = NSPoint(x: ring.maxX - clearance - size.width, y: ring.maxY - overlap)
         if panel.frame.origin != origin { panel.setFrameOrigin(origin) }
         if panel.isVisible || !Fade.enabled {

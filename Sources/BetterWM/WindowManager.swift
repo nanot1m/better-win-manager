@@ -75,7 +75,6 @@ final class WindowManager {
     let overlay: ZoneOverlay
     let focusRing: FocusRing
     private var handles: [HandleWindow] = []
-    private var parkingMats: [ParkingMatWindow] = []
     private var timer: Timer?
     private var axObserver: WindowObserver?
     /// Set while a Space switch is in flight; the window list mixes both desktops during the slide.
@@ -604,6 +603,9 @@ final class WindowManager {
         overlay = ZoneOverlay(screen: primaryScreen)
         focusRing.isTiled = { [unowned self] w in self.isTiled(w) }
         focusRing.isTiledID = { [unowned self] id in self.state.isTiled(id) }
+        focusRing.topTiledWindow = { [unowned self] in
+            self.zOrder.first { self.state.isTiled($0) && self.desktops.workspace(of: $0) == self.desktops.active && !self.desktops.isParked($0) }
+        }
         focusRing.isShown = { [unowned self] id in self.desktops.isShown(self.desktops.workspace(of: id)) }
         focusRing.tiledWindows = { [unowned self] in self.state.grids.values.flatMap(\.windows) }
         focusRing.focusedWindow = { [unowned self] in self.system.focused }
@@ -665,6 +667,9 @@ final class WindowManager {
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             self?.saveNow()
         }
+        // The ring learns of activation at once (its own observer); the tabs colour, hide and show with it, not
+        // after the Accessibility round-trip below.
+        focusRing.onFocusChange = { [weak self] in self?.refreshTabStrips() }
         // App activation (⌘Tab, Dock) is the common way to reach a parked window; AX focus events fire before
         // the frontmost app updates, so re-check shortly after activation as well.
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
@@ -679,7 +684,7 @@ final class WindowManager {
             case .frontChange, .windowReorder: self?.refanStackedScreens(); self?.refreshTabStrips()
             case .windowCreate: self?.scheduleTick()
             case .windowDestroy:
-                if let wid { self?.windowWentAway(wid) }
+                if let wid, let pid = self?.system.pid(of: wid) { self?.windowWentAway(of: pid) }
                 self?.scheduleTick()
             case .spaceChange: self?.stepAsideFromFullscreen()
             case .windowMove, .windowResize:
@@ -720,7 +725,7 @@ final class WindowManager {
                                         let onScreen = Set(CGWindowInfo.list([.optionOnScreenOnly, .excludeDesktopElements]).filter { $0.pid == pid }.map(\.id))
                                         guard known.contains(where: { !onScreen.contains($0) }) else { return }
                                         self.focusRing.update()
-                                        self.windowWentAway()
+                                        self.windowWentAway(of: pid)
                                         self.scheduleTick(after: 0.05)
                                     })
         tick()
@@ -863,9 +868,12 @@ final class WindowManager {
     /// The focused window closing leaves its app frontmost with nothing to focus (macOS does not pick another
     /// app's window): the desktop's top window takes the focus, so ring and tabs stay sensible. Also for a window
     /// its app keeps alive after closing (Ghostty), which sends no destroy event.
-    private func windowWentAway(_ id: WindowID? = nil) {
+    /// A window of `pid` closed: if that was the frontmost app's last window on screen, focus moves on to the top
+    /// window, since macOS leaves it with an app that has nothing to show. Only that app's own loss counts: an app
+    /// still launching (System Settings takes a moment) has no window yet either, and must not be pushed behind.
+    private func windowWentAway(of pid: pid_t) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            guard let self, let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != getpid() else { return }
+            guard let self, let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier == pid, pid != getpid() else { return }
             // Accessibility may still name the closed window as focused (the app keeps it alive); what counts is
             // whether the frontmost app has any window left on the screen.
             let screens = NSScreen.screens.map { $0.frame.toCocoa() }
@@ -880,7 +888,7 @@ final class WindowManager {
         guard case let alive = CGWindowInfo.aliveIDs(), !alive.isEmpty else { return }
         let closed = system.closedByApp
         system.forgetClosed(closed)
-        closed.forEach(windowWentAway)
+        Set(closed.compactMap(system.pid(of:))).forEach(windowWentAway(of:))
         do {
             let v = desktops
             for id in v.knownWindows where !alive.contains(id) || closed.contains(id) {
@@ -1126,46 +1134,16 @@ final class WindowManager {
         guard NSScreen.screens.contains(where: Spaces.showsFullscreen) else { return }
         tabStrips.forEach { $0.hide() }
         handles.forEach { $0.orderOut(nil) }
-        parkingMats.forEach { $0.hide() }
         focusRing.update()
         // macOS shoves parked windows onto the screen during the transition; that is no refusal of theirs.
         if claimsSuspendedUntil < Date() { suspendClaims(until: Date().addingTimeInterval(5)) }
     }
 
     private func refreshChrome() {
-        refreshParkingMats()
         refreshHandles()
         refreshTabStrips()
         focusRing.update()
         stackHandles()
-    }
-
-    /// One mat per screen over the parking corner: the corner as it looks without the parked windows, so the
-    /// shadows of the windows on the desktop stay and the seam is invisible. Tiled windows reaching in are cut out.
-    private func refreshParkingMats() {
-        var needed: [(area: CGRect, cutouts: [(CGRect, CGFloat)])] = []
-        if config.parkingMat, CGPreflightScreenCaptureAccess() {
-            for (space, geo) in activeGeometries() {
-                if let ws = VirtualWorkspaces.workspace(of: space), let s = screen(ofDesktop: ws), Spaces.showsFullscreen(s) { continue }
-                let cutouts = geo.windowFrames().filter { !geo.waitsAside($0.1) }.map { ($0.1, config.ringRadius(for: $0.0)) }
-                needed.append((geo.area, cutouts))
-            }
-        }
-        while parkingMats.count < needed.count { parkingMats.append(ParkingMatWindow()) }
-        guard !needed.isEmpty else { parkingMats.forEach { $0.hide() }; return }
-        // A parked window shows a sliver at most on any screen; macOS clamps some short of the exact corner.
-        let screens = NSScreen.screens.map { $0.frame.toCocoa() }
-        func sliver(_ b: CGRect) -> Bool {
-            screens.allSatisfy { let v = b.intersection($0); return v.isNull || v.width <= 3 || v.height <= 3 }
-        }
-        let shown = CGWindowInfo.list(.optionOnScreenOnly).filter { $0.pid != getpid() && !sliver($0.bounds) }.map(\.id)
-        for (i, m) in parkingMats.enumerated() {
-            guard i < needed.count else { m.hide(); continue }
-            let corner = CGRect(x: needed[i].area.maxX - ParkingMatWindow.size, y: needed[i].area.maxY - ParkingMatWindow.size,
-                                width: ParkingMatWindow.size, height: ParkingMatWindow.size)
-            guard let image = CGWindowInfo.image(of: shown, in: corner) else { m.hide(); continue }
-            m.show(area: needed[i].area, cutouts: needed[i].cutouts, wallpaper: image)
-        }
     }
 
     /// Handles go right above the focus ring (or the frontmost tiled window), so the ring never covers the grip
@@ -1680,12 +1658,16 @@ final class WindowManager {
         // A strip whose window is not the focused one (a floating window holds the focus, or another tiled
         // window does) would hang loose over the ring's gap; it moves over the gap to touch its window. A stack's
         // front window is the first in z-order.
+        // The tabs show while the ring does: no ring (nothing focused and no window to mark) means no tabs either.
+        let ringGone = config.focusRing && !focusRing.isUp
         for (i, s) in tabStrips.enumerated() {
-            guard i < needed.count else { s.hide(); continue }
+            guard i < needed.count, !ringGone else { s.hide(); continue }
             var (frame, items, side, stacked) = needed[i]
             let ids = Set(items.map(\.id))
             let front = focused.flatMap { ids.contains($0) ? $0 : nil } ?? zOrder.first(where: ids.contains)
-            if let front, front != focused {
+            // No ring on the front window (focus is on a floating window ringed instead): the strip, which would
+            // hang loose over the ring's gap, moves over it to touch its window.
+            if let front, front != focused, focusRing.ringedWindow != front {
                 let d = config.focusRingOutset + config.tileInset
                 switch side {
                 case .top: frame.origin.y += d

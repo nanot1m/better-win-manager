@@ -372,10 +372,10 @@ struct ReconcilerTests {
         c.focusRing = true
         c.focusRingWidth = 6
         c.focusRingPadding = 3
-        // Ring 6 wide reaches 4 beyond the slot, so 2 of it lie inside: the window moves in by the gap plus those 2.
-        // At the sides the ring is outermost, so the slot itself starts the ring's reach (4) in from the edge.
+        // The ring is a card under the window: all 6 of it lie outside the slot, and the window moves in by the gap.
+        // At the sides the ring is outermost, so the slot itself starts the ring's reach (6) in from the edge.
         let ringed = GridGeometry(grid: g, area: area, config: c).windowFrames().first!.1
-        expect(ringed.minY == 30 + 4 + 5 && ringed.minX == 4 + 5 && ringed.width == area.width - 18, #function, #line)
+        expect(ringed.minY == 30 + 6 + 3 && ringed.minX == 6 + 3 && ringed.width == area.width - 18, #function, #line)
         // A slot narrower than twice the gap still yields a finite frame.
         c.focusRingPadding = 40
         var narrow = Grid()
@@ -384,7 +384,7 @@ struct ReconcilerTests {
         expect(!tiny.isNull && tiny.width >= 1 && tiny.minX.isFinite, #function, #line)
         c.focusRingPadding = 0
         // No gap means no inset inside the slot; the slot itself still starts the ring's reach in from the edge.
-        expect(GridGeometry(grid: g, area: area, config: c).windowFrames().first!.1.minX == 4, #function, #line)
+        expect(GridGeometry(grid: g, area: area, config: c).windowFrames().first!.1.minX == 6, #function, #line)
         c.focusRing = false
         let top = GridGeometry(grid: g, area: area, config: c)
         let frames = Dictionary(uniqueKeysWithValues: top.windowFrames())

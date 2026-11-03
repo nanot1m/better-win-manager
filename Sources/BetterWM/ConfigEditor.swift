@@ -51,7 +51,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var stackStylePopup: NSPopUpButton!
     private var tabHeightField: NSTextField!
     private var tiledTabsSwitch: NSSwitch!
-    private var parkingMatSwitch: NSSwitch!
     private var tabWidthField: NSTextField!
     private var tabTitleField: NSTextField!
     private var resizeStepField: NSTextField!
@@ -72,6 +71,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var smallH: NSTextField!
     private var ringSwitch: NSSwitch!
     private var ringColor: NSColorWell!
+    private var ringColorMode: NSPopUpButton!
     private var ringFloatingMode: NSPopUpButton!
     private var ringFloatingColor: NSColorWell!
     private var ringWidth: NSSlider!
@@ -81,7 +81,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var ringRadius: NSSlider!
     private var ringRadiusLabel: NSTextField!
     private var ringAutoRadius: NSSwitch!
-    private var ringStylePopup: NSPopUpButton!
     private var ringFloating: NSSwitch!
     private var ringActions: NSSwitch!
     private var fadeSwitch: NSSwitch!
@@ -98,6 +97,9 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var barTextColorWell: NSColorWell!
     private var barBorderColorWell: NSColorWell!
     private var barActiveMode: NSPopUpButton!
+    private var barChipStyleMode: NSPopUpButton!
+    private var glassStyleMode: NSPopUpButton!
+    private var tabStyleMode: NSPopUpButton!
     private var barActiveColorWell: NSColorWell!
     private var barOutlineMode: NSPopUpButton!
     private var barOutlineColorWell: NSColorWell!
@@ -464,7 +466,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         desktopSwipeSwitch = toggle()
         gestureFingersPopup = choice(["Three fingers", "Four fingers"], #selector(overviewChanged))
         overlaySwitch = toggle()
-        parkingMatSwitch = toggle()
         edgeGapFields = (numberField("", width: 48), numberField("", width: 48), numberField("", width: 48), numberField("", width: 48))
         for f in [edgeGapFields.0, edgeGapFields.1, edgeGapFields.2, edgeGapFields.3] { f.placeholderString = "same" }
         return [
@@ -473,7 +474,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 sliderRow("Gap around the screen", nil, \.outerGap, 0...64),
                 row("Gap per edge", "Top, left, bottom, right. Blank takes the gap around the screen.",
                     [edgeGapFields.0, edgeGapFields.1, edgeGapFields.2, edgeGapFields.3, unit("pt")]),
-                row("Hide the parking corner", "Windows of other desktops and hidden tabs wait just past the bottom-right corner, two points showing. A patch of wallpaper covers them and their shadows. Needs Screen Recording permission.", [parkingMatSwitch]),
                 sliderRow("Resize handle width", "The draggable bar in each gap.", \.handleWidth, 4...32),
             ]),
             group("Launch", [
@@ -533,6 +533,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         }
         tabHeightField = numberField("30")
         tiledTabsSwitch = toggle()
+        tabStyleMode = choice(["Flat", "Liquid glass"], #selector(barAppearanceChanged))
         tabWidthField = numberField("240")
         tabTitleField = NSTextField(string: "")
         tabTitleField.widthAnchor.constraint(equalToConstant: 200).isActive = true
@@ -553,6 +554,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 row("Cascade offset", "Windows cascade by this much so the ones behind stay visible.", [stackOffsetField, unit("pt")]),
                 row("Tab strip thickness / max tab length", "The strip's height on top or width on the left, where tabs read sideways; and the longest a tab gets.", [tabHeightField, unit("pt"), tabWidthField, unit("pt")]),
                 row("Tab title", "{app} and {title} are replaced.", [tabTitleField]),
+                row("Inactive tabs", "Flat grey, or Liquid Glass (macOS 26). The active tab keeps the ring colour.", [tabStyleMode]),
                 row("Tabs on tiled windows too", "A tab above every window in the columns layout, to see titles and renamed tabs there.", [tiledTabsSwitch]),
                 row("Start stacked on narrow screens", "Screens narrower than this begin in stacked layout; 0 never.", [stackNarrowField, unit("pt")]),
             ]),
@@ -575,7 +577,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         checks.alignment = .leading
         checks.spacing = 2
         ringColor = well()
-        ringFloatingMode = choice(["Same as tiled", "Custom colour"], #selector(floatingColorModeChanged))
+        ringColorMode = choice(["System accent", "Custom colour"], #selector(floatingColorModeChanged))
+        ringFloatingMode = choice(["Same as tiled", "System accent", "Custom colour"], #selector(floatingColorModeChanged))
         ringFloatingColor = well()
         ringWidth = NSSlider(value: 3, minValue: 1, maxValue: 12, target: self, action: #selector(ringSliderChanged(_:)))
         ringWidth.widthAnchor.constraint(equalToConstant: 220).isActive = true
@@ -593,11 +596,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             l.widthAnchor.constraint(equalToConstant: 44).isActive = true
         }
         ringAutoRadius = toggle(#selector(autoRadiusChanged))
-        ringStylePopup = NSPopUpButton()
-        for st in Config.FocusRingStyle.allCases {
-            ringStylePopup.addItem(withTitle: st.title)
-            ringStylePopup.lastItem?.representedObject = st.rawValue
-        }
         return [
             group(nil, [
                 row("Highlight the focused window", nil, [ringSwitch]),
@@ -607,11 +605,10 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 row("Buttons", "In this order, left to right.", [checks]),
             ]),
             group("Colour", [
-                row("Tiled windows", nil, [ringColor]),
+                row("Tiled windows", nil, [ringColorMode, ringColor]),
                 row("Floating windows", "Untiled windows can get their own ring colour.", [ringFloatingMode, ringFloatingColor]),
             ]),
             group("Shape", [
-                row("Style", "A line over the window's edge, or a band of the full thickness around the window with the buttons on top of it.", [ringStylePopup]),
                 row("Thickness", nil, [ringWidth, ringWidthLabel]),
                 row("Gap to the window", "Tiled windows shrink inside their slot by this much; the ring stays on the slot's edge.", [ringPadding, ringPaddingLabel]),
                 row("Match each window's corners", "Measures the window's own corner radius.", [ringAutoRadius]),
@@ -623,7 +620,9 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private func barGroups() -> [NSView] {
         barSwitch = toggle()
         barHeightField = numberField("28")
-        barBackgroundMode = choice(["Blur", "Colour"], #selector(barAppearanceChanged))
+        barBackgroundMode = choice(["Blur", "Colour", "Liquid glass"], #selector(barAppearanceChanged))
+        barChipStyleMode = choice(["Flat", "Liquid glass"], #selector(barAppearanceChanged))
+        glassStyleMode = choice(["Regular", "Clear"], #selector(barAppearanceChanged))
         barBgColor = well()
         barTextMode = choice(["System", "Custom colour"], #selector(barAppearanceChanged))
         barTextColorWell = well()
@@ -643,9 +642,11 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 row("Height", nil, [barHeightField, unit("pt")]),
             ]),
             group("Appearance", [
-                row("Background", "A translucent blur, or a solid colour.", [barBackgroundMode, barBgColor]),
-                row("Text colour", nil, [barTextMode, barTextColorWell]),
+                row("Background", "A translucent blur, a solid colour, or Liquid Glass (macOS 26; a blur before).", [barBackgroundMode, barBgColor]),
+                row("Text colour", "On Liquid Glass the text always follows the system, light or dark.", [barTextMode, barTextColorWell]),
                 row("Active desktop chip", nil, [barActiveMode, barActiveColorWell]),
+                row("Desktop chips", "Flat colour fills, or Liquid Glass capsules with the active one tinted (macOS 26).", [barChipStyleMode]),
+                row("Glass style", "For the bar, the chips and the tabs: regular, or clear for a more transparent glass.", [glassStyleMode]),
                 row("Focused window outline", "Around the focused window's icon in its chip. Automatic contrasts with the chip.", [barOutlineMode, barOutlineColorWell]),
                 row("Border", nil, [barBorderColorWell, barBorderWidthField, unit("pt")]),
                 row("Corner radius", nil, [barRadiusField, unit("pt")]),
@@ -994,13 +995,17 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     }
     @objc private func ringActionsChanged() { for (_, box) in ringActionChecks { box.isEnabled = ringActions.state == .on } }
     @objc private func autoRadiusChanged() { ringRadius.isEnabled = ringAutoRadius.state == .off }
-    @objc private func floatingColorModeChanged() { ringFloatingColor.isEnabled = ringFloatingMode.indexOfSelectedItem == 1 }
+    @objc private func floatingColorModeChanged() {
+        ringColor.isEnabled = ringColorMode.indexOfSelectedItem == 1
+        ringFloatingColor.isEnabled = ringFloatingMode.indexOfSelectedItem == 2
+    }
     @objc private func ringSliderChanged(_ s: NSSlider) {
         (s === ringWidth ? ringWidthLabel : s === ringPadding ? ringPaddingLabel : ringRadiusLabel)?.stringValue = "\(Int(s.doubleValue.rounded())) pt"
     }
     @objc private func barAppearanceChanged() {
         barBgColor.isEnabled = barBackgroundMode.indexOfSelectedItem == 1
-        barTextColorWell.isEnabled = barTextMode.indexOfSelectedItem == 1
+        barTextMode.isEnabled = barBackgroundMode.indexOfSelectedItem != 2
+        barTextColorWell.isEnabled = barTextMode.isEnabled && barTextMode.indexOfSelectedItem == 1
         barActiveColorWell.isEnabled = barActiveMode.indexOfSelectedItem == 1
         barOutlineColorWell.isEnabled = barOutlineMode.indexOfSelectedItem == 1
     }
@@ -1059,7 +1064,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         stackStylePopup.selectItem(at: Config.StackStyle.allCases.firstIndex(of: config.stackStyle) ?? 0)
         tabHeightField.stringValue = String(Int(config.tabHeight))
         on(tiledTabsSwitch, config.tiledTabs)
-        on(parkingMatSwitch, config.parkingMat)
         tabWidthField.stringValue = String(Int(config.tabWidth))
         tabTitleField.stringValue = config.tabTitleFormat
         resizeStepField.stringValue = String(Int(config.resizeStep))
@@ -1080,15 +1084,16 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         for (k, r) in recorders { r.spec = config.hotkeys[k] }
         on(ringSwitch, config.focusRing)
         on(ringFloating, config.focusRingFloating)
+        ringColorMode.selectItem(at: config.focusRingColor.lowercased() == "accent" ? 0 : 1)
         ringColor.color = config.ringTiledColor
-        ringFloatingMode.selectItem(at: config.ringFloatingColorOverride == nil ? 0 : 1)
+        let floatingMode = config.focusRingFloatingColor.lowercased()
+        ringFloatingMode.selectItem(at: floatingMode == "same" ? 0 : floatingMode == "accent" ? 1 : 2)
         ringFloatingColor.color = config.ringColor(floating: true)
         floatingColorModeChanged()
         ringWidth.doubleValue = Double(config.focusRingWidth)
         ringPadding.doubleValue = Double(config.focusRingPadding)
         ringRadius.doubleValue = Double(config.focusRingRadius)
         on(ringAutoRadius, config.focusRingAutoRadius)
-        ringStylePopup.selectItem(at: Config.FocusRingStyle.allCases.firstIndex(of: config.focusRingStyle) ?? 0)
         on(ringActions, config.focusRingActions)
         on(fadeSwitch, config.fadeAnimations)
         for (key, box) in ringActionChecks { box.state = config.focusRingActionKeys.contains(key) ? .on : .off }
@@ -1106,9 +1111,12 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         widgetLists[1].order = config.barWidgets.map { ($0, true) } + Config.BarWidget.rightKinds.filter { !config.barWidgets.contains($0) }.map { ($0, false) }
         rebuildWidgetRows()
         barCatSheets.string = config.barCatSheets.joined(separator: "\n")
-        let blur = config.barBackground.lowercased() == "blur"
-        barBackgroundMode.selectItem(at: blur ? 0 : 1)
-        barBgColor.color = blur ? NSColor.windowBackgroundColor : (NSColor(hex: config.barBackground) ?? .windowBackgroundColor)
+        let bg = config.barBackground.lowercased()
+        barBackgroundMode.selectItem(at: bg == "blur" ? 0 : bg == "glass" ? 2 : 1)
+        barBgColor.color = NSColor(hex: config.barBackground) ?? .windowBackgroundColor
+        barChipStyleMode.selectItem(at: config.barChipStyle == "glass" ? 1 : 0)
+        glassStyleMode.selectItem(at: config.glassStyle == "clear" ? 1 : 0)
+        tabStyleMode.selectItem(at: config.tabStyle == "glass" ? 1 : 0)
         let autoText = config.barTextColor.lowercased() == "auto"
         barTextMode.selectItem(at: autoText ? 0 : 1)
         barTextColorWell.color = autoText ? .labelColor : (NSColor(hex: config.barTextColor) ?? .labelColor)
@@ -1153,7 +1161,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         if let raw = stackStylePopup.selectedItem?.representedObject as? String, let st = Config.StackStyle(rawValue: raw) { config.stackStyle = st }
         config.tabHeight = max(16, number(tabHeightField, or: defaults.tabHeight))
         config.tiledTabs = isOn(tiledTabsSwitch)
-        config.parkingMat = isOn(parkingMatSwitch)
         config.tabWidth = max(60, number(tabWidthField, or: defaults.tabWidth))
         config.tabTitleFormat = tabTitleField.stringValue.isEmpty ? defaults.tabTitleFormat : tabTitleField.stringValue
         config.resizeStep = max(1, number(resizeStepField, or: defaults.resizeStep))
@@ -1174,13 +1181,12 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.hotkeys = recorders.compactMapValues(\.spec)
         config.focusRing = isOn(ringSwitch)
         config.focusRingFloating = isOn(ringFloating)
-        config.focusRingColor = ringColor.color.hexString
-        config.focusRingFloatingColor = ringFloatingMode.indexOfSelectedItem == 0 ? "same" : ringFloatingColor.color.hexString
+        config.focusRingColor = ringColorMode.indexOfSelectedItem == 0 ? "accent" : ringColor.color.hexString
+        config.focusRingFloatingColor = [0: "same", 1: "accent"][ringFloatingMode.indexOfSelectedItem] ?? ringFloatingColor.color.hexString
         config.focusRingWidth = CGFloat(ringWidth.doubleValue.rounded())
         config.focusRingPadding = CGFloat(ringPadding.doubleValue.rounded())
         config.focusRingRadius = CGFloat(ringRadius.doubleValue.rounded())
         config.focusRingAutoRadius = isOn(ringAutoRadius)
-        if let raw = ringStylePopup.selectedItem?.representedObject as? String, let st = Config.FocusRingStyle(rawValue: raw) { config.focusRingStyle = st }
         config.focusRingActions = isOn(ringActions)
         config.fadeAnimations = isOn(fadeSwitch)
         config.focusRingActionKeys = ringActionChecks.filter { $0.box.state == .on }.map(\.key)
@@ -1192,7 +1198,10 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.barLeftWidgets = widgetLists[0].order.filter(\.1).map(\.0)
         config.barWidgets = widgetLists[1].order.filter(\.1).map(\.0)
         config.barCatSheets = barCatSheets.string.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        config.barBackground = barBackgroundMode.indexOfSelectedItem == 0 ? "blur" : barBgColor.color.hexString
+        config.barBackground = [0: "blur", 2: "glass"][barBackgroundMode.indexOfSelectedItem] ?? barBgColor.color.hexString
+        config.barChipStyle = barChipStyleMode.indexOfSelectedItem == 1 ? "glass" : "flat"
+        config.glassStyle = glassStyleMode.indexOfSelectedItem == 1 ? "clear" : "regular"
+        config.tabStyle = tabStyleMode.indexOfSelectedItem == 1 ? "glass" : "flat"
         config.barTextColor = barTextMode.indexOfSelectedItem == 0 ? "auto" : barTextColorWell.color.hexString
         config.barBorderColor = barBorderColorWell.color.hexString
         config.barActiveColor = barActiveMode.indexOfSelectedItem == 0 ? "accent" : barActiveColorWell.color.hexString

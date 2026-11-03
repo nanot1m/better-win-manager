@@ -13,7 +13,6 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `gap` | 16 | Space between tiled windows |
 | `outerGap` | 16 | Space between the screen edge (and the bar) and the outermost thing at it: the focus ring, a tab strip or the ring's action pills |
 | `outerGapTop`, `outerGapLeft`, `outerGapBottom`, `outerGapRight` | blank | Gap to that edge; blank takes `outerGap` |
-| `parkingMat` | false | Covers the bottom-right corner, where parked windows show two points, with a patch of wallpaper. Needs Screen Recording |
 | `handleWidth` | 16 | Width of the draggable bar in each gap |
 
 ## Tiling
@@ -28,6 +27,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `dragModifiers` | alt | Keys held while dragging to tile: `cmd`, `alt`, `ctrl`, `shift` joined with `+` |
 | `stackOffset` | 48 | Horizontal shift between cascaded windows in stacked layout |
 | `stackStyle` | tabsTop | How a stacked screen looks: `cascade`, `tabsTop` (every window full size under a row of tabs), `tabsLeft` or `tabsRight` (sideways tabs down that edge) |
+| `tabStyle` | flat | Inactive tabs: `flat` grey, or `glass` (macOS 26); the active tab keeps the ring colour |
 | `tabHeight` / `tabWidth` | 30 / 240 | Thickness of the tab strip (its height on top, its width on the left, where tabs read sideways), and the longest a tab gets; the windows get the rest |
 | `tabTitleFormat` | `{app} — {title}` | Tab label; `{app}` and `{title}` are replaced |
 | `tiledTabs` | false | A tab above every window in the columns layout too, showing its title or the name given to it |
@@ -43,10 +43,9 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | --- | --- | --- |
 | `focusRing` | true | Draw an outline around the focused window |
 | `focusRingFloating` | true | Also around floating windows |
-| `focusRingColor` | FF9300 | Ring colour for tiled windows |
-| `focusRingFloatingColor` | 009193 | Ring colour for floating windows, or `same` |
+| `focusRingColor` | FF9300 | Ring colour for tiled windows: hex, or `accent` for the system accent colour |
+| `focusRingFloatingColor` | 009193 | Ring colour for floating windows: hex, `accent`, or `same` as the tiled one |
 | `focusRingWidth` | 6 | Thickness |
-| `focusRingStyle` | outline | `outline` draws a line over the window's edge; `filled` draws a band of the full thickness around the window, with the action buttons standing on top of it |
 | `focusRingPadding` | 0 | Gap between a window and its ring; tiled windows shrink inside their slot by it, the ring stays put |
 | `focusRingAutoRadius` | true | Measure each window's own corner radius |
 | `focusRingActions` | true | Small icon buttons on the ring's top edge near the right corner. When no tab strip sits above the ring (columns layout without `tiledTabs`, or side tabs), the layout keeps room for them under the status bar |
@@ -68,7 +67,9 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `barBatteryPercent` | false | Number next to the battery icon |
 | `barWeatherFahrenheit` | false | Weather units |
 | `barWeatherLocation` | auto | `auto` for Location Services, or `latitude,longitude` |
-| `barBackground` | 000000 | `blur` or a colour |
+| `barBackground` | 000000 | `blur`, `glass` (Liquid Glass on macOS 26, a blur before) or a colour. With `glass` the text colour always follows the system |
+| `barChipStyle` | flat | `flat` colour fills for the desktop chips, or `glass` capsules with the active one tinted (macOS 26) |
+| `glassStyle` | regular | Liquid Glass look wherever it is used: `regular`, or `clear` for a more transparent glass |
 | `barTextColor` | FFFFFF | `auto` or a colour |
 | `barActiveColor` | FF9300 | `accent` or a colour, for the active desktop chip |
 | `barFocusOutlineColor` | auto | Outline around the focused window's icon in its chip: `auto` contrasts with the chip, or a colour |

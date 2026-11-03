@@ -51,12 +51,14 @@ final class TabStripWindow {
     var isVisible: Bool { panel.isVisible }
 
     init() {
-        // Above app windows, like the ring: behind them the focused window's shadow fell on the tabs and tinted
-        // them against the ring. Not an auxiliary of fullscreen Spaces, so a fullscreen app covers it.
+        // Behind every app window, at a level of its own below them: the tabs reach over the ring and the window's
+        // edge, and the window hides that part, so the tabs grow out of it; a window carried over the strip stays
+        // on top, and our own app coming to the front (Settings) cannot lift the strip over the windows. Not an
+        // auxiliary of fullscreen Spaces, so a fullscreen app covers it.
         panel = EditablePanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.level = .floating
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue - 1)
         panel.hasShadow = false
         panel.animationBehavior = .none
         panel.collectionBehavior = [.canJoinAllSpaces, .transient]
@@ -155,10 +157,12 @@ private final class TabStripView: NSView, NSTextFieldDelegate {
             let active = item.id == focused
             // Re-adding a view that is already frontmost drops a frame; only move it when something is above it.
             if active, subviews.last !== t { addSubview(t, positioned: .above, relativeTo: nil) }
-            let color: NSColor = active ? accent.contrastingText : .white
+            let glass = config.tabStyle == "glass"
+            // On glass the text follows the system: white on a light glass would vanish.
+            let color: NSColor = active ? accent.contrastingText : glass ? .labelColor : .white
             let title = item.label.map { NSAttributedString(string: $0, attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: color]) }
                 ?? BarView.formatTitle(config.tabTitleFormat, app: item.app, title: item.title, color: color)
-            t.configure(title: title, active: active, accent: accent, side: side)
+            t.configure(title: title, active: active, accent: accent, side: side, glass: glass, clear: config.glassStyle == "clear")
             t.isNew = arrived.contains(item.id)
         }
         needsLayout = true
@@ -408,6 +412,22 @@ private final class TabView: NSView {
     private var side = TabStripWindow.Side.top
     private let shape = CAShapeLayer()
     private var lift: CGFloat?
+    /// Liquid Glass behind an inactive tab, clipped to the tab's shape with the body; the active tab keeps its colour.
+    private var glass: NSView?
+    private var onGlass = false
+
+    private func setGlass(_ on: Bool, clear: Bool) {
+        guard #available(macOS 26, *) else { return }
+        onGlass = on
+        if on, glass == nil {
+            let g = NSGlassEffectView(frame: body.bounds)
+            g.autoresizingMask = [.width, .height]
+            body.addSubview(g, positioned: .below, relativeTo: label)
+            glass = g
+        }
+        glass?.isHidden = !on
+        if let g = glass as? NSGlassEffectView { g.style = clear ? .clear : .regular }
+    }
     private static let duration = 0.16
 
     override init(frame: NSRect) {
@@ -425,12 +445,13 @@ private final class TabView: NSView {
     required init?(coder: NSCoder) { fatalError() }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    func configure(title: NSAttributedString, active: Bool, accent: NSColor, side: TabStripWindow.Side) {
+    func configure(title: NSAttributedString, active: Bool, accent: NSColor, side: TabStripWindow.Side, glass: Bool = false, clear: Bool = false) {
         let wasActive = self.active
         self.active = active
         self.accent = accent
         self.side = side
         horizontal = side == .top
+        setGlass(glass && !active, clear: clear)
         label.attributedStringValue = title
         layoutBody(animated: wasActive != active)
         updateShape()
@@ -518,7 +539,7 @@ private final class TabView: NSView {
 
     private func paint(animated: Bool) {
         guard let layer = body.layer else { return }
-        let base = active ? accent : NSColor(white: 0.22, alpha: 0.92)
+        let base = active ? accent : onGlass ? NSColor.clear : NSColor(white: 0.22, alpha: 0.92)
         let color = (hovering && !active ? base.blended(withFraction: 0.15, of: .white) ?? base : base).cgColor
         if animated, let from = layer.presentation()?.backgroundColor ?? layer.backgroundColor {
             let anim = CABasicAnimation(keyPath: "backgroundColor")

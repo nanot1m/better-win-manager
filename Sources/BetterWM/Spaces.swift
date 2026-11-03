@@ -163,13 +163,6 @@ struct CGWindowInfo {
         return (d.first?[kCGWindowIsOnscreen as String] as? Bool) ?? false
     }
 
-    /// What `rect` (AX coordinates) looks like with only `ids` (front to back) drawn, shadows included.
-    static func image(of ids: [CGWindowID], in rect: CGRect) -> CGImage? {
-        var raw = ids.map { UnsafeRawPointer(bitPattern: UInt($0)) }
-        guard let array = raw.withUnsafeMutableBufferPointer({ CFArrayCreate(nil, $0.baseAddress, ids.count, nil) }) else { return nil }
-        return CGImage(windowListFromArrayScreenBounds: rect, windowArray: array, imageOption: [.bestResolution])
-    }
-
     /// Window IDs WindowServer still knows, hidden or off screen included.
     static func aliveIDs() -> Set<CGWindowID> { Set(list(.optionAll).map(\.id)) }
 }
