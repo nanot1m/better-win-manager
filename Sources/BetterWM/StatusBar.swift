@@ -539,7 +539,7 @@ final class BarView: NSView {
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingTail
         let bold: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: color, .paragraphStyle: para]
-        let dim: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: color.withAlphaComponent(0.65), .paragraphStyle: para]
+        let dim: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: color.dimmed(0.65), .paragraphStyle: para]
         guard !title.isEmpty, title != app, format.contains("{title}") else {
             return NSAttributedString(string: app, attributes: bold)
         }
@@ -563,6 +563,16 @@ final class BarView: NSView {
 
 extension NSColor {
     /// Black or white, whichever reads better on this colour.
+    /// `withAlphaComponent` on a system colour fixes it to the appearance of the moment; this stays dynamic, so the
+    /// text follows light and dark like the colour it came from.
+    func dimmed(_ alpha: CGFloat) -> NSColor {
+        NSColor(name: nil) { appearance in
+            var c = self
+            appearance.performAsCurrentDrawingAppearance { c = self.withAlphaComponent(alpha) }
+            return c
+        }
+    }
+
     var contrastingText: NSColor {
         let c = usingColorSpace(.sRGB) ?? self
         let luminance = 0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent

@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.38.4] - 2026-11-03
+
+### Fixed
+- Desktop chip numbers and the dimmer parts of the title did not follow the system text colour after a theme switch, leaving light text on a light glass bar; the dimmed colours now stay dynamic.
+
 ## [0.38.3] - 2026-11-03
 
 ### Fixed

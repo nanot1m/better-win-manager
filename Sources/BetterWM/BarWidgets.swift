@@ -281,7 +281,7 @@ final class KeyboardWidget: BarWidget {
         for l in labels {
             l.stringValue = text
             l.textColor = style.textColor
-            l.layer?.backgroundColor = style.textColor.withAlphaComponent(0.12).cgColor
+            l.layer?.backgroundColor = style.textColor.dimmed(0.12).cgColor
         }
     }
 }
@@ -466,7 +466,7 @@ final class DesktopChipsView: NSStackView {
             let isCurrent = d == current && d == active
             let shownHere = d == current
             c.number.attributedStringValue = NSAttributedString(string: "\(d + 1)", attributes: [
-                .foregroundColor: isCurrent ? style.activeColor.contrastingText : style.textColor.withAlphaComponent(shownHere ? 1 : 0.7),
+                .foregroundColor: isCurrent ? style.activeColor.contrastingText : style.textColor.dimmed(shownHere ? 1 : 0.7),
                 .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
             ])
             let glass = style.config.barChipStyle == "glass"
@@ -475,7 +475,7 @@ final class DesktopChipsView: NSStackView {
                 c.layer?.backgroundColor = nil
             } else {
                 c.setGlass(false, tint: nil)
-                c.layer?.backgroundColor = isCurrent ? style.activeColor.cgColor : style.textColor.withAlphaComponent(shownHere ? 0.3 : 0.1).cgColor
+                c.layer?.backgroundColor = isCurrent ? style.activeColor.cgColor : style.textColor.dimmed(shownHere ? 0.3 : 0.1).cgColor
             }
             c.setApps(apps[d] ?? [], focused: focused, color: style.focusOutline ?? (isCurrent ? style.activeColor.contrastingText : style.activeColor))
         }
@@ -571,9 +571,9 @@ final class FullscreenWidget: BarWidget {
                 c.isHidden = i >= spaces.count
                 guard i < spaces.count else { continue }
                 c.number.attributedStringValue = NSAttributedString(string: "⛶", attributes: [
-                    .foregroundColor: style.textColor.withAlphaComponent(0.7), .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                    .foregroundColor: style.textColor.dimmed(0.7), .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
                 ])
-                c.layer?.backgroundColor = style.textColor.withAlphaComponent(0.1).cgColor
+                c.layer?.backgroundColor = style.textColor.dimmed(0.1).cgColor
                 c.setApps(spaces[i].pids.map { ($0, []) }, focused: nil, color: style.activeColor)
             }
         }
