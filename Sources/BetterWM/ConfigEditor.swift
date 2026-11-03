@@ -89,8 +89,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var barClockField: NSTextField!
     private var barTitleField: NSTextField!
     private var barDesktopAppsSwitch: NSSwitch!
-    private var widgetOrder: [(Config.BarWidget, Bool)] = []
-    private let widgetList = NSStackView()
     private var barBatteryPercentSwitch: NSSwitch!
     private var barCatSwitch: NSSwitch!
     private var barNotchPortalsSwitch: NSSwitch!
@@ -140,7 +138,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             Section(title: "Tiling", symbol: "rectangle.split.3x1", view: page("Tiling", "How new windows are placed and how you tile by dragging.", tilingGroups())),
             Section(title: "Focus Ring", symbol: "scope", view: page("Focus Ring", "Outline drawn around the focused window.", ringGroups())),
             Section(title: "Status Bar", symbol: "menubar.rectangle", view: page("Status Bar", "The bar at the top of each screen, under the hidden system menu bar.", barGroups())),
-            Section(title: "Widgets", symbol: "square.grid.2x2", view: page("Widgets", "What the right side of the bar shows, left to right.", widgetGroups())),
+            Section(title: "Widgets", symbol: "square.grid.2x2", view: page("Widgets", "What the bar shows, in order: the left side, then the right side. Drag the grips to reorder.", widgetGroups())),
             Section(title: "Cats", symbol: "pawprint", view: page("Cats", "Pixel cats living in the free part of the bar.", catGroups())),
             Section(title: "Apps", symbol: "app.badge", view: page("Apps", "Windows that stay out of the tiling.", appGroups())),
             Section(title: "Hotkeys", symbol: "keyboard", view: page("Hotkeys", "Click a field and press a combination. Delete clears it, Escape keeps the current one. System shortcuts such as ⌃← (Mission Control) must be disabled in System Settings › Keyboard before they can be bound here.", hotkeyGroups())),
@@ -650,10 +648,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 row("Show the status bar", "Set \"Automatically hide and show the menu bar\" to Always in System Settings › Control Center so the system bar does not overlap it. Tiled windows start below the bar.", [barSwitch]),
                 row("Height", nil, [barHeightField, unit("pt")]),
             ]),
-            group("Content", [
-                row("App icons on desktop chips", "One icon per window open on that desktop.", [barDesktopAppsSwitch]),
-                row("Active window label", "{app} and {title} are replaced; the rest is shown as is.", [barTitleField]),
-            ]),
             group("Appearance", [
                 row("Background", "A translucent blur, or a solid colour.", [barBackgroundMode, barBgColor]),
                 row("Text colour", nil, [barTextMode, barTextColorWell]),
@@ -668,23 +662,48 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         ]
     }
 
+    /// One reorderable list per side of the bar.
+    private final class WidgetList {
+        var order: [(Config.BarWidget, Bool)] = []
+        let stack = NSStackView()
+        var rowViews: [NSView] = []
+        let dropLine = NSView()
+    }
+    private let widgetLists = [WidgetList(), WidgetList()]
     private func widgetGroups() -> [NSView] {
-        widgetList.orientation = .vertical
-        widgetList.alignment = .width
-        widgetList.spacing = 0
-        let box = GroupBox()
-        widgetList.translatesAutoresizingMaskIntoConstraints = false
-        box.addSubview(widgetList)
-        NSLayoutConstraint.activate([
-            widgetList.topAnchor.constraint(equalTo: box.topAnchor), widgetList.bottomAnchor.constraint(equalTo: box.bottomAnchor),
-            widgetList.leadingAnchor.constraint(equalTo: box.leadingAnchor), widgetList.trailingAnchor.constraint(equalTo: box.trailingAnchor),
-        ])
-        return [box]
+        func box(_ list: WidgetList) -> NSView {
+            list.stack.orientation = .vertical
+            list.stack.alignment = .width
+            list.stack.spacing = 0
+            let box = GroupBox()
+            list.stack.translatesAutoresizingMaskIntoConstraints = false
+            box.addSubview(list.stack)
+            NSLayoutConstraint.activate([
+                list.stack.topAnchor.constraint(equalTo: box.topAnchor), list.stack.bottomAnchor.constraint(equalTo: box.bottomAnchor),
+                list.stack.leadingAnchor.constraint(equalTo: box.leadingAnchor), list.stack.trailingAnchor.constraint(equalTo: box.trailingAnchor),
+            ])
+            return box
+        }
+        return [titled("Left side", box(widgetLists[0])), titled("Right side", box(widgetLists[1]))]
+    }
+
+    private func titled(_ title: String, _ view: NSView) -> NSView {
+        let header = NSTextField(labelWithString: title)
+        header.font = .systemFont(ofSize: 13, weight: .semibold)
+        header.textColor = .secondaryLabelColor
+        let stack = NSStackView(views: [header, view])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 6
+        view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        return stack
     }
 
     /// The rows of a widget's own settings, shown under it when disclosed; nil for a widget with none.
     private func widgetSettings(_ w: Config.BarWidget) -> [NSView]? {
         switch w {
+        case .desktops: return [row("App icons", "One icon per window open on that desktop.", [barDesktopAppsSwitch])]
+        case .title: return [row("Format", "{app} and {title} are replaced; the rest is shown as is.", [barTitleField])]
         case .clock: return [row("Format", "Unicode date pattern, for example EEE d MMM  HH:mm.", [barClockField])]
         case .battery: return [row("Percentage", "Show the number next to the battery icon.", [barBatteryPercentSwitch])]
         case .weather: return [row("Fahrenheit", nil, [barFahrenheit]),
@@ -694,114 +713,117 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     private var expandedWidgets: Set<Config.BarWidget> = []
-    /// The row view of each widget, in list order, for the drag to measure.
-    private var widgetRowViews: [NSView] = []
-    private let widgetDropLine = NSView()
 
     private func rebuildWidgetRows() {
-        widgetList.arrangedSubviews.forEach { widgetList.removeArrangedSubview($0); $0.removeFromSuperview() }
-        widgetRowViews = []
-        for (i, (w, on)) in widgetOrder.enumerated() {
-            if i > 0 {
-                let line = NSBox(); line.boxType = .separator
-                line.translatesAutoresizingMaskIntoConstraints = false
-                let wrap = NSView(); wrap.translatesAutoresizingMaskIntoConstraints = false
-                wrap.addSubview(line)
-                NSLayoutConstraint.activate([
-                    line.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 14), line.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -14),
-                    line.topAnchor.constraint(equalTo: wrap.topAnchor), line.bottomAnchor.constraint(equalTo: wrap.bottomAnchor), wrap.heightAnchor.constraint(equalToConstant: 1),
-                ])
-                widgetList.addArrangedSubview(wrap)
+        for (side, list) in widgetLists.enumerated() {
+            list.stack.arrangedSubviews.forEach { list.stack.removeArrangedSubview($0); $0.removeFromSuperview() }
+            list.rowViews = []
+            for (i, (w, on)) in list.order.enumerated() {
+                let tag = side * 100 + i
+                if i > 0 {
+                    let line = NSBox(); line.boxType = .separator
+                    line.translatesAutoresizingMaskIntoConstraints = false
+                    let wrap = NSView(); wrap.translatesAutoresizingMaskIntoConstraints = false
+                    wrap.addSubview(line)
+                    NSLayoutConstraint.activate([
+                        line.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 14), line.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -14),
+                        line.topAnchor.constraint(equalTo: wrap.topAnchor), line.bottomAnchor.constraint(equalTo: wrap.bottomAnchor), wrap.heightAnchor.constraint(equalToConstant: 1),
+                    ])
+                    list.stack.addArrangedSubview(wrap)
+                }
+                let sw = NSSwitch()
+                sw.controlSize = .small
+                sw.state = on ? .on : .off
+                sw.tag = tag
+                sw.target = self
+                sw.action = #selector(widgetToggled(_:))
+                let grip = DragGrip()
+                grip.onDrag = { [weak self] phase, point in self?.widgetDrag(side: side, index: i, phase: phase, at: point) }
+                var controls: [NSView] = [sw]
+                let settings = widgetSettings(w)
+                if settings != nil {
+                    let disclose = NSButton(image: NSImage(systemSymbolName: expandedWidgets.contains(w) ? "chevron.down" : "chevron.right", accessibilityDescription: "Settings")!,
+                                            target: self, action: #selector(widgetDisclosed(_:)))
+                    disclose.bezelStyle = .texturedRounded
+                    disclose.setButtonType(.momentaryPushIn)
+                    disclose.tag = tag
+                    controls.insert(disclose, at: 0)
+                }
+                let r = row(w.title, nil, controls)
+                let line = NSStackView(views: [grip, r])
+                line.spacing = 0
+                line.alignment = .centerY
+                r.translatesAutoresizingMaskIntoConstraints = false
+                grip.widthAnchor.constraint(equalToConstant: 28).isActive = true
+                grip.heightAnchor.constraint(equalTo: line.heightAnchor).isActive = true
+                list.stack.addArrangedSubview(line)
+                list.rowViews.append(line)
+                if let settings, expandedWidgets.contains(w) {
+                    let inner = NSStackView(views: settings)
+                    inner.orientation = .vertical
+                    inner.alignment = .width
+                    inner.spacing = 0
+                    inner.edgeInsets = NSEdgeInsets(top: 0, left: 28, bottom: 6, right: 0)
+                    list.stack.addArrangedSubview(inner)
+                }
             }
-            let sw = NSSwitch()
-            sw.controlSize = .small
-            sw.state = on ? .on : .off
-            sw.tag = i
-            sw.target = self
-            sw.action = #selector(widgetToggled(_:))
-            let grip = DragGrip()
-            grip.onDrag = { [weak self] phase, point in self?.widgetDrag(index: i, phase: phase, at: point) }
-            var controls: [NSView] = [sw]
-            let settings = widgetSettings(w)
-            if settings != nil {
-                let disclose = NSButton(image: NSImage(systemSymbolName: expandedWidgets.contains(w) ? "chevron.down" : "chevron.right", accessibilityDescription: "Settings")!,
-                                        target: self, action: #selector(widgetDisclosed(_:)))
-                disclose.bezelStyle = .texturedRounded
-                disclose.setButtonType(.momentaryPushIn)
-                disclose.tag = i
-                controls.insert(disclose, at: 0)
-            }
-            let r = row(w.title, nil, controls)
-            let line = NSStackView(views: [grip, r])
-            line.spacing = 0
-            line.alignment = .centerY
-            r.translatesAutoresizingMaskIntoConstraints = false
-            grip.widthAnchor.constraint(equalToConstant: 28).isActive = true
-            grip.heightAnchor.constraint(equalTo: line.heightAnchor).isActive = true
-            widgetList.addArrangedSubview(line)
-            widgetRowViews.append(line)
-            if let settings, expandedWidgets.contains(w) {
-                let inner = NSStackView(views: settings)
-                inner.orientation = .vertical
-                inner.alignment = .width
-                inner.spacing = 0
-                inner.edgeInsets = NSEdgeInsets(top: 0, left: 28, bottom: 6, right: 0)
-                widgetList.addArrangedSubview(inner)
-            }
+            list.dropLine.wantsLayer = true
+            list.dropLine.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+            list.dropLine.layer?.cornerRadius = 1
+            list.dropLine.isHidden = true
+            list.dropLine.removeFromSuperview()
+            list.stack.addSubview(list.dropLine)
         }
-        widgetDropLine.wantsLayer = true
-        widgetDropLine.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
-        widgetDropLine.layer?.cornerRadius = 1
-        widgetDropLine.isHidden = true
-        widgetDropLine.removeFromSuperview()
-        widgetList.addSubview(widgetDropLine)
     }
 
     @objc private func widgetToggled(_ sender: NSSwitch) {
-        guard widgetOrder.indices.contains(sender.tag) else { return }
-        widgetOrder[sender.tag].1 = sender.state == .on
+        let list = widgetLists[sender.tag / 100], i = sender.tag % 100
+        guard list.order.indices.contains(i) else { return }
+        list.order[i].1 = sender.state == .on
     }
 
     @objc private func widgetDisclosed(_ sender: NSButton) {
-        guard widgetOrder.indices.contains(sender.tag) else { return }
-        let w = widgetOrder[sender.tag].0
+        let list = widgetLists[sender.tag / 100], i = sender.tag % 100
+        guard list.order.indices.contains(i) else { return }
+        let w = list.order[i].0
         if !expandedWidgets.insert(w).inserted { expandedWidgets.remove(w) }
         rebuildWidgetRows()
     }
 
     /// Dragging a row by its grip: the row floats with the pointer and an accent line marks where it will land.
-    private func widgetDrag(index: Int, phase: DragGrip.Phase, at point: NSPoint) {
-        guard widgetRowViews.indices.contains(index) else { return }
-        let dragged = widgetRowViews[index]
+    private func widgetDrag(side: Int, index: Int, phase: DragGrip.Phase, at point: NSPoint) {
+        let list = widgetLists[side]
+        guard list.rowViews.indices.contains(index) else { return }
+        let dragged = list.rowViews[index]
         // Rows run top to bottom; in the list's coordinates that is descending y unless the view is flipped.
-        let mids = widgetRowViews.map { $0.frame.midY }
+        let mids = list.rowViews.map { $0.frame.midY }
         let descending = mids.count > 1 && mids[0] > mids[1]
-        let y = widgetList.convert(point, from: nil).y
-        let others = widgetRowViews.indices.filter { $0 != index }
+        let y = list.stack.convert(point, from: nil).y
+        let others = list.rowViews.indices.filter { $0 != index }
         // The new index is how many other rows the pointer has passed below.
         let target = others.filter { descending ? mids[$0] > y : mids[$0] < y }.count
         switch phase {
         case .began:
             dragged.alphaValue = 0.6
         case .moved:
-            widgetDropLine.isHidden = target == index
+            list.dropLine.isHidden = target == index
             guard target != index else { return }
             // The gap the row lands in: the top edge of the row that will follow it, or below the last one.
             let gapY: CGFloat
             if target < others.count {
-                let f = widgetRowViews[others[target]].frame
+                let f = list.rowViews[others[target]].frame
                 gapY = descending ? f.maxY : f.minY
             } else {
-                let f = widgetRowViews[others[others.count - 1]].frame
+                let f = list.rowViews[others[others.count - 1]].frame
                 gapY = descending ? f.minY : f.maxY
             }
-            widgetDropLine.frame = NSRect(x: 14, y: gapY - 1, width: widgetList.bounds.width - 28, height: 2)
+            list.dropLine.frame = NSRect(x: 14, y: gapY - 1, width: list.stack.bounds.width - 28, height: 2)
         case .ended:
             dragged.alphaValue = 1
-            widgetDropLine.isHidden = true
+            list.dropLine.isHidden = true
             guard target != index else { return }
-            let item = widgetOrder.remove(at: index)
-            widgetOrder.insert(item, at: target)
+            let item = list.order.remove(at: index)
+            list.order.insert(item, at: target)
             rebuildWidgetRows()
         }
     }
@@ -1045,7 +1067,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         on(barBatteryPercentSwitch, config.barBatteryPercent)
         on(barCatSwitch, config.barCat)
         on(barNotchPortalsSwitch, config.barNotchPortals)
-        widgetOrder = config.barWidgets.map { ($0, true) } + Config.BarWidget.allCases.filter { !config.barWidgets.contains($0) }.map { ($0, false) }
+        widgetLists[0].order = config.barLeftWidgets.map { ($0, true) } + Config.BarWidget.leftKinds.filter { !config.barLeftWidgets.contains($0) }.map { ($0, false) }
+        widgetLists[1].order = config.barWidgets.map { ($0, true) } + Config.BarWidget.rightKinds.filter { !config.barWidgets.contains($0) }.map { ($0, false) }
         rebuildWidgetRows()
         barCatSheets.string = config.barCatSheets.joined(separator: "\n")
         on(barFahrenheit, config.barWeatherFahrenheit)
@@ -1132,7 +1155,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.barBatteryPercent = isOn(barBatteryPercentSwitch)
         config.barCat = isOn(barCatSwitch)
         config.barNotchPortals = isOn(barNotchPortalsSwitch)
-        config.barWidgets = widgetOrder.filter(\.1).map(\.0)
+        config.barLeftWidgets = widgetLists[0].order.filter(\.1).map(\.0)
+        config.barWidgets = widgetLists[1].order.filter(\.1).map(\.0)
         config.barCatSheets = barCatSheets.string.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         config.barWeatherFahrenheit = isOn(barFahrenheit)
         config.barWeatherLocation = barLocationPopup.indexOfSelectedItem == 0 ? "auto" : barLocationField.stringValue.trimmingCharacters(in: .whitespaces)

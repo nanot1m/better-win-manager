@@ -59,6 +59,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `barHeight` | 32 | Height; at least the notch height on notched screens |
 | `barTitleFormat` | {app} | Active window label; `{app}` and `{title}` are replaced |
 | `barClockFormat` | EEE d MMM  HH:mm | Unicode date pattern for the clock |
+| `barLeftWidgets` | desktops, fullscreen, title | Left-side widgets in order: desktop chips, fullscreen-app chips, active window label; leave one out to hide it |
 | `barWidgets` | keyboard, wifi, battery, clock, menu | Right-side widgets in order; see [Status bar](status-bar.md) for the full list |
 | `barDesktopApps` | true | One app icon per window on each desktop chip |
 | `barBatteryPercent` | false | Number next to the battery icon |

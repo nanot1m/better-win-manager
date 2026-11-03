@@ -10,9 +10,9 @@ One bar per screen at the top edge, where the hidden system menu bar lives. Enab
 
 **Cats** roam whatever is free between the left and right content; see [Cats](cats.md).
 
-## Right side: widgets
+## Widgets
 
-`barWidgets` is the ordered list of what appears, left to right. In Settings › Widgets each widget has a switch and a grip to drag it into place; a widget with settings of its own (clock format, battery percentage, weather units and location) shows them under a disclosure in its row.
+Both sides of the bar are lists of widgets. `barLeftWidgets` (default `desktops, fullscreen, title`: the desktop chips, the fullscreen-app chips, the active window label) and `barWidgets` (the right side) are the ordered lists of what appears, left to right. In Settings › Widgets each widget has a switch and a grip to drag it into place; a widget with settings of its own (desktop chip app icons, the title format, clock format, battery percentage, weather units and location) shows them under a disclosure in its row.
 
 | Widget | Shows | Notes |
 | --- | --- | --- |

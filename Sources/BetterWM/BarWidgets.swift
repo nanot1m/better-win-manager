@@ -4,16 +4,34 @@ import Cocoa
 /// What a widget renders with: the bar's colours and the configuration.
 struct BarStyle {
     let textColor: NSColor
+    let activeColor: NSColor
+    let focusOutline: NSColor?
     let config: Config
 }
 
-/// One entry of the status bar's right side. A widget owns its data source, one view per bar window, and its refresh
+/// What the left-side widgets ask of the window manager, and what they tell it.
+final class BarContext {
+    var desktopsOn: (NSScreen) -> [Int] = { _ in [] }
+    var shownOn: (NSScreen) -> Int? = { _ in nil }
+    var activeDesktop: () -> Int? = { nil }
+    var desktopApps: () -> [Int: [(pid: pid_t, windows: [WindowID])]] = { [:] }
+    var focusedWindow: () -> WindowID? = { nil }
+    var fullscreenSpaces: () -> [(space: UInt64, pids: [pid_t])] = { [] }
+    var focusedAXWindow: () -> AXWindow? = { nil }
+    var tabLabel: (WindowID) -> String? = { _ in nil }
+    var onSelectDesktop: ((Int) -> Void)?
+    var onSelectFullscreen: ((UInt64) -> Void)?
+    var onReorderDesktop: ((Int, Int) -> Void)?
+    var onDesktopMenu: ((Int, NSView) -> Void)?
+}
+
+/// One entry of the status bar. A widget owns its data source, one view per bar window, and its refresh
 /// triggers; the bar only orders, starts and renders it. `wantsRefresh` asks the bar for a render pass.
 protocol BarWidget: AnyObject {
     var id: Config.BarWidget { get }
     var wantsRefresh: (() -> Void)? { get set }
-    /// A view for one bar window; the widget keeps it and updates it on `render`.
-    func makeView() -> NSView
+    /// A view for one bar window, on `screen`; the widget keeps it and updates it on `render`.
+    func makeView(for screen: NSScreen) -> NSView
     /// Forgets every view made: the bar windows are being rebuilt.
     func dropViews()
     /// The data source runs only while the widget is in the bar.
@@ -101,7 +119,7 @@ class ValueWidget: BarWidget {
         self.id = id; self.symbol = symbol; self.iconWidth = iconWidth; self.monospaced = monospaced; self.spacing = spacing
     }
 
-    func makeView() -> NSView {
+    func makeView(for screen: NSScreen) -> NSView {
         let v = IconValueView(symbol: symbol, iconWidth: iconWidth, monospaced: monospaced, spacing: spacing)
         views.append(v)
         return v.row
@@ -188,7 +206,7 @@ final class ClockWidget: BarWidget {
     private var timer: Timer?
     private let formatter = DateFormatter()
 
-    func makeView() -> NSView {
+    func makeView(for screen: NSScreen) -> NSView {
         let l = BarWidgetViews.label(monospaced: true, weight: .medium)
         labels.append(l)
         return l
@@ -214,7 +232,7 @@ final class WifiWidget: BarWidget {
     private let monitor = WiFiMonitor()
 
     init() { monitor.onChange = { [weak self] in self?.wantsRefresh?() } }
-    func makeView() -> NSView {
+    func makeView(for screen: NSScreen) -> NSView {
         let v = BarWidgetViews.icon()
         icons.append(v)
         return BarWidgetViews.row([v])
@@ -233,7 +251,7 @@ final class KeyboardWidget: BarWidget {
     private var labels: [NSTextField] = []
     private var observer: NSObjectProtocol?
 
-    func makeView() -> NSView {
+    func makeView(for screen: NSScreen) -> NSView {
         let l = BarWidgetViews.label(weight: .semibold)
         l.font = .systemFont(ofSize: 11, weight: .semibold)
         l.wantsLayer = true
@@ -265,7 +283,7 @@ final class MediaWidget: BarWidget {
     private let service = MediaService()
 
     init() { service.onUpdate = { [weak self] _ in self?.wantsRefresh?() } }
-    func makeView() -> NSView {
+    func makeView(for screen: NSScreen) -> NSView {
         let button = BarButton(title: "", target: self, action: #selector(pressed))
         button.isBordered = false
         button.imageScaling = .scaleProportionallyDown
@@ -304,7 +322,7 @@ final class SoundWidget: BarWidget {
     private lazy var popover = SoundPopover(service: service)
 
     init() { service.onChange = { [weak self] in self?.wantsRefresh?(); self?.popover.refreshIfShown() } }
-    func makeView() -> NSView {
+    func makeView(for screen: NSScreen) -> NSView {
         let b = BarScrollButton(title: "", target: self, action: #selector(pressed(_:)))
         b.isBordered = false
         b.imageScaling = .scaleProportionallyDown
@@ -336,7 +354,7 @@ final class MenuWidget: BarWidget {
     var onPressed: ((NSView) -> Void)?
     private var buttons: [BarButton] = []
 
-    func makeView() -> NSView {
+    func makeView(for screen: NSScreen) -> NSView {
         let b = BarButton(title: "", target: self, action: #selector(pressed(_:)))
         b.isBordered = false
         b.image = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: "BetterWM menu")
@@ -353,10 +371,229 @@ final class MenuWidget: BarWidget {
     func render(_ style: BarStyle) { for b in buttons { b.contentTintColor = style.textColor } }
 }
 
+// MARK: - Left side
+
+/// Desktop chips of one screen: number plus the icons of the apps open there, draggable to reorder desktops,
+/// with a menu on right-click, and lit up while a window is dragged over one.
+final class DesktopChipsView: NSStackView {
+    private let screen: NSScreen
+    private let context: BarContext
+    private var chips: [ChipView] = []
+    /// Desktop index of each visible chip, left to right.
+    private(set) var chipDesktops: [Int] = []
+    private var activeColor = NSColor.controlAccentColor
+    private var chipDrag: ReorderDrag?
+    private var settlingChips: ReorderDrag?
+
+    init(screen: NSScreen, context: BarContext) {
+        self.screen = screen
+        self.context = context
+        super.init(frame: .zero)
+        orientation = .horizontal
+        spacing = 10
+        alignment = .centerY
+    }
+    required init(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        settlingChips?.settle()
+        settlingChips = nil
+    }
+
+    /// The desktop under a point in this view's coordinates.
+    func chipDesktop(at point: NSPoint) -> Int? {
+        for (i, c) in chips.enumerated() where !c.isHidden && i < chipDesktops.count {
+            if c.frame.insetBy(dx: -4, dy: -6).contains(point) { return chipDesktops[i] }
+        }
+        return nil
+    }
+
+    /// Where a desktop's chip is, in the coordinates of `view`; for the cats.
+    func chipMidX(for desktop: Int, in view: NSView) -> CGFloat? {
+        guard let i = chipDesktops.firstIndex(of: desktop), chips.indices.contains(i) else { return nil }
+        return chips[i].convert(chips[i].bounds, to: view).midX
+    }
+
+    func setDropTarget(_ desktop: Int?) {
+        for (i, c) in chips.enumerated() where i < chipDesktops.count {
+            c.setDropTarget(chipDesktops[i] == desktop, color: activeColor)
+        }
+    }
+
+    func render(_ style: BarStyle) {
+        activeColor = style.activeColor
+        let desktops = context.desktopsOn(screen)
+        let current = context.shownOn(screen), active = context.activeDesktop()
+        let apps = style.config.barDesktopApps ? context.desktopApps() : [:]
+        let focused = context.focusedWindow()
+        chipDesktops = desktops
+        while chips.count < desktops.count {
+            let c = ChipView()
+            // Chips change places in `chips` after a drag, so each looks its index up when asked.
+            let indexOf: (ChipView) -> Int? = { [weak self] c in self?.chips.firstIndex { $0 === c } }
+            c.onClick = { [weak self, weak c] in
+                guard let self, let c, let i = indexOf(c), i < self.chipDesktops.count else { return }
+                self.context.onSelectDesktop?(self.chipDesktops[i])
+            }
+            c.onDragBegan = { [weak self, weak c] in if let c, let i = indexOf(c) { self?.beginDrag(i) } }
+            c.onDragMoved = { [weak self] dx in self?.chipDrag?.update(delta: dx) }
+            c.onDragEnded = { [weak self] in self?.endDrag() }
+            c.onContextMenu = { [weak self, weak c] in
+                guard let self, let c, let i = indexOf(c), i < self.chipDesktops.count else { return }
+                self.context.onDesktopMenu?(self.chipDesktops[i], c)
+            }
+            chips.append(c)
+            addArrangedSubview(c)
+        }
+        for (i, c) in chips.enumerated() {
+            c.isHidden = i >= desktops.count
+            guard i < desktops.count else { continue }
+            let d = desktops[i]
+            // The desktop being worked on gets the accent; the one merely shown on this screen a lighter mark.
+            let isCurrent = d == current && d == active
+            let shownHere = d == current
+            c.number.attributedStringValue = NSAttributedString(string: "\(d + 1)", attributes: [
+                .foregroundColor: isCurrent ? style.activeColor.contrastingText : style.textColor.withAlphaComponent(shownHere ? 1 : 0.7),
+                .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+            ])
+            c.layer?.backgroundColor = isCurrent ? style.activeColor.cgColor : style.textColor.withAlphaComponent(shownHere ? 0.3 : 0.1).cgColor
+            c.setApps(apps[d] ?? [], focused: focused, color: style.focusOutline ?? (isCurrent ? style.activeColor.contrastingText : style.activeColor))
+        }
+    }
+
+    private func beginDrag(_ index: Int) {
+        let visible = chips.enumerated().filter { !$0.element.isHidden && $0.offset < chipDesktops.count }
+        guard let i = visible.firstIndex(where: { $0.offset == index }) else { return }
+        chipDrag = ReorderDrag(items: visible.map(\.element), index: i, horizontal: true)
+    }
+
+    private func endDrag() {
+        guard let drag = chipDrag else { return }
+        chipDrag = nil
+        let visible = chips.enumerated().filter { !$0.element.isHidden && $0.offset < chipDesktops.count }.map(\.offset)
+        drag.end { [weak self] target in
+            guard let self, let from = visible.firstIndex(where: { self.chips[$0] === drag.grabbed }), target != from,
+                  target < visible.count else {
+                drag.settle()
+                return
+            }
+            // The chip view moves to its new place first, keeping its content, so the re-render only confirms what
+            // is already on screen; relabelling views in place would show the old order for a frame.
+            let fromIndex = visible[from], toIndex = visible[target]
+            let c = self.chips.remove(at: fromIndex)
+            self.chips.insert(c, at: toIndex)
+            self.insertArrangedSubview(c, at: toIndex)
+            self.settlingChips = drag
+            self.needsLayout = true
+            self.context.onReorderDesktop?(self.chipDesktops[fromIndex], self.chipDesktops[toIndex])
+        }
+    }
+}
+
+final class DesktopsWidget: BarWidget {
+    let id = Config.BarWidget.desktops
+    var wantsRefresh: (() -> Void)?
+    private let context: BarContext
+    private(set) var views: [DesktopChipsView] = []
+
+    init(context: BarContext) { self.context = context }
+    func makeView(for screen: NSScreen) -> NSView {
+        let v = DesktopChipsView(screen: screen, context: context)
+        views.append(v)
+        return v
+    }
+    func dropViews() { views.removeAll() }
+    func render(_ style: BarStyle) { views.forEach { $0.render(style) } }
+
+    /// The desktop whose chip is under a screen point (Cocoa coordinates), on any bar.
+    func chipDesktop(atScreenPoint p: NSPoint) -> Int? {
+        for v in views {
+            guard let w = v.window, w.isVisible, w.frame.contains(p) else { continue }
+            return v.chipDesktop(at: v.convert(w.convertPoint(fromScreen: p), from: nil))
+        }
+        return nil
+    }
+    func setDropTarget(_ desktop: Int?) { views.forEach { $0.setDropTarget(desktop) } }
+}
+
+/// Fullscreen Spaces, one chip each after the desktop chips; clicking one goes there.
+final class FullscreenWidget: BarWidget {
+    let id = Config.BarWidget.fullscreen
+    var wantsRefresh: (() -> Void)?
+    private let context: BarContext
+    private final class Row { let stack: NSStackView; var chips: [ChipView] = []; var spaces: [UInt64] = []
+        init() { stack = NSStackView(); stack.orientation = .horizontal; stack.spacing = 10; stack.alignment = .centerY } }
+    private var rows: [Row] = []
+
+    init(context: BarContext) { self.context = context }
+    func makeView(for screen: NSScreen) -> NSView {
+        let r = Row()
+        rows.append(r)
+        return r.stack
+    }
+    func dropViews() { rows.removeAll() }
+    func render(_ style: BarStyle) {
+        let spaces = context.fullscreenSpaces()
+        for r in rows {
+            r.spaces = spaces.map(\.space)
+            r.stack.isHidden = spaces.isEmpty
+            while r.chips.count < spaces.count {
+                let c = ChipView()
+                let i = r.chips.count
+                c.onClick = { [weak self, weak r] in
+                    guard let self, let r, i < r.spaces.count else { return }
+                    self.context.onSelectFullscreen?(r.spaces[i])
+                }
+                r.chips.append(c)
+                r.stack.addArrangedSubview(c)
+            }
+            for (i, c) in r.chips.enumerated() {
+                c.isHidden = i >= spaces.count
+                guard i < spaces.count else { continue }
+                c.number.attributedStringValue = NSAttributedString(string: "⛶", attributes: [
+                    .foregroundColor: style.textColor.withAlphaComponent(0.7), .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                ])
+                c.layer?.backgroundColor = style.textColor.withAlphaComponent(0.1).cgColor
+                c.setApps(spaces[i].pids.map { ($0, []) }, focused: nil, color: style.activeColor)
+            }
+        }
+    }
+}
+
+/// The active window's label, after a separator: `barTitleFormat`, or the name its tab was given.
+final class TitleWidget: BarWidget {
+    let id = Config.BarWidget.title
+    var wantsRefresh: (() -> Void)?
+    private let context: BarContext
+    private var labels: [NSTextField] = []
+
+    init(context: BarContext) { self.context = context }
+    func makeView(for screen: NSScreen) -> NSView {
+        let sep = NSBox(); sep.boxType = .separator
+        sep.heightAnchor.constraint(equalToConstant: 14).isActive = true
+        let l = BarWidgetViews.label()
+        l.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        labels.append(l)
+        return BarWidgetViews.row([sep, l], spacing: 10)
+    }
+    func dropViews() { labels.removeAll() }
+    func render(_ style: BarStyle) {
+        let focused = context.focusedAXWindow()
+        let app = focused.flatMap { NSRunningApplication(processIdentifier: $0.pid)?.localizedName }
+            ?? NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
+        let title = focused?.title ?? ""
+        let text = focused?.windowID.flatMap(context.tabLabel).map { BarView.formatTitle("{app}", app: $0, title: "", color: style.textColor) }
+            ?? BarView.formatTitle(style.config.barTitleFormat, app: app, title: title, color: style.textColor)
+        for l in labels { l.attributedStringValue = text }
+    }
+}
+
 enum BarWidgets {
     /// One widget object per kind, built once for the bar's lifetime.
-    static func make(config: Config) -> [Config.BarWidget: BarWidget] {
-        let all: [BarWidget] = [WeatherWidget(config: config), CpuWidget(), MemoryWidget(), DiskWidget(), KeyboardWidget(),
+    static func make(config: Config, context: BarContext) -> [Config.BarWidget: BarWidget] {
+        let all: [BarWidget] = [DesktopsWidget(context: context), FullscreenWidget(context: context), TitleWidget(context: context),
+                                WeatherWidget(config: config), CpuWidget(), MemoryWidget(), DiskWidget(), KeyboardWidget(),
                                 WifiWidget(), BatteryWidget(), ClockWidget(), MenuWidget(), MediaWidget(), SoundWidget()]
         return Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
     }

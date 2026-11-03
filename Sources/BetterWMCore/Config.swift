@@ -128,12 +128,19 @@ public struct Config {
     public var barClockFormat: String = "EEE d MMM  HH:mm"
     /// Active window label; {app} and {title} are replaced. The title part is dropped when the title is empty.
     public var barTitleFormat: String = "{app}"
-    /// Right-side widgets of the bar, in display order. The per-widget booleans below are views onto this list,
-    /// kept so older config files (and older app versions reading new ones) keep working.
+    /// The bar's widgets. The left side holds `desktops`, `fullscreen` and `title`; everything else is a
+    /// right-side widget. The per-widget booleans below are views onto the right-side list, kept so older config
+    /// files (and older app versions reading new ones) keep working.
     public enum BarWidget: String, CaseIterable {
+        case desktops, fullscreen, title
         case weather, cpu, memory, disk, keyboard, wifi, battery, clock, menu, media, sound
+        public static let leftKinds: [BarWidget] = [.desktops, .fullscreen, .title]
+        public static let rightKinds: [BarWidget] = allCases.filter { !leftKinds.contains($0) }
         public var title: String {
             switch self {
+            case .desktops: return "Desktop chips"
+            case .fullscreen: return "Fullscreen apps"
+            case .title: return "Active window title"
             case .weather: return "Weather"
             case .cpu: return "CPU load"
             case .memory: return "Memory used"
@@ -149,10 +156,12 @@ public struct Config {
         }
     }
     public var barWidgets: [BarWidget] = [.keyboard, .wifi, .battery, .clock, .menu]
+    /// Left-side widgets, in display order.
+    public var barLeftWidgets: [BarWidget] = [.desktops, .fullscreen, .title]
     private mutating func setWidget(_ w: BarWidget, _ on: Bool) {
         if on, !barWidgets.contains(w) {
             // Slot it where the default order would have it, after the nearest enabled predecessor.
-            let all = BarWidget.allCases
+            let all = BarWidget.rightKinds
             let before = all[..<all.firstIndex(of: w)!]
             let at = before.reversed().compactMap { barWidgets.firstIndex(of: $0) }.first.map { $0 + 1 } ?? 0
             barWidgets.insert(w, at: at)
@@ -351,6 +360,8 @@ public struct Config {
         barClockFormat = \(barClockFormat)
         # Active window label: {app} and {title} are replaced; the rest is shown as is.
         barTitleFormat = \(barTitleFormat)
+        # Left-side widgets in display order: desktops, fullscreen, title. Leave one out to hide it.
+        barLeftWidgets = \(barLeftWidgets.map(\.rawValue).joined(separator: ", "))
         # Right-side widgets in display order: weather, cpu, memory, disk, keyboard, wifi, battery, clock, menu, media, sound.
         # Leave one out to hide it. (The barWeather/barBattery/... flags below mirror this list for older versions.)
         barWidgets = \(barWidgets.map(\.rawValue).joined(separator: ", "))
@@ -500,7 +511,8 @@ public struct Config {
             case "barNotchPortals": cfg.barNotchPortals = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barBatteryPercent": cfg.barBatteryPercent = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barBattery": cfg.barBattery = ["true", "yes", "1", "on"].contains(value.lowercased())
-            case "barWidgets": cfg.barWidgets = value.split(separator: ",").compactMap { BarWidget(rawValue: $0.trimmingCharacters(in: .whitespaces).lowercased()) }
+            case "barWidgets": cfg.barWidgets = value.split(separator: ",").compactMap { BarWidget(rawValue: $0.trimmingCharacters(in: .whitespaces).lowercased()) }.filter(BarWidget.rightKinds.contains)
+            case "barLeftWidgets": cfg.barLeftWidgets = value.split(separator: ",").compactMap { BarWidget(rawValue: $0.trimmingCharacters(in: .whitespaces).lowercased()) }.filter(BarWidget.leftKinds.contains)
             case "barDesktopApps": cfg.barDesktopApps = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barCpu": cfg.barCpu = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "barMemory": cfg.barMemory = ["true", "yes", "1", "on"].contains(value.lowercased())

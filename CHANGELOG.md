@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-11-03
+
+### Added
+- `barLeftWidgets` (Settings › Widgets › Left side): the desktop chips, the fullscreen-app chips and the active window label are widgets too, each switchable and draggable into order like the right side. The chips' app icons and the title format moved under their widgets' disclosures.
+
 ## [0.35.3] - 2026-11-03
 
 ### Changed

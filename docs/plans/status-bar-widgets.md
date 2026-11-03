@@ -16,9 +16,9 @@ refresh triggers. `StatusBar` keeps the list, lays it out and forwards configura
 1. **Right side as widgets** — done. Clock, battery, Wi-Fi, keyboard, CPU, memory, disk, weather, media, sound and the
    menu button moved out of `BarView` into widget types. Services (weather, media, Wi-Fi, sound, the clock timer, the
    input-source observer) live inside the widgets that use them and run only while that widget is in the list.
-2. **Left side as widgets** — desktop chips, fullscreen chips and the active window title become `side: .left`
-   widgets with a `barLeftWidgets` order. Chip drag-to-reorder, the drop highlight and the chip menu move into the chips
-   widget; the bar context carries the manager callbacks they need.
+2. **Left side as widgets** — done. Desktop chips, fullscreen chips and the active window title are widgets with a
+   `barLeftWidgets` order, switchable and reorderable in Settings. Chip drag-to-reorder, the drop highlight and the
+   chip menu live in the chips widget; `BarContext` carries the manager callbacks.
 3. **Cats as a widget with a layout rule** — the cats need the free span between the sides and the notch portals;
    they become a free-floating widget positioned after the sides are laid out, reading the spans from the layout.
 4. **Settings from a schema** — each widget declares `settings: [Setting]` (key, kind, default, note), stored under one

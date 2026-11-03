@@ -7,8 +7,10 @@ final class StatusBar {
     private var windows: [BarWindow] = []
     private var config: Config
     private let events = WindowServerEvents()
-    /// One object per widget kind; the ones in `config.barWidgets` are running and shown.
+    /// One object per widget kind; the ones in `config.barWidgets` and `config.barLeftWidgets` are running and shown.
     private let widgets: [Config.BarWidget: BarWidget]
+    /// What the left-side widgets ask of the manager; filled from the closures below so the app wires only these.
+    private let context = BarContext()
     var onSelectDesktop: ((Int) -> Void)?
     var onSelectFullscreen: ((UInt64) -> Void)?
     var fullscreenSpaces: () -> [(space: UInt64, pids: [pid_t])] = { [] }
@@ -34,7 +36,19 @@ final class StatusBar {
 
     init(config: Config) {
         self.config = config
-        widgets = BarWidgets.make(config: config)
+        widgets = BarWidgets.make(config: config, context: context)
+        context.desktopsOn = { [unowned self] in self.desktopsOn($0) }
+        context.shownOn = { [unowned self] in self.shownOn($0) }
+        context.activeDesktop = { [unowned self] in self.activeDesktop() }
+        context.desktopApps = { [unowned self] in self.desktopApps() }
+        context.focusedWindow = { [unowned self] in self.focusedWindow() }
+        context.fullscreenSpaces = { [unowned self] in self.fullscreenSpaces() }
+        context.focusedAXWindow = { [unowned self] in self.focusedAXWindow() }
+        context.tabLabel = { [unowned self] in self.tabLabel($0) }
+        context.onSelectDesktop = { [weak self] in self?.onSelectDesktop?($0) }
+        context.onSelectFullscreen = { [weak self] in self?.onSelectFullscreen?($0) }
+        context.onReorderDesktop = { [weak self] from, to in self?.onReorderDesktop?(from, to) }
+        context.onDesktopMenu = { [weak self] d, v in self?.onDesktopMenu?(d, v) }
         for w in widgets.values { w.wantsRefresh = { [weak self] in self?.refresh() } }
         (widgets[.menu] as? MenuWidget)?.onPressed = { [weak self] v in self?.onMenuRequested?(v) }
         runWidgets()
@@ -54,8 +68,9 @@ final class StatusBar {
 
     /// Starts the widgets in the bar and stops the rest, so a widget that is off costs nothing.
     private func runWidgets() {
+        let inUse = config.barWidgets + config.barLeftWidgets
         for (id, w) in widgets {
-            if config.bar && config.barWidgets.contains(id) { w.apply(config); w.start() } else { w.stop() }
+            if config.bar && inUse.contains(id) { w.apply(config); w.start() } else { w.stop() }
         }
     }
 
@@ -83,15 +98,11 @@ final class StatusBar {
 
     /// The desktop chip under a point in AX coordinates, on any bar.
     func desktop(at pointAX: CGPoint) -> Int? {
-        let cocoa = CGRect(origin: pointAX, size: .zero).toCocoa().origin
-        for w in windows where w.isVisible && w.frame.contains(cocoa) {
-            return w.view.chipDesktop(at: w.view.convert(w.convertPoint(fromScreen: cocoa), from: nil))
-        }
-        return nil
+        (widgets[.desktops] as? DesktopsWidget)?.chipDesktop(atScreenPoint: CGRect(origin: pointAX, size: .zero).toCocoa().origin)
     }
 
     /// Lights up one desktop's chip (on every bar showing it) while a dragged window is over it.
-    func highlightDrop(_ desktop: Int?) { windows.forEach { $0.view.setDropTarget(desktop) } }
+    func highlightDrop(_ desktop: Int?) { (widgets[.desktops] as? DesktopsWidget)?.setDropTarget(desktop) }
 
     /// A screen switching to a fullscreen Space: hide at once, before the first frame of the animation; the
     /// deferred refresh decides what comes back.
@@ -126,11 +137,8 @@ final class StatusBar {
             let frame = NSRect(x: screen.frame.minX + m, y: screen.frame.maxY - config.barTopOffset - h, width: screen.frame.width - 2 * m, height: h)
             let w = BarWindow(frame: frame, screen: screen)
             w.view.apply(config, avoidNotch: atScreenTop(screen))
-            w.view.setRightWidgets(config.barWidgets.compactMap { id in widgets[id].map { (id, $0.makeView()) } })
-            w.view.onSelectDesktop = { [weak self] i in self?.onSelectDesktop?(i) }
-            w.view.onSelectFullscreen = { [weak self] s in self?.onSelectFullscreen?(s) }
-            w.view.onReorderDesktop = { [weak self] from, to in self?.onReorderDesktop?(from, to) }
-            w.view.onDesktopMenu = { [weak self] d, v in self?.onDesktopMenu?(d, v) }
+            w.view.setLeftWidgets(config.barLeftWidgets.compactMap { id in widgets[id].map { (id, $0.makeView(for: screen)) } })
+            w.view.setRightWidgets(config.barWidgets.compactMap { id in widgets[id].map { (id, $0.makeView(for: screen)) } })
             windows.append(w)
             // Entering fullscreen hides the menu bar, which lands here too: a fullscreen screen gets no bar.
             if !Spaces.showsFullscreen(screen) { w.orderFrontRegardless() }
@@ -170,32 +178,17 @@ final class StatusBar {
             let fullscreen = Spaces.showsFullscreen(w.targetScreen) || hiddenForSystemReveal
             if fullscreen { w.orderOut(nil) } else if !w.isVisible { w.orderFrontRegardless() }
         }
-        let focused = focusedAXWindow()
-        let app = focused.flatMap { NSRunningApplication(processIdentifier: $0.pid)?.localizedName }
-            ?? NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
-        let title = focused?.title ?? ""
-        let label = focused?.windowID.flatMap(tabLabel)
         // Widgets first: the cats read the battery and CPU from the widgets' fresh readings.
-        if let textColor = windows.first?.view.textColor {
-            let style = BarStyle(textColor: textColor, config: config)
-            for id in config.barWidgets { widgets[id]?.render(style) }
+        if let v = windows.first?.view {
+            let style = BarStyle(textColor: v.textColor, activeColor: v.activeColor, focusOutline: v.focusOutline, config: config)
+            for id in config.barLeftWidgets + config.barWidgets { widgets[id]?.render(style) }
         }
         var model = BarView.Model(
-            desktops: [],
             current: nil,
-            active: activeDesktop(),
-            apps: config.barDesktopApps ? desktopApps() : [:],
-            focusedWindow: focusedWindow() ?? focused?.windowID,
-            fullscreen: config.barDesktopApps ? fullscreenSpaces() : [],
-            app: app,
-            title: title,
-            label: label,
             battery: config.barWidgets.contains(.battery) ? (widgets[.battery] as? BatteryWidget)?.battery : nil,
-            cpu: config.barWidgets.contains(.cpu) ? (widgets[.cpu] as? CpuWidget)?.load : nil,
-            titleFormat: config.barTitleFormat
+            cpu: config.barWidgets.contains(.cpu) ? (widgets[.cpu] as? CpuWidget)?.load : nil
         )
         for w in windows {
-            model.desktops = desktopsOn(w.targetScreen)
             model.current = shownOn(w.targetScreen)
             w.view.render(model)
         }
@@ -257,7 +250,7 @@ final class BarWindow: NSPanel {
 
 /// Desktop number plus the icons of the apps open there. A non-key panel swallows the first click unless the
 /// view accepts it.
-private final class ChipView: NSView {
+final class ChipView: NSView {
     var onClick: (() -> Void)?
     var onContextMenu: (() -> Void)?
 
@@ -348,29 +341,14 @@ private final class ChipView: NSView {
 }
 
 final class BarView: NSView {
+    /// What the cats react to; the widgets draw everything else.
     struct Model {
-        /// This screen's desktops (global indices) and the one it shows; `active` is the one being worked on.
-        var desktops: [Int]
+        /// The desktop this screen shows.
         var current: Int?
-        var active: Int?
-        var apps: [Int: [(pid: pid_t, windows: [WindowID])]]
-        var focusedWindow: WindowID?
-        var fullscreen: [(space: UInt64, pids: [pid_t])]
-        var app: String
-        var title: String
-        var label: String?
-        /// For the cats' reactions; the widgets themselves draw these.
         var battery: SystemStatus.Battery?
         var cpu: Double?
-        var titleFormat: String
     }
 
-    var onSelectDesktop: ((Int) -> Void)?
-    var onSelectFullscreen: ((UInt64) -> Void)?
-    var onReorderDesktop: ((Int, Int) -> Void)?
-    /// Right-click on a desktop chip: the desktop and the chip to anchor a menu to.
-    var onDesktopMenu: ((Int, NSView) -> Void)?
-    /// Scroll over the sound widget: positive delta turns the volume up.
     private let screen: NSScreen
     private let background = NSVisualEffectView()
     private let solid = NSView()
@@ -378,20 +356,15 @@ final class BarView: NSView {
     private var notchPortals = true
     private var catsEnabled = true
     private(set) var textColor: NSColor = .labelColor
-    private var activeColor: NSColor = .controlAccentColor
-    private var focusOutline: NSColor?
+    private(set) var activeColor: NSColor = .controlAccentColor
+    private(set) var focusOutline: NSColor?
     private var padding: CGFloat = 12
     private let left = NSStackView()
     private let right = NSStackView()
-    private let appLabel = NSTextField(labelWithString: "")
-    private let titleLabel = NSTextField(labelWithString: "")
     private let cat = BarCat(frame: .zero)
-    /// The right side's widget views by widget; the cats aim at some of them.
+    /// The widget views by widget; the cats aim at some of them.
+    private var leftViews: [Config.BarWidget: NSView] = [:]
     private var rightViews: [Config.BarWidget: NSView] = [:]
-    private var chips: [ChipView] = []
-    /// Fullscreen Spaces, after the desktop chips; clicking one goes there.
-    private var fsChips: [ChipView] = []
-    private var fsSpaces: [UInt64] = []
     private var lastDesktop: Int?
     private var warnedBatteryLow = false
     private var lastLoadReaction = Date.distantPast
@@ -414,14 +387,6 @@ final class BarView: NSView {
         wantsLayer = true
         layer?.masksToBounds = true
 
-        for l in [appLabel, titleLabel] {
-            l.font = .systemFont(ofSize: 12, weight: l === appLabel ? .semibold : .regular)
-            l.textColor = .labelColor
-            l.lineBreakMode = .byTruncatingTail
-            l.maximumNumberOfLines = 1
-        }
-        titleLabel.textColor = .secondaryLabelColor
-
         left.orientation = .horizontal
         left.spacing = 10
         left.alignment = .centerY
@@ -435,9 +400,6 @@ final class BarView: NSView {
             cat.topAnchor.constraint(equalTo: topAnchor), cat.bottomAnchor.constraint(equalTo: bottomAnchor),
             cat.leadingAnchor.constraint(equalTo: leadingAnchor), cat.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
-        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        appLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
-
         leftLeading = left.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12)
         leftTrailing = left.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12)
         rightTrailing = right.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12)
@@ -469,12 +431,21 @@ final class BarView: NSView {
         layer?.cornerRadius = config.barRadius
         layer?.borderWidth = config.barBorderWidth
         layer?.borderColor = (NSColor(hex: config.barBorderColor) ?? .separatorColor).cgColor
-        appLabel.textColor = textColor
-        titleLabel.textColor = textColor.withAlphaComponent(0.65)
         cat.isHidden = !config.barCat
         catsEnabled = config.barCat
         notchPortals = config.barNotchPortals
         cat.configure(sheets: config.barCatSheets, color: textColor, barHeight: config.barHeight)
+        needsLayout = true
+    }
+
+    /// The left side, in display order; each view belongs to a widget that updates it.
+    func setLeftWidgets(_ views: [(Config.BarWidget, NSView)]) {
+        left.arrangedSubviews.forEach { left.removeArrangedSubview($0); $0.removeFromSuperview() }
+        leftViews = [:]
+        for (id, v) in views {
+            left.addArrangedSubview(v)
+            leftViews[id] = v
+        }
         needsLayout = true
     }
 
@@ -491,8 +462,6 @@ final class BarView: NSView {
 
     override func layout() {
         super.layout()
-        settlingChips?.settle()
-        settlingChips = nil
         // Keep content out of the notch: the auxiliary areas are the usable strips either side of it.
         if avoidNotch, let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea {
             // A long title would otherwise run right up to the notch and leave the cats nowhere to stand.
@@ -525,97 +494,14 @@ final class BarView: NSView {
         cat.roam = freeStart...max(freeStart, freeEnd)
     }
 
-    /// Desktop index of each visible chip, left to right.
-    private var chipDesktops: [Int] = []
-    private var dropTarget: Int?
-
-    func chipDesktop(at point: NSPoint) -> Int? {
-        for (i, c) in chips.enumerated() where !c.isHidden && i < chipDesktops.count {
-            if c.frame.insetBy(dx: -4, dy: -6).contains(convert(point, to: c.superview)) { return chipDesktops[i] }
-        }
-        return nil
-    }
-
-    func setDropTarget(_ desktop: Int?) {
-        dropTarget = desktop
-        for (i, c) in chips.enumerated() where i < chipDesktops.count {
-            c.setDropTarget(chipDesktops[i] == desktop, color: activeColor)
-        }
-    }
-
-    func render(_ m: Model) {
-        chipDesktops = m.desktops
-        while chips.count < m.desktops.count {
-            let c = ChipView()
-            // Chips change places in `chips` after a drag, so each looks its index up when asked.
-            let indexOf: (ChipView) -> Int? = { [weak self] c in self?.chips.firstIndex { $0 === c } }
-            c.onClick = { [weak self, weak c] in
-                guard let self, let c, let i = indexOf(c), i < self.chipDesktops.count else { return }
-                self.onSelectDesktop?(self.chipDesktops[i])
-            }
-            c.onDragBegan = { [weak self, weak c] in if let c, let i = indexOf(c) { self?.beginChipDrag(i) } }
-            c.onDragMoved = { [weak self] dx in self?.chipDrag?.update(delta: dx) }
-            c.onDragEnded = { [weak self] in self?.endChipDrag() }
-            c.onContextMenu = { [weak self, weak c] in
-                guard let self, let c, let i = indexOf(c), i < self.chipDesktops.count else { return }
-                self.onDesktopMenu?(self.chipDesktops[i], c)
-            }
-            chips.append(c)
-            left.insertArrangedSubview(c, at: chips.count - 1)
-        }
-        for (i, c) in chips.enumerated() {
-            c.isHidden = i >= m.desktops.count
-            guard i < m.desktops.count else { continue }
-            let d = m.desktops[i]
-            // The desktop being worked on gets the accent; the one merely shown on this screen a lighter mark.
-            let current = d == m.current && d == m.active
-            let shownHere = d == m.current
-            c.number.attributedStringValue = NSAttributedString(string: "\(d + 1)", attributes: [
-                .foregroundColor: current ? activeColor.contrastingText : textColor.withAlphaComponent(shownHere ? 1 : 0.7),
-                .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-            ])
-            c.layer?.backgroundColor = current ? activeColor.cgColor : textColor.withAlphaComponent(shownHere ? 0.3 : 0.1).cgColor
-            c.setApps(m.apps[d] ?? [], focused: m.focusedWindow, color: focusOutline ?? (current ? activeColor.contrastingText : activeColor))
-        }
-        fsSpaces = m.fullscreen.map(\.space)
-        while fsChips.count < m.fullscreen.count {
-            let c = ChipView()
-            let i = fsChips.count
-            c.onClick = { [weak self] in
-                guard let self, i < self.fsSpaces.count else { return }
-                self.onSelectFullscreen?(self.fsSpaces[i])
-            }
-            fsChips.append(c)
-            left.insertArrangedSubview(c, at: chips.count + fsChips.count - 1)
-        }
-        for (i, c) in fsChips.enumerated() {
-            c.isHidden = i >= m.fullscreen.count
-            guard i < m.fullscreen.count else { continue }
-            c.number.attributedStringValue = NSAttributedString(string: "⛶", attributes: [
-                .foregroundColor: textColor.withAlphaComponent(0.7), .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-            ])
-            c.layer?.backgroundColor = textColor.withAlphaComponent(0.1).cgColor
-            c.setApps(m.fullscreen[i].pids.map { ($0, []) }, focused: nil, color: activeColor)
-        }
-        if appLabel.superview == nil {
-            let sep = NSBox(); sep.boxType = .separator
-            sep.heightAnchor.constraint(equalToConstant: 14).isActive = true
-            left.addArrangedSubview(sep)
-            left.addArrangedSubview(appLabel)
-            left.addArrangedSubview(titleLabel)
-        }
-        appLabel.isHidden = true
-        titleLabel.attributedStringValue = m.label.map { BarView.formatTitle("{app}", app: $0, title: "", color: textColor) }
-            ?? BarView.formatTitle(m.titleFormat, app: m.app, title: m.title, color: textColor)
-        notifyCats(m)
-    }
+    func render(_ m: Model) { notifyCats(m) }
 
     /// Hands the cats the things worth reacting to: a new active desktop, a low battery, a busy machine.
     private func notifyCats(_ m: Model) {
         guard !cat.isHidden else { return }
         if let current = m.current, current != lastDesktop {
-            if lastDesktop != nil, let i = m.desktops.firstIndex(of: current), chips.indices.contains(i) {
-                cat.react(.desktopSwitched(towardX: chips[i].convert(chips[i].bounds, to: cat).midX))
+            if lastDesktop != nil, let x = (leftViews[.desktops] as? DesktopChipsView)?.chipMidX(for: current, in: cat) {
+                cat.react(.desktopSwitched(towardX: x))
             }
             lastDesktop = current
         }
@@ -633,36 +519,6 @@ final class BarView: NSView {
         if let load = m.cpu, load > 0.8, Date().timeIntervalSince(lastLoadReaction) > 120 {
             lastLoadReaction = Date()
             cat.react(.load)
-        }
-    }
-
-    private var chipDrag: ReorderDrag?
-    private var settlingChips: ReorderDrag?
-    private func beginChipDrag(_ index: Int) {
-        let visible = chips.enumerated().filter { !$0.element.isHidden && $0.offset < chipDesktops.count }
-        guard let i = visible.firstIndex(where: { $0.offset == index }) else { return }
-        chipDrag = ReorderDrag(items: visible.map(\.element), index: i, horizontal: true)
-    }
-
-    private func endChipDrag() {
-        guard let drag = chipDrag else { return }
-        chipDrag = nil
-        let visible = chips.enumerated().filter { !$0.element.isHidden && $0.offset < chipDesktops.count }.map(\.offset)
-        drag.end { [weak self] target in
-            guard let self, let from = visible.firstIndex(where: { self.chips[$0] === drag.grabbed }), target != from,
-                  target < visible.count else {
-                drag.settle()
-                return
-            }
-            // The chip view moves to its new place first, keeping its content, so the re-render only confirms what
-            // is already on screen; relabelling views in place would show the old order for a frame.
-            let fromIndex = visible[from], toIndex = visible[target]
-            let c = self.chips.remove(at: fromIndex)
-            self.chips.insert(c, at: toIndex)
-            self.left.insertArrangedSubview(c, at: toIndex)
-            self.settlingChips = drag
-            self.needsLayout = true
-            self.onReorderDesktop?(self.chipDesktops[fromIndex], self.chipDesktops[toIndex])
         }
     }
 
