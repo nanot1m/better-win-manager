@@ -6,7 +6,10 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.35.2] - 2026-11-03
+
 ### Changed
+- Tabs and the ring buttons keep clear of the ring's corner by the largest measured corner radius among all tiled windows on every desktop, so the row sits at the same place on every desktop and after every switch; it used to be per stack.
 - Status bar internals: the right side is a list of widgets, each owning its data source (weather, media, Wi-Fi, sound, the clock timer, the input-source observer) and its views; a widget not in `barWidgets` runs nothing. No visible change. Plan for the rest in `docs/plans/status-bar-widgets.md`.
 
 ## [0.35.1] - 2026-11-02

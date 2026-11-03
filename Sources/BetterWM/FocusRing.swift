@@ -46,12 +46,12 @@ final class FocusRing {
     private var placedFrame: NSRect = .zero
     /// The ring's outer corner radius as drawn; nothing should hang over the curve.
     var cornerRadius: CGFloat { shown ? layer.cornerRadius : 0 }
-    /// The windows that share a stack with `id` (itself included); the manager knows the grids.
-    var stackMates: (CGWindowID) -> [CGWindowID] = { [$0] }
+    /// Every tiled window on every desktop; the manager knows the grids.
+    var tiledWindows: () -> [CGWindowID] = { [] }
     /// How far in from the ring's outer corner the tabs and the buttons start, so they never hang over the curve:
-    /// the ring's reach plus the largest corner radius in the stack. One value for the whole stack, so the row
-    /// does not shift when a window with a different corner comes to the front.
-    func clearance(for id: CGWindowID) -> CGFloat { (stackMates(id).map(radius(for:)).max() ?? radius(for: id)) + pad }
+    /// the ring's reach plus the largest corner radius among all tiled windows. One value everywhere, so the row
+    /// does not shift when another window comes to the front or another desktop shows.
+    func clearance(for id: CGWindowID) -> CGFloat { (tiledWindows().map(radius(for:)).max() ?? radius(for: id)) + pad }
     /// Independent of whether the ring is up right now: a strip that moved every time the ring hid would jump.
     func tabClearance(for ids: [CGWindowID]) -> CGFloat {
         guard config.focusRing, let any = ids.first else { return 0 }
