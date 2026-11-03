@@ -21,9 +21,10 @@ refresh triggers. `StatusBar` keeps the list, lays it out and forwards configura
    chip menu live in the chips widget; `BarContext` carries the manager callbacks.
 3. **Cats as a widget with a layout rule** — the cats need the free span between the sides and the notch portals;
    they become a free-floating widget positioned after the sides are laid out, reading the spans from the layout.
-4. **Settings from a schema** — each widget declares `settings: [Setting]` (key, kind, default, note), stored under one
-   namespace per widget; the Widgets page renders the schema under each widget's disclosure. Today's keys stay as
-   aliases for two releases.
+4. **Settings from a schema** — done. `Config.BarWidget.settings` describes each widget's settings (config key, title,
+   note, kind: toggle, text, auto-or-text); the Widgets page renders them under the widget's disclosure, reading and
+   writing through `Config.value(forKey:)` and `Config.set(_:to:)`. The keys stay the existing ones (`barClockFormat`,
+   …), so no alias layer is needed; a per-widget namespace can come with step 5 if wanted.
 5. **Config** — the per-widget booleans (`barClock` and friends) go once the alias layer covers old files; unknown ids
    in `barWidgets` are kept so a widget missing in one build does not lose its place.
 

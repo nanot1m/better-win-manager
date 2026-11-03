@@ -6,6 +6,14 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.36.1] - 2026-11-03
+
+### Fixed
+- Opening About This Mac (or anything chosen from a menu) no longer pushes the new window behind another: the Accessibility notification for a destroyed element, which a closing menu also sends, was taken for a window closing. It counts only when a known window of that app has left the screen.
+
+### Changed
+- Settings › Widgets builds each widget's settings rows from a description in the core (key, title, note, kind) instead of hand-made controls; a new widget's settings need no Settings code. No visible change.
+
 ## [0.36.0] - 2026-11-03
 
 ### Added

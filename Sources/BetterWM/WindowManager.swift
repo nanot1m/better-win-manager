@@ -711,11 +711,16 @@ final class WindowManager {
                                         self?.scheduleTick()
                                     },
                                     // Accessibility reports a window's destruction even when the app keeps the
-                                    // window object (Ghostty); the window server stays silent then.
-                                    onDestroyed: { [weak self] _ in
-                                        self?.focusRing.update()
-                                        self?.windowWentAway()
-                                        self?.scheduleTick(after: 0.05)
+                                    // window object (Ghostty); the window server stays silent then. It reports
+                                    // any destroyed element, though (a menu closing), so only a known window of
+                                    // the app gone from the screen counts.
+                                    onDestroyed: { [weak self] pid in
+                                        guard let self, case let known = self.system.windowIDs(of: pid), !known.isEmpty else { return }
+                                        let onScreen = Set(CGWindowInfo.list([.optionOnScreenOnly, .excludeDesktopElements]).filter { $0.pid == pid }.map(\.id))
+                                        guard known.contains(where: { !onScreen.contains($0) }) else { return }
+                                        self.focusRing.update()
+                                        self.windowWentAway()
+                                        self.scheduleTick(after: 0.05)
                                     })
         tick()
         // Window creation, destruction, focus and Space changes all arrive as events; the timer is a safety net.

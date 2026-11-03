@@ -154,7 +154,51 @@ public struct Config {
             case .sound: return "Sound (volume, output and input devices)"
             }
         }
+        /// The widget's own settings, shown under it in Settings › Widgets.
+        public var settings: [WidgetSetting] {
+            switch self {
+            case .desktops: return [WidgetSetting("barDesktopApps", "App icons", "One icon per window open on that desktop.", .toggle)]
+            case .title: return [WidgetSetting("barTitleFormat", "Format", "{app} and {title} are replaced; the rest is shown as is.", .text(placeholder: "{app}", width: 200))]
+            case .clock: return [WidgetSetting("barClockFormat", "Format", "Unicode date pattern, for example EEE d MMM  HH:mm.", .text(placeholder: "EEE d MMM  HH:mm", width: 200))]
+            case .battery: return [WidgetSetting("barBatteryPercent", "Percentage", "Show the number next to the battery icon.", .toggle)]
+            case .weather: return [WidgetSetting("barWeatherFahrenheit", "Fahrenheit", nil, .toggle),
+                                   WidgetSetting("barWeatherLocation", "Location", "Weather comes from Open-Meteo.",
+                                                 .autoOrText(autoTitle: "Use Location Services", customTitle: "Fixed coordinates", placeholder: "52.52, 13.40", auto: "auto", width: 140))]
+            default: return []
+            }
+        }
     }
+
+    /// The value of one config key as the file would show it, or nil for an unknown key.
+    public func value(forKey key: String) -> String? {
+        for raw in serialized().split(whereSeparator: \.isNewline) {
+            let line = Config.stripComment(String(raw))
+            guard let eq = line.firstIndex(of: "=") else { continue }
+            if line[..<eq].trimmingCharacters(in: .whitespaces) == key { return line[line.index(after: eq)...].trimmingCharacters(in: .whitespaces) }
+        }
+        return nil
+    }
+
+    /// Sets one config key from its file form; a later line wins, so the whole file is re-read with it appended.
+    public mutating func set(_ key: String, to value: String) {
+        self = Config.parse(serialized() + "\n\(key) = \(value)\n")
+    }
+    /// One setting of a widget, described rather than coded: the Settings window renders it, and the value lives in
+    /// the config file under `key` like any other.
+    public struct WidgetSetting {
+        public enum Kind {
+            case toggle
+            case text(placeholder: String?, width: CGFloat)
+            /// A choice between an automatic value and a typed one: `auto` is stored for the first option.
+            case autoOrText(autoTitle: String, customTitle: String, placeholder: String, auto: String, width: CGFloat)
+        }
+        public let key: String
+        public let title: String
+        public let note: String?
+        public let kind: Kind
+        public init(_ key: String, _ title: String, _ note: String? = nil, _ kind: Kind) { self.key = key; self.title = title; self.note = note; self.kind = kind }
+    }
+
     public var barWidgets: [BarWidget] = [.keyboard, .wifi, .battery, .clock, .menu]
     /// Left-side widgets, in display order.
     public var barLeftWidgets: [BarWidget] = [.desktops, .fullscreen, .title]

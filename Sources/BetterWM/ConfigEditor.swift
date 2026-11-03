@@ -86,16 +86,9 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var ringActionChecks: [(key: String, box: NSButton)] = []
     private var barSwitch: NSSwitch!
     private var barHeightField: NSTextField!
-    private var barClockField: NSTextField!
-    private var barTitleField: NSTextField!
-    private var barDesktopAppsSwitch: NSSwitch!
-    private var barBatteryPercentSwitch: NSSwitch!
     private var barCatSwitch: NSSwitch!
     private var barNotchPortalsSwitch: NSSwitch!
     private var barCatSheets: NSTextView!
-    private var barFahrenheit: NSSwitch!
-    private var barLocationPopup: NSPopUpButton!
-    private var barLocationField: NSTextField!
     private var barBackgroundMode: NSPopUpButton!
     private var barBgColor: NSColorWell!
     private var barTextMode: NSPopUpButton!
@@ -615,12 +608,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private func barGroups() -> [NSView] {
         barSwitch = toggle()
         barHeightField = numberField("28")
-        barTitleField = NSTextField(string: "")
-        barTitleField.widthAnchor.constraint(equalToConstant: 200).isActive = true
-        barClockField = NSTextField(string: "")
-        barClockField.widthAnchor.constraint(equalToConstant: 200).isActive = true
-        barDesktopAppsSwitch = toggle()
-        barBatteryPercentSwitch = toggle()
         barBackgroundMode = choice(["Blur", "Colour"], #selector(barAppearanceChanged))
         barBgColor = well()
         barTextMode = choice(["System", "Custom colour"], #selector(barAppearanceChanged))
@@ -635,14 +622,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         barPaddingField = numberField("12")
         barMarginField = numberField("0")
         barTopOffsetField = numberField("0")
-        barFahrenheit = toggle()
-        barLocationPopup = NSPopUpButton()
-        barLocationPopup.addItems(withTitles: ["Use Location Services", "Fixed coordinates"])
-        barLocationPopup.target = self
-        barLocationPopup.action = #selector(locationModeChanged)
-        barLocationField = NSTextField(string: "")
-        barLocationField.placeholderString = "52.52, 13.40"
-        barLocationField.widthAnchor.constraint(equalToConstant: 140).isActive = true
         return [
             group(nil, [
                 row("Show the status bar", "Set \"Automatically hide and show the menu bar\" to Always in System Settings › Control Center so the system bar does not overlap it. Tiled windows start below the bar.", [barSwitch]),
@@ -699,17 +678,58 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         return stack
     }
 
+    /// A control made from a widget setting's schema; `read` gives the value in config-file form, `write` sets it.
+    private final class SchemaControl {
+        let views: [NSView]
+        let read: () -> String
+        let write: (String) -> Void
+        init(views: [NSView], read: @escaping () -> String, write: @escaping (String) -> Void) { self.views = views; self.read = read; self.write = write }
+    }
+    private var schemaControls: [String: SchemaControl] = [:]
+
+    private func schemaControl(for setting: Config.WidgetSetting) -> SchemaControl {
+        if let c = schemaControls[setting.key] { return c }
+        let c: SchemaControl
+        switch setting.kind {
+        case .toggle:
+            let sw = toggle()
+            c = SchemaControl(views: [sw], read: { sw.state == .on ? "true" : "false" }, write: { sw.state = ["true", "yes", "1", "on"].contains($0.lowercased()) ? .on : .off })
+        case let .text(placeholder, width):
+            let field = NSTextField(string: "")
+            field.placeholderString = placeholder
+            field.widthAnchor.constraint(equalToConstant: width).isActive = true
+            // An emptied field means the default, which the placeholder shows.
+            c = SchemaControl(views: [field], read: { field.stringValue.isEmpty ? (placeholder ?? "") : field.stringValue }, write: { field.stringValue = $0 })
+        case let .autoOrText(autoTitle, customTitle, placeholder, auto, width):
+            let popup = NSPopUpButton()
+            popup.addItems(withTitles: [autoTitle, customTitle])
+            let field = NSTextField(string: "")
+            field.placeholderString = placeholder
+            field.widthAnchor.constraint(equalToConstant: width).isActive = true
+            let sync = { field.isEnabled = popup.indexOfSelectedItem == 1 }
+            popup.target = self
+            popup.action = #selector(schemaPopupChanged(_:))
+            schemaSyncs[ObjectIdentifier(popup)] = sync
+            c = SchemaControl(views: [popup, field],
+                              read: { popup.indexOfSelectedItem == 0 ? auto : field.stringValue.trimmingCharacters(in: .whitespaces) },
+                              write: { value in
+                                  let isAuto = value.lowercased() == auto
+                                  popup.selectItem(at: isAuto ? 0 : 1)
+                                  field.stringValue = isAuto ? "" : value
+                                  sync()
+                              })
+        }
+        schemaControls[setting.key] = c
+        return c
+    }
+    private var schemaSyncs: [ObjectIdentifier: () -> Void] = [:]
+    @objc private func schemaPopupChanged(_ sender: NSPopUpButton) { schemaSyncs[ObjectIdentifier(sender)]?() }
+
     /// The rows of a widget's own settings, shown under it when disclosed; nil for a widget with none.
     private func widgetSettings(_ w: Config.BarWidget) -> [NSView]? {
-        switch w {
-        case .desktops: return [row("App icons", "One icon per window open on that desktop.", [barDesktopAppsSwitch])]
-        case .title: return [row("Format", "{app} and {title} are replaced; the rest is shown as is.", [barTitleField])]
-        case .clock: return [row("Format", "Unicode date pattern, for example EEE d MMM  HH:mm.", [barClockField])]
-        case .battery: return [row("Percentage", "Show the number next to the battery icon.", [barBatteryPercentSwitch])]
-        case .weather: return [row("Fahrenheit", nil, [barFahrenheit]),
-                               row("Location", "Weather comes from Open-Meteo.", [barLocationPopup, barLocationField])]
-        default: return nil
-        }
+        let settings = w.settings
+        guard !settings.isEmpty else { return nil }
+        return settings.map { row($0.title, $0.note, schemaControl(for: $0).views) }
     }
 
     private var expandedWidgets: Set<Config.BarWidget> = []
@@ -969,8 +989,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         barActiveColorWell.isEnabled = barActiveMode.indexOfSelectedItem == 1
         barOutlineColorWell.isEnabled = barOutlineMode.indexOfSelectedItem == 1
     }
-    @objc private func locationModeChanged() { barLocationField.isEnabled = barLocationPopup.indexOfSelectedItem == 1 }
-
     @objc private func chooseCatSheet() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.png]
@@ -1061,21 +1079,13 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         ringSliderChanged(ringRadius)
         on(barSwitch, config.bar)
         barHeightField.stringValue = String(Int(config.barHeight))
-        barClockField.stringValue = config.barClockFormat
-        barTitleField.stringValue = config.barTitleFormat
-        on(barDesktopAppsSwitch, config.barDesktopApps)
-        on(barBatteryPercentSwitch, config.barBatteryPercent)
+        for w in Config.BarWidget.allCases { for s in w.settings { schemaControl(for: s).write(config.value(forKey: s.key) ?? "") } }
         on(barCatSwitch, config.barCat)
         on(barNotchPortalsSwitch, config.barNotchPortals)
         widgetLists[0].order = config.barLeftWidgets.map { ($0, true) } + Config.BarWidget.leftKinds.filter { !config.barLeftWidgets.contains($0) }.map { ($0, false) }
         widgetLists[1].order = config.barWidgets.map { ($0, true) } + Config.BarWidget.rightKinds.filter { !config.barWidgets.contains($0) }.map { ($0, false) }
         rebuildWidgetRows()
         barCatSheets.string = config.barCatSheets.joined(separator: "\n")
-        on(barFahrenheit, config.barWeatherFahrenheit)
-        let auto = config.barWeatherLocation.lowercased() == "auto"
-        barLocationPopup.selectItem(at: auto ? 0 : 1)
-        barLocationField.stringValue = auto ? "" : config.barWeatherLocation
-        locationModeChanged()
         let blur = config.barBackground.lowercased() == "blur"
         barBackgroundMode.selectItem(at: blur ? 0 : 1)
         barBgColor.color = blur ? NSColor.windowBackgroundColor : (NSColor(hex: config.barBackground) ?? .windowBackgroundColor)
@@ -1149,17 +1159,12 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.focusRingActionKeys = ringActionChecks.filter { $0.box.state == .on }.map(\.key)
         config.bar = isOn(barSwitch)
         config.barHeight = number(barHeightField, or: defaults.barHeight)
-        config.barClockFormat = barClockField.stringValue.isEmpty ? defaults.barClockFormat : barClockField.stringValue
-        config.barTitleFormat = barTitleField.stringValue.isEmpty ? defaults.barTitleFormat : barTitleField.stringValue
-        config.barDesktopApps = isOn(barDesktopAppsSwitch)
-        config.barBatteryPercent = isOn(barBatteryPercentSwitch)
+        for w in Config.BarWidget.allCases { for s in w.settings { config.set(s.key, to: schemaControl(for: s).read()) } }
         config.barCat = isOn(barCatSwitch)
         config.barNotchPortals = isOn(barNotchPortalsSwitch)
         config.barLeftWidgets = widgetLists[0].order.filter(\.1).map(\.0)
         config.barWidgets = widgetLists[1].order.filter(\.1).map(\.0)
         config.barCatSheets = barCatSheets.string.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        config.barWeatherFahrenheit = isOn(barFahrenheit)
-        config.barWeatherLocation = barLocationPopup.indexOfSelectedItem == 0 ? "auto" : barLocationField.stringValue.trimmingCharacters(in: .whitespaces)
         config.barBackground = barBackgroundMode.indexOfSelectedItem == 0 ? "blur" : barBgColor.color.hexString
         config.barTextColor = barTextMode.indexOfSelectedItem == 0 ? "auto" : barTextColorWell.color.hexString
         config.barBorderColor = barBorderColorWell.color.hexString

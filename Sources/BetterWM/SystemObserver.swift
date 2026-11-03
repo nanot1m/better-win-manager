@@ -50,6 +50,8 @@ final class SystemObserver {
     func titlesChanged(for pid: pid_t) { AX.queue.async { self.titleDirtyPids.insert(pid) } }
 
     func pid(of id: WindowID) -> pid_t? { axMain[id]?.pid ?? lastInfoMain[id]?.pid }
+    /// The windows of an app as the last snapshot knew them.
+    func windowIDs(of pid: pid_t) -> [WindowID] { lastInfoMain.values.filter { $0.pid == pid }.map(\.id) }
     /// Frame from the last snapshot, without touching Accessibility.
     func lastFrame(of id: WindowID) -> CGRect? { lastInfoMain[id]?.frame }
 

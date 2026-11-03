@@ -571,6 +571,18 @@ struct ReconcilerTests {
         expect(g.heightWeights[1] == 400 && g.minSizes[3]?.width == 500, #function, #line)
     }
 
+    func testWidgetSettingsRoundTripThroughKeys() {
+        var c = Config()
+        c.set("barClockFormat", to: "HH:mm")
+        c.set("barBatteryPercent", to: "true")
+        c.set("barWeatherLocation", to: "52.52, 13.40")
+        expect(c.barClockFormat == "HH:mm" && c.barBatteryPercent && c.barWeatherLocation == "52.52, 13.40", #function, #line)
+        expect(c.value(forKey: "barClockFormat") == "HH:mm" && c.value(forKey: "barBatteryPercent") == "true", #function, #line)
+        expect(c.value(forKey: "noSuchKey") == nil, #function, #line)
+        // Every schema key is a real config key.
+        for w in Config.BarWidget.allCases { for s in w.settings { expect(c.value(forKey: s.key) != nil, #function, #line) } }
+    }
+
     func testUnstackingRestoresTheColumns() {
         var g = Grid()
         g.columns = [Column([1, 2], weight: 2), Column([3], weight: 1)]
@@ -928,6 +940,7 @@ let tests: [(String, () -> Void)] = [
     ("stackedModeSurvivesSaveWithoutWindows", t.testStackedModeSurvivesSaveWithoutWindows),
     ("focusedWindowLeadsTheStackBeforeZOrderCatchesUp", t.testFocusedWindowLeadsTheStackBeforeZOrderCatchesUp),
     ("unstackingRestoresTheColumns", t.testUnstackingRestoresTheColumns),
+    ("widgetSettingsRoundTripThroughKeys", t.testWidgetSettingsRoundTripThroughKeys),
     ("equalizeWidthsKeepsHeightsAndMinimums", t.testEqualizeWidthsKeepsHeightsAndMinimums),
     ("rememberedColumnsSurviveSaving", t.testRememberedColumnsSurviveSaving),
     ("barWidgetsCompatibility", t.testBarWidgetsCompatibility),
