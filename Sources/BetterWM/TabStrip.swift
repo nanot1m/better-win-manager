@@ -157,12 +157,14 @@ private final class TabStripView: NSView, NSTextFieldDelegate {
             let active = item.id == focused
             // Re-adding a view that is already frontmost drops a frame; only move it when something is above it.
             if active, subviews.last !== t { addSubview(t, positioned: .above, relativeTo: nil) }
-            let glass = config.tabStyle == "glass"
+            // A greyed front tab (its window has no focus: a tiled window's own tab, a stack behind a floating
+            // window) is glass like the inactive ones; only a focused front tab keeps the ring colour.
+            let glass = config.tabStyle == "glass" && (!active || inactive)
             // On glass the text follows the system: white on a light glass would vanish.
-            let color: NSColor = active ? accent.contrastingText : glass ? .labelColor : .white
+            let color: NSColor = glass ? .labelColor : active ? accent.contrastingText : .white
             let title = item.label.map { NSAttributedString(string: $0, attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: color]) }
                 ?? BarView.formatTitle(config.tabTitleFormat, app: item.app, title: item.title, color: color)
-            t.configure(title: title, active: active, accent: accent, side: side, glass: glass, clear: config.glassStyle == "clear")
+            t.configure(title: title, active: active && !glass, accent: accent, side: side, glass: glass, clear: config.glassStyle == "clear")
             t.isNew = arrived.contains(item.id)
         }
         needsLayout = true
