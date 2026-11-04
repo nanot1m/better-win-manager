@@ -1180,6 +1180,10 @@ final class WindowManager {
     private var edgeDragged: WindowID?
 
     private func followEdgeDrag(_ id: WindowID) -> Bool {
+        // A handle drag or an ⌥-drag owns the interaction: the resizes it causes arrive a frame late, with the
+        // mouse still down, and must not be read as the user dragging the windows' edges. Once an edge drag has
+        // started, only the dragged window counts.
+        if interacting, edgeDragged != id { return false }
         guard NSEvent.pressedMouseButtons & 1 != 0, state.isTiled(id), let space = state.space(containing: id),
               let geo = geometry(for: space), geo.grid.mode == .columns, let slot = geo.frame(of: id),
               let actual = WindowServerEvents.bounds(of: id), let pos = geo.grid.position(of: id) else { return false }

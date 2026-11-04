@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.41.1] - 2026-11-04
+
+### Fixed
+- Dragging a gap handle jittered: the neighbours' late resize reports were read as edge drags of those windows and moved the boundary back. Edge-drag handling now stays out of handle and ⌥-drags.
+
 ## [0.41.0] - 2026-11-04
 
 ### Fixed
