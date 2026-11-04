@@ -65,7 +65,12 @@
   .desk { position: absolute; inset: 12px; display: grid; gap: 10px; transition: transform .7s cubic-bezier(.2,.8,.2,1), opacity .7s; }
   .desk.d1 { grid-template-columns: 1.3fr 1fr; grid-template-rows: 1fr 1fr; }
   .desk.d1 .w:first-child { grid-row: span 2; }
-  .desk.d2 { grid-template-columns: 1fr 1fr 1fr; transform: translateX(105%); }
+  /* The second desktop is stacked: one window takes the screen behind a row of tabs. */
+  .desk.d2 { display: block; transform: translateX(105%); }
+  .d2 .tabs { position: absolute; left: 0; right: 0; top: 0; height: 30px; display: flex; gap: 4px; padding: 0 16px; }
+  .d2 .w { position: absolute; left: 0; right: 0; top: 36px; bottom: 0; }
+  .tab { flex: 0 1 220px; margin-top: 5px; border-radius: 8px 8px 0 0; background: #383b45; border: 1px solid rgba(255,255,255,.12); border-bottom: 0; color: #fff; font: 600 11px/24px system-ui; padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: margin-top .25s, background .25s, line-height .25s; }
+  .tab.on { margin-top: 1px; line-height: 28px; background: var(--accent); border-color: var(--accent); color: #1a1205; }
   .w { border-radius: 10px; background: #1c1f27; border: 1px solid rgba(255,255,255,.08); overflow: hidden; position: relative; }
   .w::before { content: ""; position: absolute; left: 10px; top: 9px; width: 34px; height: 8px;
     background: radial-gradient(circle at 4px 4px, #ff5f57 3.5px, transparent 4px), radial-gradient(circle at 17px 4px, #febc2e 3.5px, transparent 4px), radial-gradient(circle at 30px 4px, #28c840 3.5px, transparent 4px); }
@@ -129,8 +134,6 @@
   .tut .zone { position: absolute; left: 50.5%; top: 12px; right: 12px; bottom: 12px; border: 2px solid #3b82f6; border-radius: 12px; background: rgba(59,130,246,.3); opacity: 0; transition: opacity .4s; z-index: 2; }
   .tut .cursor { position: absolute; left: 60%; top: 24%; width: 34px; height: 24px; border-radius: 6px; background: var(--accent); color: #1a1205; font: 700 13px/24px system-ui; text-align: center; opacity: 0; transition: left .7s cubic-bezier(.2,.8,.2,1), top .7s cubic-bezier(.2,.8,.2,1), opacity .3s; z-index: 5; box-shadow: 0 4px 12px rgba(0,0,0,.4); }
   .tut .tabs { position: absolute; left: 12px; right: 12px; top: 12px; height: 30px; display: flex; gap: 4px; padding: 0 16px; opacity: 0; transition: opacity .4s; z-index: 4; }
-  .tut .tab { flex: 0 1 220px; margin-top: 5px; border-radius: 8px 8px 0 0; background: #383b45; border: 1px solid rgba(255,255,255,.12); border-bottom: 0; color: #fff; font: 600 11px/24px system-ui; padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: margin-top .25s, background .25s, line-height .25s; }
-  .tut .tab.on { margin-top: 1px; line-height: 28px; background: var(--accent); border-color: var(--accent); color: #1a1205; }
   /* 2: the new window is carried onto the drop zone */
   .tut.s2 .w.b { left: 52%; top: 14%; z-index: 3; }
   .tut.s2 .zone, .tut.s2 .cursor { opacity: 1; }
@@ -226,9 +229,8 @@
           <div class="w"><div class="t"><i></i><i></i><i></i></div></div>
         </div>
         <div class="desk d2">
-          <div class="w"><div class="t"><i></i><i></i><i></i><i></i><i></i></div></div>
-          <div class="w focus"><div class="t"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
-          <div class="w"><div class="t"><i></i><i></i><i></i><i></i></div></div>
+          <div class="tabs"><span class="tab on">Figma — Landing page</span><span class="tab">Slack — #design</span><span class="tab">Notes — Launch checklist</span></div>
+          <div class="w focus"><div class="t"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
         </div>
       </div>
     </div>
