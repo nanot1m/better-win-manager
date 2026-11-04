@@ -11,6 +11,8 @@ mkdir -p "$stage/root/.background"
 cp -R "$app" "$stage/root/"
 ln -s /Applications "$stage/root/Applications"
 cp assets/dmg-background.png "$stage/root/.background/background.png"
+# A volume of the same name still mounted (an earlier image left open) would be the one Finder lays out.
+for v in /Volumes/"$name"*; do [[ -d "$v" ]] && hdiutil detach "$v" -quiet 2>/dev/null || true; done
 hdiutil create -quiet -srcfolder "$stage/root" -volname "$name" -fs HFS+ -format UDRW -ov "$rw"
 mount=$(hdiutil attach -readwrite -noverify -nobrowse "$rw" | awk -F'\t' '/Apple_HFS/{print $NF}')
 [[ -d "$mount" ]] || { echo "mount failed"; exit 1; }

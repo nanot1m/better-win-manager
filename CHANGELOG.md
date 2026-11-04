@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.39.1] - 2026-11-04
+
+### Fixed
+- The disk image's background is light with dark text: Finder drew the icon labels in dark grey on the previous dark background.
+
 ## [0.39.0] - 2026-11-04
 
 ### Changed
