@@ -475,7 +475,6 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 sliderRow("Gap around the screen", nil, \.outerGap, 0...64),
                 row("Gap per edge", "Top, left, bottom, right. Blank takes the gap around the screen.",
                     [edgeGapFields.0, edgeGapFields.1, edgeGapFields.2, edgeGapFields.3, unit("pt")]),
-                sliderRow("Resize handle width", "The draggable bar in each gap.", \.handleWidth, 4...32),
             ]),
             group("Launch", [
                 row("Tile existing windows", "When a desktop is seen for the first time, arrange the windows already on it.", [tileOnStartSwitch]),

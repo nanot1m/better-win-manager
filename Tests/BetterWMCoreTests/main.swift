@@ -351,14 +351,12 @@ struct ReconcilerTests {
         let fullscreen = CGRect(x: 0, y: 0, width: 1600, height: 1000)
         // A click, even one whose button changed the frame, is not a hand move.
         expect(DragRules.outcome(moved: false, travel: 0, before: slot, after: fullscreen, alt: false) == .init(), #function, #line)
-        // A nudge short of the threshold snaps back and settles nothing.
-        expect(DragRules.outcome(moved: true, travel: 12, before: slot, after: slot.offsetBy(dx: 12, dy: 0), alt: false) == .init(snapBack: true), #function, #line)
-        // A real drag releases the window and remembers where it landed.
-        expect(DragRules.outcome(moved: true, travel: 300, before: slot, after: elsewhere, alt: false) == .init(release: true, rememberFloating: true), #function, #line)
-        // ⌥-drag that missed every zone: released, but the miss is not a new floating spot.
-        expect(DragRules.outcome(moved: true, travel: 300, before: slot, after: elsewhere, alt: true) == .init(release: true), #function, #line)
-        // A long drag inside the window (a canvas item, a text selection) moved nothing: no release.
-        expect(DragRules.outcome(moved: true, travel: 300, before: slot, after: slot, alt: false) == .init(rememberFloating: true), #function, #line)
+        // A nudge short of the threshold settles nothing.
+        expect(DragRules.outcome(moved: true, travel: 12, before: slot, after: slot.offsetBy(dx: 12, dy: 0), alt: false) == .init(), #function, #line)
+        // A real drag of a floating window remembers where it landed.
+        expect(DragRules.outcome(moved: true, travel: 300, before: slot, after: elsewhere, alt: false) == .init(rememberFloating: true), #function, #line)
+        // ⌥-drag that missed every zone: the miss is not a new floating spot.
+        expect(DragRules.outcome(moved: true, travel: 300, before: slot, after: elsewhere, alt: true) == .init(), #function, #line)
     }
 
     func testTabbedStackFramesAndStrip() {
@@ -575,7 +573,6 @@ struct ReconcilerTests {
         let frames = geo.windowFrames()
         expect(frames.map { $0.1.minX } == [0, 50, 100], #function, #line)
         expect(frames.allSatisfy { $0.1.width == 1500 && $0.1.height == 1000 }, #function, #line)
-        expect(geo.handleFrames().isEmpty, #function, #line)
         // Dropping onto the second strip puts the window second in the deck.
         let (zone, _) = geo.zone(at: CGPoint(x: 60, y: 500), dragging: 3)!
         expect(zone == .newColumn(index: 1), #function, #line)

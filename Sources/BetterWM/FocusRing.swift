@@ -87,8 +87,6 @@ final class FocusRing {
     var isTiledID: (CGWindowID) -> Bool = { _ in true }
     /// The tiled window in front on the active desktop; the grey ring's fallback when none was ringed before.
     var topTiledWindow: () -> CGWindowID? = { nil }
-    /// Fired after the ring window is (re)ordered so dependants like the gap handles can stack above it.
-    var onReorder: (() -> Void)?
     /// Fired when the ringed window changes, including between windows of one app.
     var onFocusChange: (() -> Void)?
     var windowNumber: Int? { shown ? window.windowNumber : nil }
@@ -350,7 +348,6 @@ final class FocusRing {
         place(frame: frame)
         if wasHidden || targetChanged {
             showRing()
-            onReorder?()
         }
         notify()
     }

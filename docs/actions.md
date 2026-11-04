@@ -69,9 +69,9 @@ Behind the grid button at the right end of the bar, and behind the menu bar icon
 
 | Gesture | Does |
 | --- | --- |
-| ⌥-drag a window (`dragModifiers`) | Tile it into the highlighted drop zone; ⌥ only matters while a drag is in progress, so ⌥-clicking stays an ordinary click |
-| Drag a gap handle | Resize the columns or rows on either side |
-| Plain move or resize of a tiled window | Untiles it; the grid reflows |
+| ⌥-drag a floating window (`dragModifiers`) | Tile it into the highlighted drop zone; ⌥ only matters while a drag is in progress, so ⌥-clicking stays an ordinary click |
+| Drag a tiled window | The same, with or without ⌥: drop it into a zone to move it in the grid, or let go anywhere else and it snaps back to its slot. Untile with `toggleTile` |
+| Drag a tiled window's edge | Resize the tiles: the boundary with the neighbour follows; an edge with no neighbour snaps back |
 | ⌥ + scroll | Switch desktop |
 | Click a chip | Switch desktop; drag it to reorder |
 | Click a cat | Pet it |

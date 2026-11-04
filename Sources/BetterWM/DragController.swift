@@ -208,6 +208,9 @@ final class DragController {
             // Clicks often carry a pixel of motion; only real movement suspends reconciling and the focus ring.
             if !manager.interacting, hypot(p.x - dragStart.x, p.y - dragStart.y) < 4 { return }
             manager.interacting = true
+            // A tiled window is dragged like an ⌥-drag whatever the keys: it goes to a drop zone or back to its slot,
+            // never out of the grid. Only a floating window needs the modifier to be tiled.
+            let alt = alt || manager.isTiled(w)
             if alt, !windowMoved, Date().timeIntervalSince(lastMoveCheck) > 0.1 {
                 lastMoveCheck = Date()
                 let f = liveFrame(w)
@@ -255,11 +258,11 @@ final class DragController {
                     return
                 }
                 if let zone { manager.drop(w, into: zone, at: p, from: original); return }
+                // A tiled window that missed every zone goes back to its slot; a floating one settles where it is.
+                if manager.isTiled(w) { if moved { manager.apply() }; return }
                 let now = self?.liveFrame(w) ?? w.frame
                 let outcome = DragRules.outcome(moved: moved, travel: travel, before: original, after: now, alt: alt)
-                if outcome.release, let id { manager.releaseDisplacedWindow(id) }
                 if outcome.rememberFloating { manager.rememberFloatingFrame(w, frame: now) }
-                if outcome.snapBack { manager.apply() }
             }
             // Let the app complete its own move or resize before we inspect frames.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: finish)

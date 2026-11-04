@@ -96,7 +96,7 @@ public struct Grid: Equatable {
         }
         switch zone {
         case let .newColumn(i):
-            // Column weights are on whatever scale a handle drag left them (pixel widths); a newcomer at weight 1
+            // Column weights are on whatever scale an edge drag left them (pixel widths); a newcomer at weight 1
             // beside a 1000 would be a sliver, so it takes the average and shares the width like the others.
             var column = Column([w])
             if !columns.isEmpty { column.weight = columns.map(\.weight).reduce(0, +) / CGFloat(columns.count) }
@@ -481,25 +481,6 @@ public struct GridGeometry {
         columnFrames().firstIndex { x < $0.midX } ?? grid.columns.count
     }
 
-    public func handleFrames() -> [(Handle, CGRect)] {
-        guard grid.mode == .columns else { return [] }
-        var out: [(Handle, CGRect)] = []
-        let cf = columnFrames()
-        for i in cf.indices.dropLast() {
-            let midX = (cf[i].maxX + cf[i + 1].minX) / 2
-            out.append((.column(i), CGRect(x: midX - config.handleWidth / 2, y: inner.minY, width: config.handleWidth, height: inner.height)))
-        }
-        let wf = tiledSlots()
-        var k = 0
-        for (ci, c) in grid.columns.enumerated() {
-            for i in 0..<max(0, c.windows.count - 1) {
-                let midY = (wf[k + i].1.maxY + wf[k + i + 1].1.minY) / 2
-                out.append((.row(column: ci, index: i), CGRect(x: cf[ci].minX, y: midY - config.handleWidth / 2, width: cf[ci].width, height: config.handleWidth)))
-            }
-            k += c.windows.count
-        }
-        return out
-    }
 
     /// Each window is split by its diagonals: the nearest edge decides. Left/right create a column, top/bottom stack.
     public func zone(at p: CGPoint, dragging dragged: WindowID?) -> (DropZone, CGRect)? {

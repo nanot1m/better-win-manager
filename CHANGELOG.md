@@ -6,6 +6,17 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-11-04
+
+### Fixed
+- Resizing a tiled window by its edge was sometimes ignored: the drag controller's own marking of the drag as an interaction tripped the guard meant for handle drags.
+
+### Removed
+- The gap handles: tiles are resized by dragging a window's edge now, so the grips in the gaps and `handleWidth` are gone. The key is accepted and ignored.
+
+### Changed
+- Dragging a tiled window works like an ⌥-drag whatever the keys: drop zones light up, a drop moves it in the grid, and letting go anywhere else snaps it back. Moving or resizing a tiled window by hand no longer untiles it; `toggleTile` does.
+
 ## [0.41.1] - 2026-11-04
 
 ### Fixed

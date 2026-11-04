@@ -6,7 +6,7 @@ Column-based tiling window manager for macOS. Tile windows by ⌥-dragging them 
 
 - Columns across the screen, windows stacked within a column
 - Virtual workspaces per macOS desktop: instant switching, reorderable, created on demand
-- Drop zones highlighted while dragging, draggable gap handles to resize
+- Drop zones highlighted while dragging; drag a tiled window's edge to resize the tiles
 - Auto-tiling of new windows with several placement strategies
 - Instant desktop switching that skips the slide animation
 - Optional status bar under the auto-hidden menu bar: desktops, active window, weather, clock; notch-aware
@@ -52,7 +52,7 @@ On the first run the windows on the current desktop are tiled, ordered left to r
 - Left or right half of a window: new column on that side.
 - Top or bottom half: stack above or below it.
 - Empty column: fills it.
-- Drag the bar in a gap between columns or stacked windows to resize them.
+- Drag the edge of a tiled window to resize the columns or rows around it.
 - Move or resize a tiled window normally and it leaves the grid; the others reflow.
 - ⌥ + scroll wheel switches desktop.
 
@@ -100,7 +100,6 @@ Both `config.conf` and `state.json` carry a `version`; files written by older re
 ```ini
 gap = 16
 outerGap = 16
-handleWidth = 16
 
 tileExistingOnStart = true
 autoTile = true

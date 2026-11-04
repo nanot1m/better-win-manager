@@ -14,7 +14,6 @@ public struct Config {
     public var outerGaps: (top: CGFloat, left: CGFloat, bottom: CGFloat, right: CGFloat) {
         (outerGapTop ?? outerGap, outerGapLeft ?? outerGap, outerGapBottom ?? outerGap, outerGapRight ?? outerGap)
     }
-    public var handleWidth: CGFloat = 16
     public var dragModifiers: String = "alt"
     public var hotkeys: [String: String] = Config.defaultHotkeys
 
@@ -366,8 +365,6 @@ public struct Config {
         outerGapLeft = \(outerGapLeft.map(num) ?? "")
         outerGapBottom = \(outerGapBottom.map(num) ?? "")
         outerGapRight = \(outerGapRight.map(num) ?? "")
-        # Width of the draggable bar sitting in each gap.
-        handleWidth = \(num(handleWidth))
 
         # Tile the windows already open when a desktop is first seen (at launch or on first visit).
         tileExistingOnStart = \(tileExistingOnStart)
@@ -554,7 +551,7 @@ public struct Config {
             case "outerGapLeft": cfg.outerGapLeft = Double(value).map { CGFloat($0) }
             case "outerGapBottom": cfg.outerGapBottom = Double(value).map { CGFloat($0) }
             case "outerGapRight": cfg.outerGapRight = Double(value).map { CGFloat($0) }
-            case "handleWidth": cfg.handleWidth = Double(value).map { CGFloat($0) } ?? cfg.handleWidth
+            case "handleWidth": break  // the gap handles went in 0.42; tiles are resized by dragging a window's edge
             case "dragModifiers": cfg.dragModifiers = value
             case "workspaces": break  // native Spaces mode was removed in 0.12; the key is accepted and ignored
             case "virtualWorkspaces": break  // workspaces are created on demand since 0.12.1; accepted and ignored

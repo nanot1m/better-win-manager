@@ -9,24 +9,17 @@ public enum DragRules {
     /// Frame change below which a window still counts as in its slot.
     public static let frameTolerance: CGFloat = 10
 
+    /// How a drag of a floating window ends; tiled windows drop into a zone or snap back and never come here.
     public struct Outcome: Equatable {
-        /// The window leaves its grid: it was moved or resized by hand.
-        public var release = false
         /// Where it ended up is its new floating spot (a plain drag, not a ⌥-drag that missed every zone).
         public var rememberFloating = false
-        /// A tiled window nudged short of `handTravel` goes straight back to its slot.
-        public var snapBack = false
-        public init(release: Bool = false, rememberFloating: Bool = false, snapBack: Bool = false) {
-            self.release = release; self.rememberFloating = rememberFloating; self.snapBack = snapBack
-        }
+        public init(rememberFloating: Bool = false) { self.rememberFloating = rememberFloating }
     }
 
     /// `moved`: the mouse travelled far enough during the press to count as a drag at all (a few points).
     /// `travel`: distance from press to release. `before`/`after`: the window's frame at press and at release.
     public static func outcome(moved: Bool, travel: CGFloat, before: CGRect, after: CGRect, alt: Bool) -> Outcome {
-        guard moved else { return Outcome() }
-        guard travel >= handTravel else { return Outcome(snapBack: true) }
-        let changed = !after.approximatelyEquals(before, tolerance: frameTolerance)
-        return Outcome(release: changed, rememberFloating: !alt)
+        guard moved, travel >= handTravel else { return Outcome() }
+        return Outcome(rememberFloating: !alt)
     }
 }

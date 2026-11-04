@@ -25,7 +25,7 @@ On first launch, while Accessibility is missing, a welcome window lists both per
 ## The first five minutes
 
 1. **The status bar** appears at the top of each screen. It is meant to replace the system menu bar: set "Automatically hide and show the menu bar" to Always in System Settings › Control Center. The app offers to open that pane once.
-2. **Tile a window.** Hold ⌥ and drag any window. Drop zones light up: the left or right half of another window makes a new column on that side, the top or bottom half stacks it in that column. Let go to tile. Drag the bar in a gap to resize.
+2. **Tile a window.** Hold ⌥ and drag any window. Drop zones light up: the left or right half of another window makes a new column on that side, the top or bottom half stacks it in that column. Let go to tile. Tiled windows drag the same way without ⌥, and dragging their edges resizes the tiles.
 3. **Untile.** Move or resize a tiled window by hand and it leaves the grid, or press ⌃⌥T. Toggling again puts it back where it floated.
 4. **Switch desktops.** ⌃1 to ⌃9, or click a chip in the bar. Desktops beyond the ones you have are created the moment you switch or send a window to them, and disappear again when empty. ⌃⌥1 to ⌃⌥9 send the focused window.
 5. **Everything else** is in the menu behind the grid button at the right end of the bar (or the menu bar icon when the system bar is visible), and in the Window Actions popup, ⌥⌘Space.

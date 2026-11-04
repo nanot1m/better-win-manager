@@ -80,14 +80,13 @@ final class WindowManager {
     let system = SystemObserver()
     let overlay: ZoneOverlay
     let focusRing: FocusRing
-    private var handles: [HandleWindow] = []
     private var timer: Timer?
     private var axObserver: WindowObserver?
     /// Set while a Space switch is in flight; the window list mixes both desktops during the slide.
     private var switching = false
     /// Bumped per Space switch so only the latest one's settle clears `switching`.
     private var spaceSwitchGeneration = 0
-    /// Set while the user drags a window or a gap handle; reconciling mid-gesture would fight it.
+    /// Set while the user drags a window or its edge; reconciling mid-gesture would fight it.
     var interacting = false {
         didSet {
             interactionScreens = nil
@@ -617,7 +616,6 @@ final class WindowManager {
         focusRing.isShown = { [unowned self] id in self.desktops.isShown(self.desktops.workspace(of: id)) }
         focusRing.tiledWindows = { [unowned self] in self.state.grids.values.flatMap(\.windows) }
         focusRing.focusedWindow = { [unowned self] in self.system.focused }
-        focusRing.onReorder = { [unowned self] in self.stackHandles() }
         if config.restoreLayouts, let data = try? Data(contentsOf: Config.statePath),
            let layout = try? JSONDecoder().decode(SavedLayout.self, from: data) {
             let spaceScreen = NSScreen.screens.first ?? NSScreen.main
@@ -1160,17 +1158,14 @@ final class WindowManager {
     private func stepAsideFromFullscreen() {
         guard NSScreen.screens.contains(where: Spaces.showsFullscreen) else { return }
         tabStrips.forEach { $0.hide() }
-        handles.forEach { $0.orderOut(nil) }
         focusRing.update()
         // macOS shoves parked windows onto the screen during the transition; that is no refusal of theirs.
         if claimsSuspendedUntil < Date() { suspendClaims(until: Date().addingTimeInterval(5)) }
     }
 
     private func refreshChrome() {
-        refreshHandles()
         refreshTabStrips()
         focusRing.update()
-        stackHandles()
     }
 
     /// A tiled window resized by its own edge while the mouse is down: the drag moves the tile boundary on that
@@ -1180,10 +1175,9 @@ final class WindowManager {
     private var edgeDragged: WindowID?
 
     private func followEdgeDrag(_ id: WindowID) -> Bool {
-        // A handle drag or an ⌥-drag owns the interaction: the resizes it causes arrive a frame late, with the
-        // mouse still down, and must not be read as the user dragging the windows' edges. Once an edge drag has
-        // started, only the dragged window counts.
-        if interacting, edgeDragged != id { return false }
+        // Once an edge drag has started, only the dragged window counts: the neighbours' resizes arrive a frame
+        // late and must not be read as drags of their own edges.
+        if let dragged = edgeDragged, dragged != id { return false }
         guard NSEvent.pressedMouseButtons & 1 != 0, state.isTiled(id), let space = state.space(containing: id),
               let geo = geometry(for: space), geo.grid.mode == .columns, let slot = geo.frame(of: id),
               let actual = WindowServerEvents.bounds(of: id), let pos = geo.grid.position(of: id) else { return false }
@@ -1209,16 +1203,6 @@ final class WindowManager {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard let self else { return }
             if NSEvent.pressedMouseButtons & 1 != 0 { self.waitForMouseUp() } else { self.interacting = false; self.edgeDragged = nil; self.apply() }
-        }
-    }
-
-    /// Handles go right above the focus ring (or the frontmost tiled window), so the ring never covers the grip
-    /// while floating windows in front of the tiles still do.
-    private func stackHandles() {
-        let tiledIDs = Set(tracked)
-        let anchor = focusRing.windowNumber ?? zOrder.first { tiledIDs.contains($0) }.map(Int.init)
-        for h in handles where h.isVisible {
-            if let anchor { h.order(.above, relativeTo: anchor) } else { h.orderFrontRegardless() }
         }
     }
 
@@ -1309,18 +1293,6 @@ final class WindowManager {
         } else {
             tile(w)
         }
-    }
-
-    /// Called on mouse-up: the window moved or resized by hand leaves the grid and floats. Only that window;
-    /// others may be off their slots merely because a desktop switch is still settling them.
-    func releaseDisplacedWindow(_ id: WindowID) {
-        guard state.isTiled(id) else { return }
-        let snap = system.lightSnapshot(tracked: tracked)
-        if reconciler.displaced(state, snap).contains(id) {
-            Log.write("tile", "released by hand: \(describe(id))")
-            state.untile(id)
-        }
-        apply()
     }
 
     func retileCurrentScreen() {
@@ -1669,8 +1641,6 @@ final class WindowManager {
     }
     func describe(_ id: WindowID) -> String { system.axWindow(id).map(describe) ?? "#\(id)" }
 
-    // MARK: Gap handles
-
     /// A window of a tabbed stack that is about to show waits past the corner; move it onto its frame before (or
     /// right as) it comes to the front, so it never flashes at the corner while the layout pass catches up.
     private func bringForwardInTabbedStack(_ id: WindowID, raise: Bool) {
@@ -1772,29 +1742,4 @@ final class WindowManager {
         }
     }
 
-    private func refreshHandles() {
-        var needed: [(SpaceID, Handle, CGRect)] = []
-        for (space, geo) in activeGeometries() { for (h, f) in geo.handleFrames() { needed.append((space, h, f)) } }
-        while handles.count < needed.count { handles.append(HandleWindow()) }
-        for (idx, h) in handles.enumerated() {
-            guard idx < needed.count else { h.orderOut(nil); continue }
-            let (space, handle, f) = needed[idx]
-            h.setFrame(f.toCocoa(), display: true)
-            h.isVertical = handle.isVertical
-            h.onDrag = { [weak self] p in
-                guard let self, let geo = self.geometry(for: space) else { return }
-                self.interacting = true
-                switch handle {
-                case let .column(i): self.state.grids[space] = geo.resizing(boundary: i, toX: p.x)
-                case let .row(ci, i): self.state.grids[space] = geo.resizing(column: ci, boundary: i, toY: p.y)
-                }
-                self.apply()
-            }
-            h.onDragEnd = { [weak self] in
-                self?.interacting = false
-                self?.apply()
-            }
-            if !h.isVisible { h.orderFrontRegardless() }
-        }
-    }
 }

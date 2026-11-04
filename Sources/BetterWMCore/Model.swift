@@ -99,12 +99,6 @@ public enum Version {
 
 public enum Move: Equatable { case left, right, up, down, mergeLeft, mergeRight }
 
-public enum Handle: Equatable {
-    case column(Int)
-    case row(column: Int, index: Int)
-    public var isVertical: Bool { if case .column = self { return true } else { return false } }
-}
-
 public extension CGRect {
     var center: CGPoint { CGPoint(x: midX, y: midY) }
 
