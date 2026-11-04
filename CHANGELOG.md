@@ -6,6 +6,14 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-11-04
+
+### Changed
+- Sending a floating window to another desktop tiles it there when floating windows are shared across desktops (`floatingOnAllDesktops`); left floating, it would only have followed you straight back.
+
+### Added
+- Releases ship a drag-to-Applications disk image, `BetterWM.dmg`, signed and notarized; the landing page's download button points straight at the newest one. The zip stays for the in-app updater and the Homebrew cask.
+
 ## [0.38.4] - 2026-11-03
 
 ### Fixed

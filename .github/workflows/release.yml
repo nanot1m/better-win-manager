@@ -36,6 +36,7 @@ jobs:
         env:
           APP_PATH: dist/BetterWM.app
           ZIP_PATH: dist/BetterWM-${{ env.VERSION }}.zip
+          DMG_PATH: dist/BetterWM-${{ env.VERSION }}.dmg
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -49,7 +50,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          assets=("dist/BetterWM-$VERSION.zip" "dist/BetterWM-$VERSION.zip.sha256")
+          # BetterWM.dmg keeps a fixed name so https://github.com/nanot1m/better-win-manager/releases/latest/download/BetterWM.dmg always works.
+          cp "dist/BetterWM-$VERSION.dmg" dist/BetterWM.dmg
+          assets=("dist/BetterWM-$VERSION.dmg" "dist/BetterWM-$VERSION.dmg.sha256" dist/BetterWM.dmg "dist/BetterWM-$VERSION.zip" "dist/BetterWM-$VERSION.zip.sha256")
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
           elif [[ -f CHANGELOG.md ]] && awk -v v="$VERSION" '/^## \[/{p = index($0, "[" v "]") > 0} p' CHANGELOG.md | sed '1d' | grep -q .; then

@@ -3,8 +3,9 @@ VERSION ?= $(shell git describe --tags --always 2>/dev/null | sed 's/^v//')
 BUILD    = .build/release
 BUNDLE   = dist/$(APP).app
 ZIP      = dist/$(APP)-$(VERSION).zip
+DMG      = dist/$(APP)-$(VERSION).dmg
 
-.PHONY: build test bundle sign zip install run demo clean
+.PHONY: build test bundle sign zip dmg install run demo clean
 
 build:
 	swift build -c release --product BetterWM
@@ -29,6 +30,9 @@ zip: sign
 	rm -f $(ZIP)
 	ditto -c -k --keepParent $(BUNDLE) $(ZIP)
 	@echo "Built $(ZIP)"
+
+dmg: sign
+	scripts/make-dmg.sh $(BUNDLE) $(DMG)
 
 install: sign
 	rm -rf /Applications/$(APP).app

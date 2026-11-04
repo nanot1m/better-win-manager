@@ -1556,12 +1556,15 @@ final class WindowManager {
         guard index >= 0, index < 9, index != v.workspace(of: id) else { return }
         if index >= v.count { v.setCount(index + 1) }
         let wasTiled = isTiled(w)
-        Log.write("desktop", "send \(describe(w)) to workspace \(index + 1) (tiled: \(wasTiled))")
+        // A floating window shared across desktops would only follow the user straight back; sending it means
+        // tiling it over there.
+        let tileThere = wasTiled || config.floatingOnAllDesktops
+        Log.write("desktop", "send \(describe(w)) to workspace \(index + 1) (tiled: \(wasTiled), tiled there: \(tileThere))")
         untile(w)
         v.move(id, to: index)
         // The sent window is still focused for a moment; don't let that pull us into its workspace.
         ignoreOwnFocusChanges()
-        if wasTiled {
+        if tileThere {
             // Pre-place it in the target workspace's grid so it is tiled when that workspace shows.
             let space = VirtualWorkspaces.spaceID(index)
             state.mutate(space) { $0.apply(.newColumn(index: $0.columns.count), to: id) }

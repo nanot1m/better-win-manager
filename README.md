@@ -28,7 +28,7 @@ The cask lives in [nanot1m/homebrew-tap](https://github.com/nanot1m/homebrew-tap
 
 ### From a release
 
-Download `BetterWM-x.y.z.zip` from [Releases](https://github.com/nanot1m/better-win-manager/releases), unzip, and move `BetterWM.app` to Applications.
+[Download BetterWM.dmg](https://github.com/nanot1m/better-win-manager/releases/latest/download/BetterWM.dmg), open it and drag BetterWM to Applications. Each release also carries `BetterWM-x.y.z.zip`, which the in-app updater and the Homebrew cask use.
 
 Releases are signed with a Developer ID and notarized, so the app opens without a Gatekeeper warning. Grant Accessibility access when prompted (System Settings → Privacy & Security → Accessibility), then relaunch; the permission survives updates. The app checks for new releases once a day and can install them itself (Settings › Updates).
 
@@ -144,6 +144,7 @@ swift build
 .build/debug/BetterWM --settings                       # open Settings on launch
 .build/debug/BetterWM --snapshot-settings /tmp/s.png   # render each Settings tab to PNG
 make zip                                               # dist/BetterWM-<version>.zip, ad-hoc signed (releases are signed in CI)
+make dmg                                               # dist/BetterWM-<version>.dmg, drag-to-Applications image
 swift run CoreTests                                    # reconciler tests (plain executable; CLT has no XCTest)
 make run                                               # debug build as a signed .app (needed for Location Services)
 make demo                                              # record demo/demo.txt to dist/demo.mov (+ .mp4 with ffmpeg)
@@ -153,7 +154,7 @@ The layout logic lives in the `BetterWMCore` library: a pure `Reconciler` turns 
 
 `demo/demo.txt` is a step-per-line script (`open`, `drag`, `action`, `layout`, `popup`, `caption`, `wait`, `quit`) that the app replays with `--demo`, so recordings are repeatable; `make demo` wraps it in `screencapture`, which needs Screen Recording permission for the terminal. Press the popup hotkey (⌥⌘Space by default) to abort a running demo; Ctrl+C in the terminal stops the recording and quits the app.
 
-Pushing a tag like `v0.1.0` runs the Release workflow, which builds the zip and publishes a GitHub release.
+Pushing a tag like `v0.1.0` runs the Release workflow, which builds the disk image and the zip and publishes a GitHub release.
 
 ## Changelog
 

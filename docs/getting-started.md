@@ -8,7 +8,7 @@ Homebrew:
 brew install --cask nanot1m/tap/betterwm
 ```
 
-Or download `BetterWM-x.y.z.zip` from [Releases](https://github.com/nanot1m/better-win-manager/releases), unzip, and move `BetterWM.app` to Applications. Releases are signed with a Developer ID and notarized, so macOS opens them like any other app. Updates: the app checks once a day and offers new releases; Settings › Updates can install them automatically.
+Or [download BetterWM.dmg](https://github.com/nanot1m/better-win-manager/releases/latest/download/BetterWM.dmg), open it and drag BetterWM to Applications. Releases are signed with a Developer ID and notarized, so macOS opens them like any other app. Updates: the app checks once a day and offers new releases; Settings › Updates can install them automatically.
 
 From source, with Command Line Tools only (no Xcode): `make install` builds, bundles, signs and copies to Applications.
 

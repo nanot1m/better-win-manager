@@ -2,7 +2,7 @@
 # Run only on a disposable macOS CI runner. Never enable shell tracing here.
 set -euo pipefail
 umask 077
-: "${RUNNER_TEMP:?Set RUNNER_TEMP to an existing writable temporary directory}" "${APP_PATH:?}" "${ZIP_PATH:?}" "${APPLE_CERTIFICATE_P12_BASE64:?}" "${APPLE_CERTIFICATE_PASSWORD:?}"
+: "${RUNNER_TEMP:?Set RUNNER_TEMP to an existing writable temporary directory}" "${APP_PATH:?}" "${ZIP_PATH:?}" "${DMG_PATH:?}" "${APPLE_CERTIFICATE_P12_BASE64:?}" "${APPLE_CERTIFICATE_PASSWORD:?}"
 : "${APPLE_SIGNING_IDENTITY:?}" "${APPLE_TEAM_ID:?}" "${ASC_KEY_ID:?}" "${ASC_ISSUER_ID:?}" "${ASC_PRIVATE_KEY_BASE64:?}"
 [[ "$APPLE_SIGNING_IDENTITY" == "Developer ID Application: "* ]] || { echo 'Expected a Developer ID Application identity'; exit 1; }
 
@@ -121,5 +121,20 @@ rm -f "$ZIP_PATH"
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
 (cd "$(dirname "$ZIP_PATH")" && shasum -a 256 "$(basename "$ZIP_PATH")" > "$(basename "$ZIP_PATH").sha256")
 log "$ZIP_PATH: $(stat -f %z "$ZIP_PATH") bytes, sha256 $(cut -d' ' -f1 "$ZIP_PATH.sha256")"
+endgroup
+
+group "Disk image"
+# The drag-to-Applications image for people; the zip stays for the in-app updater and the Homebrew cask. The image
+# is signed and notarized on its own, so Gatekeeper trusts it before the app inside is even looked at.
+scripts/make-dmg.sh "$APP_PATH" "$DMG_PATH"
+codesign --force --timestamp --keychain "$keychain" --sign "$APPLE_SIGNING_IDENTITY" "$DMG_PATH"
+xcrun notarytool submit "$DMG_PATH" --keychain "$keychain" --keychain-profile release-notary --wait --timeout 50m --output-format json > "$secret_dir/dmg-submit.json" \
+  || fail "notarytool submit (dmg) failed: $(cat "$secret_dir/dmg-submit.json")"
+grep -q '"status": *"Accepted"' "$secret_dir/dmg-submit.json" || fail "Disk image notarization not accepted: $(cat "$secret_dir/dmg-submit.json")"
+retry xcrun stapler staple "$DMG_PATH"
+retry xcrun stapler validate "$DMG_PATH"
+spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG_PATH"
+(cd "$(dirname "$DMG_PATH")" && shasum -a 256 "$(basename "$DMG_PATH")" > "$(basename "$DMG_PATH").sha256")
+log "$DMG_PATH: $(stat -f %z "$DMG_PATH") bytes, sha256 $(cut -d' ' -f1 "$DMG_PATH.sha256")"
 endgroup
 log "Done"

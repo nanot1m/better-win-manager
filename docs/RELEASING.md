@@ -45,7 +45,7 @@ git push origin v1.2.3
 
 The tag must point to a commit containing this workflow and the signing script. Only stable three-part numeric versions are supported because the bundle version must be numeric. The manual `workflow_dispatch` trigger only runs when a `v…` tag is selected (or supplied as the ref through GitHub CLI); branch runs are skipped. The workflow must be on the default branch before GitHub shows its manual Run button.
 
-Download `BetterWM-1.2.3.zip` and its `.sha256` file from the GitHub Release. Extract the ZIP, then verify on another Mac:
+Each release carries `BetterWM-1.2.3.dmg` (also as `BetterWM.dmg`, so `releases/latest/download/BetterWM.dmg` always points at the newest), `BetterWM-1.2.3.zip` for the in-app updater and the Homebrew cask, and a `.sha256` for each. The disk image is signed, notarized and stapled on its own. Download the zip and its `.sha256` file from the GitHub Release, extract it, then verify on another Mac:
 
 ```sh
 shasum -a 256 -c BetterWM-1.2.3.zip.sha256
