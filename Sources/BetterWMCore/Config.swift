@@ -62,6 +62,8 @@ public struct Config {
     public var tabTitleFormat: String = "{app} — {title}"
     /// A tab above every tiled window too, so renamed tabs and titles read outside the stacked layout.
     public var tiledTabs: Bool = false
+    /// Move left/right at the edge of the grid: carry the window to the neighbouring desktop instead of cycling its width.
+    public var moveAcrossDesktops: Bool = false
     /// How much the grow and shrink actions change a window, in points.
     public var resizeStep: CGFloat = 40
     /// Screens narrower than this start in stacked mode (0 = never). Handy for a laptop panel next to a big display.
@@ -406,6 +408,8 @@ public struct Config {
         tabTitleFormat = \(tabTitleFormat)
         # Also a tab above every tiled window (in the columns layout), to see titles and renamed tabs.
         tiledTabs = \(tiledTabs)
+        # Move left/right at the grid's edge carries the window to the previous/next desktop instead of cycling its width.
+        moveAcrossDesktops = \(moveAcrossDesktops)
         # How much the grow and shrink actions change the focused window, in points.
         resizeStep = \(num(resizeStep))
 
@@ -572,6 +576,7 @@ public struct Config {
             case "tabWidth": cfg.tabWidth = Double(value).map { CGFloat($0) } ?? cfg.tabWidth
             case "tabTitleFormat": cfg.tabTitleFormat = value
             case "tiledTabs": cfg.tiledTabs = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "moveAcrossDesktops": cfg.moveAcrossDesktops = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "resizeStep": cfg.resizeStep = Double(value).map { CGFloat($0) } ?? cfg.resizeStep
             case "stackScreensNarrowerThan": cfg.stackScreensNarrowerThan = Double(value).map { CGFloat($0) } ?? cfg.stackScreensNarrowerThan
             case "animateLayout": break  // removed: Accessibility-driven frame animation was too laggy

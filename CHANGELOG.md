@@ -6,6 +6,17 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-11-04
+
+### Fixed
+- A window arriving as a new column (sent to a desktop, moved off the edge, dropped between columns) beside columns resized by hand could come out as a sliver: column weights are on the scale the drag left them, and the newcomer started at 1. It now takes the average weight.
+
+### Added
+- `moveAcrossDesktops` (Settings › Tiling › Moving): move left or right on the outermost column carries the window to the previous or next desktop, entering on the side it left from, with focus following it. Off (the default), the move cycles the column's width as before.
+
+### Changed
+- Focus left and right carry on past the screen edge: with no display that way, focus moves to the previous or next desktop of this display, round and round, landing on the window nearest the side it entered from. Before, focus wrapped around within the desktop.
+
 ## [0.40.0] - 2026-11-04
 
 ### Changed

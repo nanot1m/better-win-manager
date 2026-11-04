@@ -544,6 +544,15 @@ struct ReconcilerTests {
         expect(legacy.spaces[0].floating.isEmpty, #function, #line)
     }
 
+    func testNewColumnSharesTheWeightScale() {
+        var g = Grid()
+        g.columns = [Column([1]), Column([2])]
+        g.columns[0].weight = 900
+        g.columns[1].weight = 600
+        g.apply(.newColumn(index: 0), to: 3)
+        expect(g.columns[0].windows == [3] && g.columns[0].weight == 750, #function, #line)
+    }
+
     func testDroppedWindowSharesTheColumnsWeightScale() {
         var g = Grid()
         g.columns = [Column([1, 2])]
@@ -1000,6 +1009,7 @@ let tests: [(String, () -> Void)] = [
     ("edgeGapsOverrideTheOuterGap", t.testEdgeGapsOverrideTheOuterGap),
     ("tiledTabsLeaveRoomAboveEachWindow", t.testTiledTabsLeaveRoomAboveEachWindow),
     ("droppedWindowSharesTheColumnsWeightScale", t.testDroppedWindowSharesTheColumnsWeightScale),
+    ("newColumnSharesTheWeightScale", t.testNewColumnSharesTheWeightScale),
 ]
 for (name, run) in tests {
     let before = failures

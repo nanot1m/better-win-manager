@@ -247,7 +247,8 @@ final class WindowManager {
     func desktopList(on screen: NSScreen) -> [Int] { desktops.desktops(on: Self.displayID(screen)) }
     func shownDesktop(on screen: NSScreen) -> Int? { desktops.shownDesktop(on: Self.displayID(screen)) }
 
-    func switchDesktop(_ index: Int) {
+    /// `thenFocus`: a window of the new desktop to focus once it is in place, instead of the remembered one.
+    func switchDesktop(_ index: Int, thenFocus: WindowID? = nil) {
         let v = desktops
         guard index >= 0 else { return }
         // Asking for the desktop you are already on cycles focus through its windows instead.
@@ -271,6 +272,7 @@ final class WindowManager {
             guard let self else { return }
             let t1 = Date()
             self.revealRingAndFocusTop()
+            if let thenFocus, self.system.axWindow(thenFocus)?.isValid == true { self.focusWindow(id: thenFocus) }
             v.trimEmptyTrailing(minimum: 1)
             self.onDesktopChange?()
             let t2 = Date()
@@ -1409,6 +1411,18 @@ final class WindowManager {
             return
         }
         guard let space = state.space(containing: id) else { return }
+        // At the grid's edge the move would only cycle the column's width; the option carries the window on to the
+        // neighbouring desktop instead, entering on the side it left from, with focus following it.
+        if config.moveAcrossDesktops, dir == .left || dir == .right, state.grid(for: space).isAtEdge(id, dir == .left ? .left : .right) {
+            let next = dir == .right
+            var target = neighbourDesktop(next: next)
+            if target == nil, next, desktops.display(of: desktops.active) == desktops.main { target = desktops.count }
+            guard let target else { return }
+            Log.write("layout", "move \(describe(w)) \(dir) off the edge -> workspace \(target + 1)")
+            send(w, toDesktop: target, entering: next ? .left : .right)
+            switchDesktop(target, thenFocus: id)
+            return
+        }
         Log.write("layout", "move \(describe(w)) \(dir)")
         state.mutate(space) { $0.move(id, dir) }
         apply()
@@ -1474,6 +1488,16 @@ final class WindowManager {
                             return
                         }
                     }
+                }
+                // No display that way: left and right carry on through the desktops of this display, round and
+                // round, entering each on the side focus came from. Up and down stay within the grid.
+                if dir == .left || dir == .right, let ws = VirtualWorkspaces.workspace(of: space),
+                   let d = desktops.display(of: ws), case let here = desktops.desktops(on: d), here.count > 1, let i = here.firstIndex(of: ws) {
+                    let target = here[(i + (dir == .right ? 1 : here.count - 1)) % here.count]
+                    let entry = state.grid(for: VirtualWorkspaces.spaceID(target)).entryWindow(from: dir, relativeTo: curFrame.center, in: curScreen.area)
+                    Log.write("focus", "focus \(dir) at the edge -> workspace \(target + 1)")
+                    switchDesktop(target, thenFocus: entry)
+                    return
                 }
             }
 
@@ -1610,7 +1634,8 @@ final class WindowManager {
         if let w = system.axWindow(id) { send(w, toDesktop: index) }
     }
 
-    func send(_ w: AXWindow, toDesktop index: Int) {
+    /// `entering`: the side of the target grid the window joins on; nil appends it as the last column.
+    func send(_ w: AXWindow, toDesktop index: Int, entering: Direction? = nil) {
         guard let id = id(w) else { return }
         let v = desktops
         guard index >= 0, index < 9, index != v.workspace(of: id) else { return }
@@ -1627,7 +1652,7 @@ final class WindowManager {
         if tileThere {
             // Pre-place it in the target workspace's grid so it is tiled when that workspace shows.
             let space = VirtualWorkspaces.spaceID(index)
-            state.mutate(space) { $0.apply(.newColumn(index: $0.columns.count), to: id) }
+            state.mutate(space) { $0.apply(.newColumn(index: entering == .left ? 0 : $0.columns.count), to: id) }
             state.seen[space, default: []].insert(id)
         }
         tick { [weak self] in self?.focusTopWindow() }

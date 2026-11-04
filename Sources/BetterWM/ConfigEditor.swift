@@ -51,6 +51,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var stackStylePopup: NSPopUpButton!
     private var tabHeightField: NSTextField!
     private var tiledTabsSwitch: NSSwitch!
+    private var moveAcrossSwitch: NSSwitch!
     private var tabWidthField: NSTextField!
     private var tabTitleField: NSTextField!
     private var resizeStepField: NSTextField!
@@ -533,6 +534,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         }
         tabHeightField = numberField("30")
         tiledTabsSwitch = toggle()
+        moveAcrossSwitch = toggle()
         tabStyleMode = choice(["Flat", "Liquid glass"], #selector(barAppearanceChanged))
         tabWidthField = numberField("240")
         tabTitleField = NSTextField(string: "")
@@ -548,6 +550,9 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             ]),
             group("Drag to tile", [
                 row("Hold while dragging", "Drag a window with these keys held to drop it into a column.", [mods]),
+            ]),
+            group("Moving", [
+                row("Move past the edge to the next desktop", "Move left or right on the outermost column carries the window to the previous or next desktop, entering on the side it left from, and follows it. Off, the move cycles the column's width.", [moveAcrossSwitch]),
             ]),
             group("Stacked layout", [
                 row("Look", "Cascade shifts each window right; tabs give every window the whole screen behind a row of tabs. Toggle the layout per screen from the menu or with its hotkey.", [stackStylePopup]),
@@ -1064,6 +1069,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         stackStylePopup.selectItem(at: Config.StackStyle.allCases.firstIndex(of: config.stackStyle) ?? 0)
         tabHeightField.stringValue = String(Int(config.tabHeight))
         on(tiledTabsSwitch, config.tiledTabs)
+        on(moveAcrossSwitch, config.moveAcrossDesktops)
         tabWidthField.stringValue = String(Int(config.tabWidth))
         tabTitleField.stringValue = config.tabTitleFormat
         resizeStepField.stringValue = String(Int(config.resizeStep))
@@ -1161,6 +1167,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         if let raw = stackStylePopup.selectedItem?.representedObject as? String, let st = Config.StackStyle(rawValue: raw) { config.stackStyle = st }
         config.tabHeight = max(16, number(tabHeightField, or: defaults.tabHeight))
         config.tiledTabs = isOn(tiledTabsSwitch)
+        config.moveAcrossDesktops = isOn(moveAcrossSwitch)
         config.tabWidth = max(60, number(tabWidthField, or: defaults.tabWidth))
         config.tabTitleFormat = tabTitleField.stringValue.isEmpty ? defaults.tabTitleFormat : tabTitleField.stringValue
         config.resizeStep = max(1, number(resizeStepField, or: defaults.resizeStep))

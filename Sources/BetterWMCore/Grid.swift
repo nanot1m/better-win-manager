@@ -96,7 +96,11 @@ public struct Grid: Equatable {
         }
         switch zone {
         case let .newColumn(i):
-            columns.insert(Column([w]), at: adjusted(i))
+            // Column weights are on whatever scale a handle drag left them (pixel widths); a newcomer at weight 1
+            // beside a 1000 would be a sliver, so it takes the average and shares the width like the others.
+            var column = Column([w])
+            if !columns.isEmpty { column.weight = columns.map(\.weight).reduce(0, +) / CGFloat(columns.count) }
+            columns.insert(column, at: adjusted(i))
         case let .stack(ci, i):
             let idx = adjusted(ci)
             if idx < columns.count {

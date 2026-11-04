@@ -30,6 +30,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `tabStyle` | glass | Inactive tabs: `flat` grey, or `glass` (macOS 26); the active tab keeps the ring colour |
 | `tabHeight` / `tabWidth` | 30 / 240 | Thickness of the tab strip (its height on top, its width on the left, where tabs read sideways), and the longest a tab gets; the windows get the rest |
 | `tabTitleFormat` | `{app} — {title}` | Tab label; `{app}` and `{title}` are replaced |
+| `moveAcrossDesktops` | false | Move left/right on the outermost column carries the window to the previous/next desktop and follows it; off, the move cycles the column width |
 | `tiledTabs` | false | A tab above every window in the columns layout too, showing its title or the name given to it |
 | `resizeStep` | 40 | Points the `grow` / `shrink` actions resize the focused window by |
 | `stackScreensNarrowerThan` | 0 | Screens narrower than this start in stacked layout; 0 never |
