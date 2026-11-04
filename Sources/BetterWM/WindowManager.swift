@@ -36,18 +36,24 @@ final class WindowManager {
     /// A display that vanishes gets a grace period before its desktops move: sleep, the lid and a loose cable
     /// all take displays away for a few seconds, and macOS puts the windows back itself when one returns.
     private var displayGrace: DispatchWorkItem?
+    /// Displays drop off the list while the Mac or the screens sleep and come back one by one after waking; a
+    /// loss then is given time. Awake and settled, a lost display is a real disconnect and handled at once.
+    private var asleep = false
+    private var wokeAt = Date.distantPast
+    private var displaysSettling: Bool { asleep || Date().timeIntervalSince(wokeAt) < 15 }
+
     private func syncDisplays() {
         let ids = NSScreen.screens.map(Self.displayID)
         guard ids != desktops.displays else { displayGrace?.cancel(); displayGrace = nil; return }
         let lost = Set(desktops.displays).subtracting(ids)
-        if lost.isEmpty || desktops.displays.isEmpty {
+        if lost.isEmpty || desktops.displays.isEmpty || !displaysSettling {
             displayGrace?.cancel()
             displayGrace = nil
             connectDisplays(ids)
             return
         }
         guard displayGrace == nil else { return }
-        Log.write("screen", "display(s) \(lost.map { $0.prefix(8) }) gone; their desktops stay put for 10 s in case it is sleep")
+        Log.write("screen", "display(s) \(lost.map { $0.prefix(8) }) gone while asleep or just woken; their desktops stay put for 10 s")
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.displayGrace = nil
@@ -633,10 +639,25 @@ final class WindowManager {
         // a while; no window may be judged as refusing to leave until a minute after the Mac is back.
         let ws = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
-            ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in self?.suspendClaims(until: .distantFuture) }
+            ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.asleep = true
+                self?.suspendClaims(until: .distantFuture)
+            }
         }
         for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
-            ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in self?.suspendClaims(until: Date().addingTimeInterval(60)) }
+            ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                guard let self else { return }
+                self.asleep = false
+                self.wokeAt = Date()
+                self.suspendClaims(until: Date().addingTimeInterval(60))
+                // The displays may already differ from before sleep; check now rather than wait for a change event.
+                if NSScreen.screens.map(Self.displayID) != self.desktops.displays {
+                    Log.write("screen", "woke with a different display set: \(NSScreen.screens.map { Self.displayID($0).prefix(8) })")
+                    self.syncDisplays()
+                    self.tick()
+                    self.onDesktopChange?()
+                }
+            }
         }
         let dnc = DistributedNotificationCenter.default()
         dnc.addObserver(forName: NSNotification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in self?.suspendClaims(until: .distantFuture) }

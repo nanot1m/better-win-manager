@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-11-04
+
+### Changed
+- A display that disconnects while the Mac is awake is handled at once: its desktops move to the remaining screens and are re-laid out immediately. The ten-second wait is kept only around sleep and for the first fifteen seconds after waking, when displays drop off and return on their own; waking also checks the display set straight away.
+
 ### Changed
 - Dragging a tiled window's own edge resizes the tiles: the boundary with the neighbour on that side follows the drag, as with the gap handles. An edge with no neighbour (a lone tile, the screen side) snaps back when the mouse goes up.
 - New defaults: Liquid Glass for the bar, the desktop chips and the inactive tabs, system text colour, and the system accent for the focus ring and the active chip. Existing configs keep their colours; a file that predates the glass and tab style keys picks up the glass looks.
