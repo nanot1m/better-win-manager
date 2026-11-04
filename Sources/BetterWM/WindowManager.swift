@@ -689,6 +689,7 @@ final class WindowManager {
             case .spaceChange: self?.stepAsideFromFullscreen()
             case .windowMove, .windowResize:
                 guard let self, let wid else { return }
+                if event == .windowResize, self.followEdgeDrag(wid) { return }
                 if event == .windowMove { self.reparkIfPushedOnScreen(wid) }
                 // A tracked window changed: the executor wants to see it, and a displaced window wants its slot back.
                 if !self.interacting, self.watchedTracked.contains(wid) { self.scheduleTick(after: 0.05) }
@@ -1083,7 +1084,10 @@ final class WindowManager {
         let plan = interacting ? reconciler.plan(for: state, snap)
                                : state.executor.submit(reconciler.plan(for: state, snap), actual: snap.ownFrame(of:), now: snap.now)
         anticipateRing(plan, snap.focused)
-        if interacting { system.executeLatest(plan.commands) } else { system.execute(plan.commands) }
+        // The window under an edge drag belongs to the user until the mouse goes up; laying it out mid-drag
+        // would fight the drag and jitter. Only its neighbours follow.
+        let commands = edgeDragged.map { id in plan.commands.filter { if case let .setFrame(w, _) = $0 { return w != id }; return true } } ?? plan.commands
+        if interacting { system.executeLatest(commands) } else { system.execute(commands) }
         if let full = pendingSnapshot { scheduleSave(full) }
         refreshChrome()
     }
@@ -1144,6 +1148,41 @@ final class WindowManager {
         refreshTabStrips()
         focusRing.update()
         stackHandles()
+    }
+
+    /// A tiled window resized by its own edge while the mouse is down: the drag moves the tile boundary on that
+    /// side instead, so the neighbours give or take the space. An edge with no neighbour (a lone tile, the screen
+    /// side) has nothing to trade with; the window snaps back to its slot when the mouse goes up.
+    /// The tiled window whose edge the user is dragging right now.
+    private var edgeDragged: WindowID?
+
+    private func followEdgeDrag(_ id: WindowID) -> Bool {
+        guard NSEvent.pressedMouseButtons & 1 != 0, state.isTiled(id), let space = state.space(containing: id),
+              let geo = geometry(for: space), geo.grid.mode == .columns, let slot = geo.frame(of: id),
+              let actual = WindowServerEvents.bounds(of: id), let pos = geo.grid.position(of: id) else { return false }
+        let tolerance: CGFloat = 2, gap = config.gap
+        var g = geo.grid
+        func current() -> GridGeometry { GridGeometry(grid: g, area: geo.area, config: config) }
+        if abs(actual.maxX - slot.maxX) > tolerance, pos.column + 1 < g.columns.count { g = current().resizing(boundary: pos.column, toX: actual.maxX + gap / 2) }
+        if abs(actual.minX - slot.minX) > tolerance, pos.column > 0 { g = current().resizing(boundary: pos.column - 1, toX: actual.minX - gap / 2) }
+        if abs(actual.maxY - slot.maxY) > tolerance, pos.index + 1 < g.columns[pos.column].windows.count { g = current().resizing(column: pos.column, boundary: pos.index, toY: actual.maxY + gap / 2) }
+        if abs(actual.minY - slot.minY) > tolerance, pos.index > 0 { g = current().resizing(column: pos.column, boundary: pos.index - 1, toY: actual.minY - gap / 2) }
+        guard g != geo.grid else { return false }
+        state.grids[space] = g
+        if !interacting {
+            interacting = true
+            edgeDragged = id
+            waitForMouseUp()
+        }
+        apply()
+        return true
+    }
+
+    private func waitForMouseUp() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self else { return }
+            if NSEvent.pressedMouseButtons & 1 != 0 { self.waitForMouseUp() } else { self.interacting = false; self.edgeDragged = nil; self.apply() }
+        }
     }
 
     /// Handles go right above the focus ring (or the frontmost tiled window), so the ring never covers the grip

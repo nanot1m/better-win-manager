@@ -6,6 +6,10 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Changed
+- Dragging a tiled window's own edge resizes the tiles: the boundary with the neighbour on that side follows the drag, as with the gap handles. An edge with no neighbour (a lone tile, the screen side) snaps back when the mouse goes up.
+- New defaults: Liquid Glass for the bar, the desktop chips and the inactive tabs, system text colour, and the system accent for the focus ring and the active chip. Existing configs keep their colours; a file that predates the glass and tab style keys picks up the glass looks.
+
 ## [0.39.1] - 2026-11-04
 
 ### Fixed

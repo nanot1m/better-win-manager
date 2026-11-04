@@ -144,7 +144,10 @@ final class FocusRing {
             case .windowResize:
                 // Apps change corner style with size (e.g. entering split view); measure again.
                 if let wid { self.radiusCache[wid] = nil }
-                guard !self.suspended, wid == self.current else { return }
+                guard !self.suspended, wid == self.current, let id = wid else { return }
+                // Follow the new frame right here, as moves do; the coalesced update that re-measures the corners
+                // comes a turn later and would leave the ring a frame behind a live resize.
+                if let f = WindowServerEvents.bounds(of: id), Self.onScreen(f) { self.place(frame: f) }
                 self.scheduleUpdate()
             case .windowMove:
                 // Moving a window never changes focus; only the ringed window matters, and it is followed straight

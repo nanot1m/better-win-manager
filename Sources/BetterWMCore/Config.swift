@@ -55,7 +55,7 @@ public struct Config {
     /// Thickness of the tab strip (height on top, width on the left; left tabs read sideways).
     public var tabHeight: CGFloat = 30
     /// Inactive tabs: "flat" grey, or "glass" (macOS 26; flat before).
-    public var tabStyle: String = "flat"
+    public var tabStyle: String = "glass"
     /// Longest a single tab gets along the strip.
     public var tabWidth: CGFloat = 240
     /// Tab label; {app} and {title} are replaced.
@@ -133,9 +133,9 @@ public struct Config {
     /// Measure each window's real corner radius once and match it; `focusRingRadius` is the fallback.
     public var focusRingAutoRadius: Bool = true
     /// Hex, or "accent" for the system accent colour.
-    public var focusRingColor: String = "FF9300"
+    public var focusRingColor: String = "accent"
     /// Ring colour for a focused window that is floating (untiled); "same" uses focusRingColor.
-    public var focusRingFloatingColor: String = "009193"
+    public var focusRingFloatingColor: String = "same"
     public var ignoreApps: [String] = Config.defaultIgnoreApps
     public var bar: Bool = true
     public var barHeight: CGFloat = 32
@@ -263,16 +263,16 @@ public struct Config {
     /// "auto" uses Location Services; otherwise "lat,lon".
     public var barWeatherLocation: String = "auto"
     /// "blur" for a translucent material, "glass" for Liquid Glass (macOS 26; blur before), or a hex colour such as 1E1E1ECC.
-    public var barBackground: String = "000000"
+    public var barBackground: String = "glass"
     /// Desktop chips: "flat" colour fills, or "glass" capsules (macOS 26; flat before).
-    public var barChipStyle: String = "flat"
+    public var barChipStyle: String = "glass"
     /// Liquid Glass everywhere it is used: "regular", or "clear" for a more transparent glass.
     public var glassStyle: String = "regular"
     /// "auto" follows the system label colour, or a hex colour.
-    public var barTextColor: String = "FFFFFF"
+    public var barTextColor: String = "auto"
     public var barBorderColor: String = "424242"
     /// "accent" follows the system accent colour, or a hex colour.
-    public var barActiveColor: String = "FF9300"
+    public var barActiveColor: String = "accent"
     /// Outline around the focused window's icon in a chip: "auto" (contrasts with the chip) or a hex colour.
     public var barFocusOutlineColor: String = "auto"
     public var barBorderWidth: CGFloat = 0
