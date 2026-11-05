@@ -1190,9 +1190,11 @@ final class WindowManager {
         if abs(actual.minY - slot.minY) > tolerance, pos.index > 0 { g = current().resizing(column: pos.column, boundary: pos.index - 1, toY: actual.minY - gap / 2) }
         guard g != geo.grid else { return false }
         state.grids[space] = g
-        if !interacting {
-            interacting = true
+        // The drag controller may have marked the interaction already; the dragged window is registered either
+        // way, so the layout leaves it to the user until the mouse goes up.
+        if edgeDragged == nil {
             edgeDragged = id
+            interacting = true
             waitForMouseUp()
         }
         apply()

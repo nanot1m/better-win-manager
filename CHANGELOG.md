@@ -6,6 +6,12 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.42.1] - 2026-11-05
+
+### Fixed
+- Edge resizes jittered again when the drag controller noticed the drag first: the dragged window was not registered as the user's and the layout kept resizing it mid-drag.
+- Resizing a tiled window from its left or top edge was taken for a move: drop zones appeared and the window was re-dropped on release. A press that changes the window's size is a resize and never a move.
+
 ## [0.42.0] - 2026-11-04
 
 ### Fixed

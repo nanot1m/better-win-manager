@@ -21,6 +21,8 @@ final class DragController {
     /// A drag inside the window (⌥-drag of a canvas item, text selection) never moves the window; only a drag that
     /// does is ours to tile. Confirmed once per drag, polled sparingly because a frame read is IPC into the app.
     private var windowMoved = false
+    /// The press is resizing the window by an edge: its size changed. Never a move, whatever the origin does.
+    private var windowResized = false
     private var lastMoveCheck = Date.distantPast
     private var lastScrollSwitch = Date.distantPast
     /// The Mission Control key (keycode 160) when the overview has taken it over.
@@ -194,6 +196,7 @@ final class DragController {
                 self.originalFrame = w.frame
                 self.currentZone = nil
                 self.windowMoved = false
+                self.windowResized = false
             }
         case .leftMouseDragged:
             if dragged == nil, !hitTestPending, alt, manager.enabled, let w = manager.system.focused {
@@ -203,6 +206,7 @@ final class DragController {
                 manager.interacting = true
                 originalFrame = w.frame
                 windowMoved = false
+                windowResized = false
             }
             guard let w = dragged else { return }
             // Clicks often carry a pixel of motion; only real movement suspends reconciling and the focus ring.
@@ -211,10 +215,15 @@ final class DragController {
             // A tiled window is dragged like an ⌥-drag whatever the keys: it goes to a drop zone or back to its slot,
             // never out of the grid. Only a floating window needs the modifier to be tiled.
             let alt = alt || manager.isTiled(w)
-            if alt, !windowMoved, Date().timeIntervalSince(lastMoveCheck) > 0.1 {
+            if alt, !windowMoved, !windowResized, Date().timeIntervalSince(lastMoveCheck) > 0.1 {
                 lastMoveCheck = Date()
                 let f = liveFrame(w)
-                windowMoved = hypot(f.minX - originalFrame.minX, f.minY - originalFrame.minY) >= 4
+                // A resize from the left or top edge moves the origin too; only a frame that kept its size is a move.
+                if abs(f.width - originalFrame.width) >= 2 || abs(f.height - originalFrame.height) >= 2 {
+                    windowResized = true
+                } else {
+                    windowMoved = hypot(f.minX - originalFrame.minX, f.minY - originalFrame.minY) >= 4
+                }
             }
             // A chip is a drop target for a window being carried, not for a click that strays onto the bar: it needs
             // the same travel that makes a drag count as a hand move, once per press.
