@@ -665,6 +665,27 @@ struct ReconcilerTests {
         expect(plan.frame(of: 1)?.minX == area.maxX - 2, #function, #line)
     }
 
+    func testBusyWindowWaitingAsideDoesNotTakeTheStackFront() {
+        let r = Reconciler(config: config)
+        var state = DesiredState()
+        var g = Grid()
+        g.setMode(.stacked)
+        g.columns = [Column([1]), Column([2])]
+        state.grids[space] = g
+        state.seen[space] = [1, 2]
+        // 1 waits past the corner and its app is not answering; its progress panel made it frontmost and focused.
+        let aside = CGRect(x: area.maxX - 2, y: area.maxY - 2, width: 800, height: 600)
+        var snap = snapshot([win(1, aside), win(2, area)], focused: 1)
+        snap.unresponsive = [1]
+        let (_, plan) = r.reconcile(state, snap)
+        expect(plan.frame(of: 2) == nil || plan.frame(of: 2)?.minX == area.minX, #function, #line)
+        expect(plan.frame(of: 1) == nil || plan.frame(of: 1)?.minX == area.maxX - 2, #function, #line)
+        // Answering again, it comes in as the focused window should.
+        snap.unresponsive = []
+        let (_, plan2) = r.reconcile(state, snap)
+        expect(plan2.frame(of: 1)?.minX == area.minX, #function, #line)
+    }
+
     func testStackedModeSurvivesSaveWithoutWindows() {
         var state = DesiredState()
         var g = Grid(); g.setMode(.stacked)
@@ -1007,6 +1028,7 @@ let tests: [(String, () -> Void)] = [
     ("tiledTabsLeaveRoomAboveEachWindow", t.testTiledTabsLeaveRoomAboveEachWindow),
     ("droppedWindowSharesTheColumnsWeightScale", t.testDroppedWindowSharesTheColumnsWeightScale),
     ("newColumnSharesTheWeightScale", t.testNewColumnSharesTheWeightScale),
+    ("busyWindowWaitingAsideDoesNotTakeTheStackFront", t.testBusyWindowWaitingAsideDoesNotTakeTheStackFront),
 ]
 for (name, run) in tests {
     let before = failures

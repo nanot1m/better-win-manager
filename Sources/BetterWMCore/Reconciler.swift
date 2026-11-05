@@ -57,8 +57,14 @@ public struct Reconciler {
     /// The window of `grid` to show in front: the focused one when it is in the grid (right after ⌘Tab the
     /// window has the focus before macOS has reordered it), else the frontmost in `snapshot`'s front-to-back order.
     func front(of grid: Grid, in snapshot: Snapshot) -> WindowID? {
-        if let f = snapshot.focused, grid.contains(f) { return f }
-        return snapshot.windows.first { grid.contains($0.id) }?.id
+        let candidates = ([snapshot.focused].compactMap { $0 } + snapshot.windows.map(\.id)).filter(grid.contains)
+        // A window waiting off screen whose app is not answering (Unity compiling, its progress panel bringing it
+        // to the front) cannot come in; sending the current front aside would leave the screen empty. It stays.
+        func stuckAside(_ id: WindowID) -> Bool {
+            guard snapshot.unresponsive.contains(id), let f = snapshot.window(id)?.frame else { return false }
+            return !snapshot.screens.contains { $0.area.contains(f.center) }
+        }
+        return candidates.first { !stuckAside($0) } ?? candidates.first
     }
 
     public func isIgnored(_ w: WindowInfo) -> Bool {

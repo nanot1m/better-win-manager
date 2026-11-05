@@ -216,7 +216,9 @@ final class SystemObserver {
             w.spaces = spacesOfWindow(i.id)
             return w
         }
-        return Snapshot(screens: screens(), windows: windows, focused: focused.flatMap { $0.windowID }, now: Date())
+        var snap = Snapshot(screens: screens(), windows: windows, focused: focused.flatMap { $0.windowID }, now: Date())
+        snap.unresponsive = Set(windows.filter { AXResponsiveness.isUnresponsive($0.pid) }.map(\.id))
+        return snap
     }
 
     /// Cheap variant for live interactions, no Accessibility at all: frames straight from WindowServer for the
@@ -230,7 +232,9 @@ final class SystemObserver {
             i.spaces = spacesOfWindow(id)
             return i
         }
-        return Snapshot(screens: screens(), windows: infos, focused: focused.flatMap { $0.windowID }, now: Date())
+        var snap = Snapshot(screens: screens(), windows: infos, focused: focused.flatMap { $0.windowID }, now: Date())
+        snap.unresponsive = Set(infos.filter { AXResponsiveness.isUnresponsive($0.pid) }.map(\.id))
+        return snap
     }
 
     /// Re-reads the focused window (after a focus or title change) and calls back on the main thread.

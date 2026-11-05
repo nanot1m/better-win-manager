@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Fixed
+- A tabbed stack whose hidden window belongs to an app that stopped answering (Unity compiling, its progress panel bringing the app to the front) no longer swaps that window in: it cannot move while busy, and sending the current front aside left only the progress panel on screen. The window in front stays until the app answers again.
+
 ## [0.42.1] - 2026-11-05
 
 ### Fixed

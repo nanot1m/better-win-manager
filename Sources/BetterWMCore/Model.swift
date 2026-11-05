@@ -46,6 +46,8 @@ public struct Snapshot: Equatable {
     /// False while macOS is still moving windows itself (a display change, waking, unlocking): a window that
     /// keeps a size then says nothing about how small it can go.
     public var settled = true
+    /// Windows of apps that are not answering Accessibility right now (compiling, busy): they cannot be moved.
+    public var unresponsive: Set<WindowID> = []
 
     public init(screens: [ScreenInfo], windows: [WindowInfo], focused: WindowID?, now: Date) {
         self.screens = screens
