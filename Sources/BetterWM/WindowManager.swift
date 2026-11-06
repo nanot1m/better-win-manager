@@ -164,11 +164,16 @@ final class WindowManager {
     /// Every window with the desktop it lives on, in the order the bar's chips show them (grid order, then
     /// floating windows in their chip order), current desktop first. The switcher and the overview read this,
     /// so what they list is exactly what the bar lists.
+    /// Desktops in chip order with their windows in chip order; the floating windows shared across desktops
+    /// join the current desktop's list, where they are.
     func windowsByDesktop() -> [(desktop: Int, windows: [AXWindow])] {
         let apps = appsByDesktop()
-        let current = currentDesktop ?? 0
-        return apps.keys.sorted { a, b in a == current ? true : b == current ? false : a < b }.map { d in
-            (d, (apps[d] ?? []).flatMap(\.windows).compactMap { system.axWindow($0) })
+        let shared = sharedFloatingApps().flatMap(\.windows)
+        var desktops = Array(apps.keys)
+        if let current = currentDesktop, !shared.isEmpty, !desktops.contains(current) { desktops.append(current) }
+        return desktops.sorted().map { d in
+            let ids = (apps[d] ?? []).flatMap(\.windows) + (d == currentDesktop ? shared : [])
+            return (d, ids.compactMap { system.axWindow($0) })
         }
     }
 
@@ -181,7 +186,8 @@ final class WindowManager {
     func appsByDesktop() -> [Int: [(pid: pid_t, windows: [WindowID])]] {
         var out: [Int: [(pid: pid_t, windows: [WindowID])]] = [:]
         for (desktop, apps) in currentAppsByDesktop() {
-            let all = apps.flatMap { app in app.windows.map { (pid: app.pid, id: $0) } }
+            // Floating windows shared across desktops belong to no desktop's chip; they have one of their own.
+            let all = apps.flatMap { app in app.windows.map { (pid: app.pid, id: $0) } }.filter { !follows($0.id) }
             let gridOrder = state.grid(for: VirtualWorkspaces.spaceID(desktop)).windows
             var ordered = gridOrder.compactMap { id in all.first { $0.id == id } }
             let floating = all.filter { !gridOrder.contains($0.id) }
@@ -193,6 +199,24 @@ final class WindowManager {
         }
         for desktop in chipOrder.keys where out[desktop] == nil { chipOrder[desktop] = nil }
         return out
+    }
+
+    /// The floating windows shared across desktops, oldest first (window ids grow with creation), for their chip
+    /// in the status bar and the focus cycle; focusing one must not reorder them.
+    func sharedFloatingApps() -> [(pid: pid_t, windows: [WindowID])] {
+        guard config.floatingOnAllDesktops else { return [] }
+        let shared = currentAppsByDesktop().values.flatMap { $0 }.flatMap { app in app.windows.map { (pid: app.pid, id: $0) } }.filter { follows($0.id) }
+        return shared.sorted { $0.id < $1.id }.map { ($0.pid, [$0.id]) }
+    }
+
+    /// Cycles focus through the floating windows: the next after the focused one, or the first.
+    func focusFloating() {
+        let ids = (config.floatingOnAllDesktops ? sharedFloatingApps().flatMap(\.windows) : windowsByDesktop().first(where: { $0.desktop == currentDesktop })?.windows.compactMap(id).filter { !state.isTiled($0) } ?? [])
+        guard !ids.isEmpty else { return }
+        let current = system.focused.flatMap(id)
+        let next = current.flatMap { ids.firstIndex(of: $0) }.map { ids[($0 + 1) % ids.count] } ?? ids[0]
+        focusWindow(id: next)
+        Log.write("focus", "focus floating -> \(describe(next))")
     }
 
     private func currentAppsByDesktop() -> [Int: [(pid: pid_t, windows: [WindowID])]] {
@@ -479,7 +503,10 @@ final class WindowManager {
     }
 
     private func focusTopWindow() {
-        if let id = zOrder.first(where: { desktops.workspace(of: $0) == desktops.active }) { system.execute([.raise(id)]) }
+        if let id = zOrder.first(where: { desktops.workspace(of: $0) == desktops.active }) {
+            Log.write("focus", "focus top window \(describe(id)) (frontmost app has no window on screen)")
+            system.execute([.raise(id)])
+        }
     }
 
     /// Where a tiled window sits (or will sit) in its grid, in AX coordinates. Works for desktops not shown

@@ -2,7 +2,7 @@
 
 Settings live in `~/.config/betterwm/config.conf`: one `key = value` per line, `#` starts a comment (a `#` directly after `=` is a value, so colours never need quoting). The Settings window in the menu edits the same file; Reload Config re-reads it after a manual edit. Import… and Export… move whole files around; exports include unsaved edits.
 
-The file carries `version = 3`. Older files are migrated on load: `#`-prefixed colours lose the `#`, missing switcher bindings are added, and explicit widget lists gain the menu widget. Keys from removed features (`workspaces`, `virtualWorkspaces`, `focusRingStyle`) are accepted and ignored, so a file from any earlier release loads unchanged. Unknown keys are skipped.
+The file carries `version = 4`. Older files are migrated on load: `#`-prefixed colours lose the `#`, missing switcher bindings are added, explicit widget lists gain the menu widget, and files from before the focus-floating action get its default binding. Keys from removed features (`workspaces`, `virtualWorkspaces`, `focusRingStyle`) are accepted and ignored, so a file from any earlier release loads unchanged. Unknown keys are skipped.
 
 Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 
@@ -94,7 +94,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `switcher` | true | ⌥Tab window switcher |
-| `switcherThumbnails` | true | Window previews in the switcher; needs Screen Recording, otherwise icons |
+| `switcherThumbnails` | false | Window previews in the switcher instead of icons with titles; needs Screen Recording, otherwise icons |
 | `overview` | true | Desktop overview (see [actions](actions.md)); previews need Screen Recording, otherwise app icons |
 | `overviewKey` | true | The Mission Control key (F3) opens the overview instead of Mission Control |
 | `gestureFingers` | 4 | Fingers for both swipe gestures: 3 or 4 |

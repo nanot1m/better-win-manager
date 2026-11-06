@@ -2,7 +2,7 @@ import Foundation
 
 public struct Config {
     /// Bumped whenever a key is renamed or its meaning changes; `parse` migrates older files.
-    public static let schemaVersion = 3
+    public static let schemaVersion = 4
     public init() {}
     public var gap: CGFloat = 16
     public var outerGap: CGFloat = 16
@@ -22,7 +22,7 @@ public struct Config {
     public static let defaultHotkeys: [String: String] = {
         var h: [String: String] = [
             "popup": "alt+cmd+space", "switcher": "alt+tab", "switcherBack": "alt+shift+tab",
-            "focusNext": "ctrl+]", "focusPrevious": "ctrl+[",
+            "focusNext": "ctrl+]", "focusPrevious": "ctrl+[", "focusFloating": "ctrl+f",
             "moveLeft": "ctrl+alt+left", "moveRight": "ctrl+alt+right", "moveUp": "ctrl+alt+up", "moveDown": "ctrl+alt+down",
             "mergeLeft": "ctrl+alt+shift+left", "mergeRight": "ctrl+alt+shift+right",
             "toggleTile": "ctrl+alt+t", "toggleStack": "ctrl+alt+s", "retile": "ctrl+alt+r", "equalize": "ctrl+alt+e",
@@ -79,7 +79,7 @@ public struct Config {
     /// Window switcher (⌥Tab). Off leaves the ⌥Tab hotkeys unregistered.
     public var switcher: Bool = true
     /// Show live window previews, or just app icons.
-    public var switcherThumbnails: Bool = true
+    public var switcherThumbnails: Bool = false
     /// Desktop overview: every desktop in a strip and the current one's windows spread out, Mission Control style.
     public var overview: Bool = true
     /// Take over the Mission Control key (F3 on Apple keyboards) to open the overview.
@@ -327,7 +327,7 @@ public struct Config {
     public static let actions: [(key: String, title: String)] = [
         ("popup", "Window actions popup"), ("switcher", "Window switcher (⌥Tab)"), ("switcherBack", "Window switcher, backwards"),
         ("overview", "Desktop overview"),
-        ("focusNext", "Focus next window"), ("focusPrevious", "Focus previous window"),
+        ("focusNext", "Focus next window"), ("focusPrevious", "Focus previous window"), ("focusFloating", "Focus floating window"),
         ("focusLeft", "Focus left"), ("focusRight", "Focus right"), ("focusUp", "Focus up"), ("focusDown", "Focus down"),
         ("moveLeft", "Move left"), ("moveRight", "Move right"), ("moveUp", "Move up"), ("moveDown", "Move down"),
         ("mergeLeft", "Merge into left column"), ("mergeRight", "Merge into right column"),
@@ -652,6 +652,11 @@ public struct Config {
         if version < 3 {
             // v3 added the menu widget; files that already pinned an explicit widget order get it appended.
             if !cfg.barWidgets.contains(.menu) { cfg.barWidgets.append(.menu) }
+        }
+        if version < 4, hadHotkeys, cfg.hotkeys["focusFloating"] == nil {
+            // v4 added the focus-floating action; an unbound action is written commented out, which reads as
+            // absent, so only files from before the action get its default.
+            cfg.hotkeys["focusFloating"] = defaultHotkeys["focusFloating"]
         }
         return cfg
     }

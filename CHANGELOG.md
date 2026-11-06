@@ -6,6 +6,22 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-11-06
+
+### Fixed
+- A click on BetterWM's own menu bar item or status bar could crash the app: the click's hit test asked Accessibility about our own window from a background thread.
+
+### Fixed
+- The status bar marked the focused window by the ring's window, so with the floating ring off a focused floating window was never marked; the chips follow the real focus now.
+
+### Changed
+- The ⌥Tab switcher shows a tab's given name in place of the window title, as the bar and the tabs do.
+- The ⌥Tab switcher shows app icons by default in the style of ⌘Tab: close together on a Liquid Glass panel (a blur before macOS 26), the window's title under the selected one; window previews are the option (`switcherThumbnails`, now off by default). Previews are cached between openings and refreshed in the background, warmed after launch and after a desktop switch, so the panel opens with pictures.
+- The ⌥Tab switcher lists desktops in the status bar's order with the current one in place rather than first, puts the floating windows shared across desktops in a group of their own after them, like the bar, and wraps onto more rows when the desktops do not fit the screen's width.
+
+### Added
+- Floating windows shared across desktops have a chip of their own in the status bar, after the desktop chips, instead of appearing under whichever desktop they are on; clicking it focuses the next of them. New action `focusFloating` (⌃F by default) cycles focus through the floating windows.
+
 ### Fixed
 - A tabbed stack whose hidden window belongs to an app that stopped answering (Unity compiling, its progress panel bringing the app to the front) no longer swaps that window in: it cannot move while busy, and sending the current front aside left only the progress panel on screen. The window in front stays until the app answers again.
 

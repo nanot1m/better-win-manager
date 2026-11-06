@@ -92,17 +92,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.shownOn = { [weak self] in self?.manager.shownDesktop(on: $0) }
         bar.activeDesktop = { [weak self] in self?.manager.currentDesktop }
         bar.desktopApps = { [weak self] in self?.manager.appsByDesktop() ?? [:] }
-        bar.focusedWindow = { [weak self] in self?.manager.focusRing.currentWindowID }
+        bar.floatingApps = { [weak self] in self?.manager.sharedFloatingApps() ?? [] }
+        bar.onSelectFloating = { [weak self] in self?.manager.focusFloating() }
+        // The window that really has focus; the ring's may be a tiled window kept marked behind a floating one.
+        bar.focusedWindow = { [weak self] in self?.manager.system.focused?.windowID ?? self?.manager.focusRing.currentWindowID }
         bar.focusedAXWindow = { [weak self] in self?.manager.system.focused }
         bar.tabLabel = { [weak self] in self?.manager.tabLabel(for: $0) }
         bar.isInteracting = { [weak self] in self?.manager.interacting ?? false }
         manager.onInteractionEnd = { [weak self] in self?.bar.interactionEnded() }
         manager.onWindowsChange = { [weak self] in self?.bar.focusChanged() }
-        manager.focusRing.onFocusChange = { [weak self] in self?.bar.focusChanged() }
+        let ringFocusChanged = manager.focusRing.onFocusChange
+        manager.focusRing.onFocusChange = { [weak self] in ringFocusChanged?(); self?.bar.focusChanged() }
         manager.onDesktopChange = { [weak self] in
             self?.bar.focusChanged()
             self?.overview.desktopChanged()
+            self?.warmSwitcherThumbnails()
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.warmSwitcherThumbnails() }
         manager.onFocusChange = { [weak self] in self?.bar.focusChanged() }
         manager.tabMenuItems = { [weak self] menu, stacked in self?.addTabItems(to: menu, stacked: stacked) }
         systemReveal.onChange = { [weak self] active in
@@ -190,6 +196,7 @@ extension AppDelegate {
         menu.addItem(withTitle: "Send Focused Window to Desktop", action: nil, keyEquivalent: "").submenu = sendMenu
         add("Focus Next Window", #selector(focusNext), action: "focusNext")
         add("Focus Previous Window", #selector(focusPrevious), action: "focusPrevious")
+        add("Focus Floating Window", #selector(focusFloating), action: "focusFloating")
 
         section("Screen")
         add("Retile Current Screen", #selector(retile), action: "retile")
@@ -277,6 +284,7 @@ extension AppDelegate {
             "overview": { [weak self] in self?.overview.toggle() },
             "focusNext": { [weak self] in self?.manager.focusNext() },
             "focusPrevious": { [weak self] in self?.manager.focusNext(reverse: true) },
+            "focusFloating": { [weak self] in self?.manager.focusFloating() },
             "focusLeft": { [weak self] in self?.manager.focusWindow(in: .left) },
             "focusRight": { [weak self] in self?.manager.focusWindow(in: .right) },
             "focusUp": { [weak self] in self?.manager.focusWindow(in: .up) },
@@ -339,6 +347,14 @@ extension AppDelegate {
     @objc func sendNext() { manager.sendFocusedWindow(toNext: true) }
     @objc func sendPrevious() { manager.sendFocusedWindow(toNext: false) }
     @objc func focusPrevious() { manager.focusNext(reverse: true) }
+    @objc func focusFloating() { manager.focusFloating() }
+
+    /// Previews of the windows on screen, captured ahead of the first ⌥Tab.
+    func warmSwitcherThumbnails() {
+        guard manager.config.switcherThumbnails, !manager.interacting else { return }
+        let ids = manager.windowsByDesktop().first { $0.desktop == manager.currentDesktop }?.windows.compactMap(\.windowID) ?? []
+        SwitcherThumbnails.refresh(ids)
+    }
     @objc func focusDirection(_ sender: NSMenuItem) {
         if let dir = sender.representedObject as? Direction { manager.focusWindow(in: dir) }
     }

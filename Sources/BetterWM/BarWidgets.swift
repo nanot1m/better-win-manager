@@ -27,6 +27,8 @@ final class BarContext {
     var shownOn: (NSScreen) -> Int? = { _ in nil }
     var activeDesktop: () -> Int? = { nil }
     var desktopApps: () -> [Int: [(pid: pid_t, windows: [WindowID])]] = { [:] }
+    var floatingApps: () -> [(pid: pid_t, windows: [WindowID])] = { [] }
+    var onSelectFloating: (() -> Void)?
     var focusedWindow: () -> WindowID? = { nil }
     var fullscreenSpaces: () -> [(space: UInt64, pids: [pid_t])] = { [] }
     var focusedAXWindow: () -> AXWindow? = { nil }
@@ -393,6 +395,8 @@ final class DesktopChipsView: NSStackView {
     private var chips: [ChipView] = []
     /// Desktop index of each visible chip, left to right.
     private(set) var chipDesktops: [Int] = []
+    /// The floating windows shared across desktops, after the desktop chips; hidden when there are none.
+    private let floatingChip = ChipView()
     private var activeColor = NSColor.controlAccentColor
     private var chipDrag: ReorderDrag?
     private var settlingChips: ReorderDrag?
@@ -479,6 +483,34 @@ final class DesktopChipsView: NSStackView {
             }
             c.setApps(apps[d] ?? [], focused: focused, color: style.focusOutline ?? (isCurrent ? style.activeColor.contrastingText : style.activeColor))
         }
+        renderFloatingChip(style, focused: focused)
+    }
+
+    private func renderFloatingChip(_ style: BarStyle, focused: WindowID?) {
+        let floating = context.floatingApps()
+        if floatingChip.superview == nil {
+            floatingChip.onClick = { [weak self] in self?.context.onSelectFloating?() }
+            addArrangedSubview(floatingChip)
+        } else if arrangedSubviews.last !== floatingChip {
+            // Chips are appended as desktops appear; the floating chip stays last.
+            removeArrangedSubview(floatingChip)
+            addArrangedSubview(floatingChip)
+        }
+        floatingChip.isHidden = floating.isEmpty
+        guard !floating.isEmpty else { return }
+        let holdsFocus = focused.map { f in floating.contains { $0.windows.contains(f) } } ?? false
+        floatingChip.number.attributedStringValue = NSAttributedString(string: "⧉", attributes: [
+            .foregroundColor: holdsFocus ? style.activeColor.contrastingText : style.textColor,
+            .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+        ])
+        if style.config.barChipStyle == "glass", Glass.makeView() != nil {
+            floatingChip.setGlass(true, tint: holdsFocus ? style.activeColor : nil, clear: style.config.glassStyle == "clear")
+            floatingChip.layer?.backgroundColor = nil
+        } else {
+            floatingChip.setGlass(false, tint: nil)
+            floatingChip.layer?.backgroundColor = holdsFocus ? style.activeColor.cgColor : style.textColor.dimmed(0.3).cgColor
+        }
+        floatingChip.setApps(floating, focused: focused, color: style.focusOutline ?? (holdsFocus ? style.activeColor.contrastingText : style.activeColor))
     }
 
     private func beginDrag(_ index: Int) {

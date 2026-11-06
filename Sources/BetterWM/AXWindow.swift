@@ -255,7 +255,9 @@ final class AXWindow: Hashable {
     private static func axHitTest(_ point: CGPoint) -> AXWindow? {
         // The hit test is answered by the app under the cursor: a hung one has nothing to say, and our own windows
         // must not be asked from this thread (see `focused`).
-        if let top = CGWindowInfo.list(.optionOnScreenOnly).first(where: { $0.layer == 0 && $0.bounds.contains(point) }),
+        // Any window of ours at the point counts, the bar and the status item too: AppKit answers for them in this
+        // process, on this thread, and its accessibility objects are main-thread only.
+        if let top = CGWindowInfo.list(.optionOnScreenOnly).first(where: { $0.layer >= 0 && $0.bounds.contains(point) }),
            top.pid == getpid() || AXResponsiveness.isUnresponsive(top.pid) { return nil }
         var el: AXUIElement?
         let systemWide = AXUIElementCreateSystemWide()

@@ -485,7 +485,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             ]),
             group("Switcher", [
                 row("⌥Tab window switcher", "Windows grouped by desktop; the hotkey is on the Hotkeys page.", [switcherSwitch]),
-                row("Show window previews", "Needs Screen Recording permission; otherwise app icons are shown.", [switcherThumbsSwitch]),
+                row("Show window previews", "Previews of the windows instead of app icons with their titles. Needs Screen Recording permission; otherwise icons are shown.", [switcherThumbsSwitch]),
             ]),
             group("Desktop overview", [
                 row("Desktop overview", "Mission Control for BetterWM desktops: a strip of every desktop and the current one's windows spread out. Click to switch or focus, drag a window onto a desktop to move it. The hotkey is on the Hotkeys page.", [overviewSwitch]),

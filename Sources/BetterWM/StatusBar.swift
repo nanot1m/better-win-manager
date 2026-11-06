@@ -28,6 +28,9 @@ final class StatusBar {
     /// The name given to a window's tab, if any; shown in place of the formatted title.
     var tabLabel: (WindowID) -> String? = { _ in nil }
     var desktopApps: () -> [Int: [(pid: pid_t, windows: [WindowID])]] = { [:] }
+    /// Floating windows shared across desktops, for their own chip after the desktop chips.
+    var floatingApps: () -> [(pid: pid_t, windows: [WindowID])] = { [] }
+    var onSelectFloating: (() -> Void)?
     var focusedWindow: () -> WindowID? = { nil }
     /// While the user drags a window the bar stays as it is; any work on the main thread stalls the event tap.
     var isInteracting: () -> Bool = { false }
@@ -42,6 +45,8 @@ final class StatusBar {
         context.shownOn = { [unowned self] in self.shownOn($0) }
         context.activeDesktop = { [unowned self] in self.activeDesktop() }
         context.desktopApps = { [unowned self] in self.desktopApps() }
+        context.floatingApps = { [unowned self] in self.floatingApps() }
+        context.onSelectFloating = { [weak self] in self?.onSelectFloating?() }
         context.focusedWindow = { [unowned self] in self.focusedWindow() }
         context.fullscreenSpaces = { [unowned self] in self.fullscreenSpaces() }
         context.focusedAXWindow = { [unowned self] in self.focusedAXWindow() }
