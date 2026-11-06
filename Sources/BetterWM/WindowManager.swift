@@ -1453,6 +1453,7 @@ final class WindowManager {
         }
         i = (i + (reverse ? -1 : 1) + count) % count
         if i < others.count {
+            if let id = id(others[i]) { intendFront(id) }
             others[i].raise()
         } else {
             own[i - others.count].makeKeyAndOrderFront(nil)
@@ -1541,10 +1542,20 @@ final class WindowManager {
         }
     }
 
+    /// The window the user just asked to focus, marked as the front at once while the app catches up; forgotten
+    /// when focus arrives there or after a few seconds.
+    private var intendedFront: (id: WindowID, until: Date)?
+
+    private func intendFront(_ id: WindowID) {
+        intendedFront = (id, Date().addingTimeInterval(4))
+        refreshTabStrips()
+    }
+
     private func focusWindow(id: WindowID) {
         guard let w = system.axWindow(id), w.isValid else { return }
         let frame = targetFrame(of: id) ?? w.frame
         focusRing.show(windowID: id, frame: frame)
+        intendFront(id)
         w.raise()
     }
 
@@ -1673,6 +1684,7 @@ final class WindowManager {
     /// A window of a tabbed stack that is about to show waits past the corner; move it onto its frame before (or
     /// right as) it comes to the front, so it never flashes at the corner while the layout pass catches up.
     private func bringForwardInTabbedStack(_ id: WindowID, raise: Bool) {
+        if raise { intendFront(id) }
         guard config.stackStyle != .cascade, let space = state.space(containing: id),
               let screen = system.screens().first(where: { $0.space == space }) else {
             if raise { system.execute([.raise(id)]) }
@@ -1755,10 +1767,21 @@ final class WindowManager {
             guard i < needed.count, !ringGone else { s.hide(); continue }
             var (frame, items, side, stacked) = needed[i]
             let ids = Set(items.map(\.id))
-            let front = focused.flatMap { ids.contains($0) ? $0 : nil } ?? zOrder.first(where: ids.contains)
+            // The front tab: the topmost window of the stack when its app is the frontmost app (the switch has
+            // happened, whatever Accessibility still says), else the focused window, else the topmost. Accessibility
+            // names the focused window a round trip after the front changes, and an app slow to answer (Unity)
+            // holds that up for seconds; going by it alone marked the old tab, then greyed it, then marked the new.
+            let frontmostPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+            let top = zOrder.first(where: ids.contains)
+            if let p = intendedFront, p.until < Date() || focused == p.id { intendedFront = nil }
+            let intended = intendedFront.flatMap { ids.contains($0.id) ? $0.id : nil }
+            let front = intended
+                ?? (top.flatMap { system.pid(of: $0) == frontmostPid ? $0 : nil })
+                ?? focused.flatMap { ids.contains($0) ? $0 : nil } ?? top
+            let frontFocused = front == intended || front == focused || front.flatMap(system.pid(of:)) == frontmostPid
             // No ring on the front window (focus is on a floating window ringed instead): the strip, which would
             // hang loose over the ring's gap, moves over it to touch its window.
-            if let front, front != focused, focusRing.ringedWindow != front {
+            if let front, !frontFocused, focusRing.ringedWindow != front {
                 let d = config.focusRingOutset + config.tileInset
                 switch side {
                 case .top: frame.origin.y += d
@@ -1766,7 +1789,7 @@ final class WindowManager {
                 case .right: frame.origin.x -= d
                 }
             }
-            s.show(frame: frame, items: items, focused: front, inactive: focusRing.isInactive || front != focused,
+            s.show(frame: frame, items: items, focused: front, inactive: focusRing.isInactive || !frontFocused,
                    clearance: focusRing.tabClearance(for: items.map(\.id)), side: side, stacked: stacked, config: config)
         }
     }

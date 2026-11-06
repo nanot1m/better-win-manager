@@ -261,6 +261,9 @@ final class FocusRing {
             // Electron apps briefly report no focused window while moving focus inside one; don't blink.
             if let id = current, let owner = CGWindowInfo.list(.optionOnScreenOnly).first(where: { $0.id == id }),
                NSWorkspace.shared.frontmostApplication?.processIdentifier == owner.pid { return }
+            // The frontmost app is not answering (Unity for a couple of seconds after activation): its window is
+            // about to be focused, so the ring stays as it is rather than greying and then jumping.
+            if let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier, AXResponsiveness.isUnresponsive(pid) { return }
             // Nothing has focus (the desktop, an app without windows): keep the ring on the last window, greyed,
             // so a tabbed stack still shows which window is in front.
             // Only a window really on a screen: a parked one keeps two points on screen at a corner.

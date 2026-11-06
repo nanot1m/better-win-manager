@@ -32,6 +32,18 @@ enum AXResponsiveness {
     private static let probeQueue = DispatchQueue(label: "betterwm.axprobe", qos: .utility)
     /// Called on the main thread when an app answers again, so its windows are picked up right away.
     static var onBackoffEnd: (() -> Void)?
+    /// One deferred action per app, run on the queue once the app answers again; a newer one replaces it.
+    private static var pending: [pid_t: () -> Void] = [:]
+
+    /// Runs `action` on the AX queue now, or once `pid` answers again if it is not responding right now.
+    static func whenResponsive(_ pid: pid_t, _ action: @escaping () -> Void) {
+        let defer_: Bool = locked {
+            guard backoffs[pid] != nil else { return false }
+            pending[pid] = action
+            return true
+        }
+        if !defer_ { AX.run(action) }
+    }
 
     static func tune(_ element: AXUIElement) { AXUIElementSetMessagingTimeout(element, timeout) }
 
@@ -86,6 +98,7 @@ enum AXResponsiveness {
             }
             if let since {
                 Log.write("ax", "\(NSRunningApplication(processIdentifier: pid)?.localizedName ?? "pid \(pid)") responds again after \(Int(Date().timeIntervalSince(since))) s")
+                if let action = locked({ pending.removeValue(forKey: pid) }) { AX.run(action) }
                 DispatchQueue.main.async { onBackoffEnd?() }
             } else {
                 probe(pid)
@@ -205,9 +218,12 @@ final class AXWindow: Hashable {
         }
     }
 
+    /// Raises the window and activates its app. An app that is not answering (Unity for a while after being
+    /// activated) gets both once it answers: activating it now makes macOS hand focus back to the previous app
+    /// and then to this one when it finally wakes, a visible bounce.
     func raise() {
-        AX.run { [self] in
-            if !AXResponsiveness.isUnresponsive(pid) { AXUIElementPerformAction(element, kAXRaiseAction as CFString) }
+        AXResponsiveness.whenResponsive(pid) { [self] in
+            AXUIElementPerformAction(element, kAXRaiseAction as CFString)
             NSRunningApplication(processIdentifier: pid)?.activate()
         }
     }
@@ -238,6 +254,9 @@ final class AXWindow: Hashable {
     /// `known` answers the handle for a window id the observer has already matched, so the fallback needs no
     /// Accessibility enumeration.
     static func at(point: CGPoint, known: (CGWindowID) -> AXWindow? = { _ in nil }) -> AXWindow? {
+        // A press on one of our own windows (a tab strip, the bar, the buttons) is ours, not a drag of whatever app
+        // window lies beneath it.
+        if CGWindowInfo.list(.optionOnScreenOnly).first(where: { $0.layer >= 0 && $0.bounds.contains(point) })?.pid == getpid() { return nil }
         let w = axHitTest(point) ?? windowListHitTest(point, known: known)
         w?.warm()
         return w

@@ -6,6 +6,16 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.43.1] - 2026-11-06
+
+### Changed
+- The tab strip marks the window you asked to focus as the front at once, before its app has answered, so switching to a slow app shows the new tab immediately.
+
+### Fixed
+- Focusing a window of an app that is not answering (Unity for a while after activation) bounced: macOS handed focus back to the previous app, then to the slow one when it woke. The raise and activation now wait until the app answers and happen once.
+- Switching to a window of an app slow to answer (Unity takes a couple of seconds after activation) made the tabs grey and shift and the ring grey and jump while the app caught up; a front window whose app is frontmost now counts as focused, and the ring waits for the app instead of greying.
+- Clicking a tab (or anything else of BetterWM's drawn over a window) made the ring and the tab strips blink: the press was hit-tested through to the window beneath and taken for the start of a drag, which suspends the ring. Presses on our own windows are left alone.
+
 ## [0.43.0] - 2026-11-06
 
 ### Fixed
