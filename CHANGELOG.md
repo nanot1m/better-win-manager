@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-11-06
+
+### Added
+- `menuBarChips` (Settings › Status bar › Desktop chips in the menu bar): the desktop chips in the system menu bar next to the BetterWM icon, clickable, draggable and a drop target like the bar's, so the bar can be off and the desktops still at hand. `menuBarChipStyle` picks the look: chips with up to three fanned icons, numbers, dots, or one pill with slashes where only the active desktop shows its icons and its section animates open on a switch.
+
 ## [0.44.0] - 2026-11-06
 
 ### Added

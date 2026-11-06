@@ -1,6 +1,6 @@
 # Status bar
 
-One bar per screen at the top edge, where the hidden system menu bar lives. Enable or disable it with `bar`; set its height with `barHeight`. Tiled windows start below it. Set "Automatically hide and show the menu bar" to Always in System Settings › Control Center so the two do not overlap; on a notched MacBook the bar is at least as tall as the notch row.
+One bar per screen at the top edge, where the hidden system menu bar lives (or at the bottom with `barPosition`). Without the bar, `menuBarChips` puts the desktop chips into the system menu bar next to the BetterWM icon: the same chips, flat and in system colours, showing the main screen's desktops. Enable or disable it with `bar`; set its height with `barHeight`. Tiled windows start below it. Set "Automatically hide and show the menu bar" to Always in System Settings › Control Center so the two do not overlap; on a notched MacBook the bar is at least as tall as the notch row.
 
 ## Left side
 

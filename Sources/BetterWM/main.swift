@@ -5,6 +5,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var manager: WindowManager!
     var drag: DragController!
     var statusItem: NSStatusItem!
+    /// The icon drawn beside the menu bar chips; the button's own image is used when there are no chips.
+    let statusIconView = NSImageView()
     var pauseItem: NSMenuItem?
     var autoTileItem: NSMenuItem?
     var popup: ActionPopup!
@@ -135,6 +137,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = StatusIcon.make(paused: false)
         statusItem.menu = buildMenu()
+        bar.onMenuChipsChange = { [weak self] in self?.layoutStatusItem() }
+        layoutStatusItem()
         Log.enabled = config.debugLog
         Log.write("app", "launched \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")")
         print("BetterWM running. Hold ⌥ and drag a window.")
@@ -348,6 +352,37 @@ extension AppDelegate {
     @objc func sendPrevious() { manager.sendFocusedWindow(toNext: false) }
     @objc func focusPrevious() { manager.focusNext(reverse: true) }
     @objc func focusFloating() { manager.focusFloating() }
+
+    /// The status item holds the desktop chips (when on) left of the icon; a click anywhere but a chip opens the menu.
+    private func layoutStatusItem() {
+        guard let button = statusItem.button else { return }
+        let chips = bar.menuChips
+        // Whatever desktops view was there before (another style, or none now) goes; one at a time.
+        for v in button.subviews where v is MenuBarDesktops && v !== chips { v.removeFromSuperview() }
+        if let chips, chips.superview !== button { button.addSubview(chips) }
+        let icon = StatusIcon.make(paused: !manager.enabled)
+        guard let chips else {
+            statusIconView.removeFromSuperview()
+            statusItem.length = NSStatusItem.variableLength
+            button.image = icon
+            button.imagePosition = .imageOnly
+            return
+        }
+        chips.layoutSubtreeIfNeeded()
+        let size = chips.fittingSize
+        let iconWidth: CGFloat = 22, pad: CGFloat = 5
+        let height = button.bounds.height > 0 ? button.bounds.height : 22
+        // No padding after the icon: the next menu bar item brings its own; the gap before the icon grows instead.
+        statusItem.length = pad + size.width + pad * 2 + iconWidth
+        button.image = nil
+        chips.frame = NSRect(x: pad, y: (height - size.height) / 2, width: size.width, height: size.height)
+        chips.autoresizingMask = [.minYMargin, .maxYMargin]
+        statusIconView.image = icon
+        statusIconView.imageScaling = .scaleNone
+        statusIconView.frame = NSRect(x: pad + size.width + pad * 2, y: (height - 22) / 2, width: iconWidth, height: 22)
+        statusIconView.autoresizingMask = [.minYMargin, .maxYMargin]
+        if statusIconView.superview !== button { button.addSubview(statusIconView) }
+    }
 
     /// Previews of the windows on screen, captured ahead of the first ⌥Tab.
     func warmSwitcherThumbnails() {
@@ -665,7 +700,7 @@ extension AppDelegate {
     func setTiling(enabled: Bool, reason: String? = nil) {
         manager.enabled = enabled
         pauseItem?.title = enabled ? "Pause Tiling" : "Resume Tiling"
-        statusItem.button?.image = StatusIcon.make(paused: !enabled)
+        layoutStatusItem()
         hud.show(keys: nil, action: reason ?? (enabled ? "Tiling resumed" : "Tiling paused"), preformatted: true, force: true)
         Log.write("tile", enabled ? "tiling resumed" : "tiling paused")
     }

@@ -109,6 +109,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var barPaddingField: NSTextField!
     private var barMarginField: NSTextField!
     private var barTopOffsetField: NSTextField!
+    private var menuBarChipsSwitch: NSSwitch!
+    private var menuBarChipStyleMode: NSPopUpButton!
     private var barPositionMode: NSPopUpButton!
 
     func show(config: Config, onSave: @escaping (Config) -> Void) {
@@ -641,11 +643,18 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         barPaddingField = numberField("12")
         barMarginField = numberField("0")
         barTopOffsetField = numberField("0")
+        menuBarChipsSwitch = toggle()
+        menuBarChipStyleMode = NSPopUpButton()
+        for (raw, title) in [("chips", "Chips with icons"), ("numbers", "Numbers"), ("dots", "Dots"), ("pill", "One pill, icons on the active desktop")] {
+            menuBarChipStyleMode.addItem(withTitle: title)
+            menuBarChipStyleMode.lastItem?.representedObject = raw
+        }
         barPositionMode = choice(["Top", "Bottom"], #selector(barAppearanceChanged))
         return [
             group(nil, [
                 row("Show the status bar", "Set \"Automatically hide and show the menu bar\" to Always in System Settings › Control Center so the system bar does not overlap it. Tiled windows start below the bar.", [barSwitch]),
                 row("Height", nil, [barHeightField, unit("pt")]),
+                row("Desktop chips in the menu bar", "Next to the BetterWM icon in the system menu bar, with or without the bar: click to switch, drop a window to send it there.", [menuBarChipsSwitch, menuBarChipStyleMode]),
             ]),
             group("Appearance", [
                 row("Background", "A translucent blur, a solid colour, or Liquid Glass (macOS 26; a blur before).", [barBackgroundMode, barBgColor]),
@@ -1111,6 +1120,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         ringSliderChanged(ringPadding)
         ringSliderChanged(ringRadius)
         on(barSwitch, config.bar)
+        on(menuBarChipsSwitch, config.menuBarChips)
+        menuBarChipStyleMode.selectItem(at: ["chips", "numbers", "dots", "pill"].firstIndex(of: config.menuBarChipStyle) ?? 0)
         barHeightField.stringValue = String(Int(config.barHeight))
         for w in Config.BarWidget.allCases { for s in w.settings { schemaControl(for: s).write(config.value(forKey: s.key) ?? "") } }
         on(barCatSwitch, config.barCat)
@@ -1201,6 +1212,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.fadeAnimations = isOn(fadeSwitch)
         config.focusRingActionKeys = ringActionChecks.filter { $0.box.state == .on }.map(\.key)
         config.bar = isOn(barSwitch)
+        config.menuBarChips = isOn(menuBarChipsSwitch)
+        if let raw = menuBarChipStyleMode.selectedItem?.representedObject as? String { config.menuBarChipStyle = raw }
         config.barHeight = number(barHeightField, or: defaults.barHeight)
         for w in Config.BarWidget.allCases { for s in w.settings { config.set(s.key, to: schemaControl(for: s).read()) } }
         config.barCat = isOn(barCatSwitch)

@@ -57,6 +57,7 @@ final class StatusBar {
         context.onDesktopMenu = { [weak self] d, v in self?.onDesktopMenu?(d, v) }
         for w in widgets.values { w.wantsRefresh = { [weak self] in self?.refresh() } }
         (widgets[.menu] as? MenuWidget)?.onPressed = { [weak self] v in self?.onMenuRequested?(v) }
+        syncMenuChips()
         runWidgets()
         events.onEvent = { [weak self] event, _ in
             switch event {
@@ -107,19 +108,57 @@ final class StatusBar {
 
     func apply(_ config: Config) {
         self.config = config
+        syncMenuChips()
         runWidgets()
         rebuild()
+        refresh()
+    }
+
+    private func syncMenuChips() {
+        guard config.menuBarChips, let main = NSScreen.main else { menuChips = nil; return }
+        let wanted = config.menuBarChipStyle
+        if menuChipsStyle == wanted, menuChips != nil { return }
+        menuChipsStyle = wanted
+        switch wanted {
+        case "dots": menuChips = MenuBarDesktopsView(screen: main, context: context, style: .dots)
+        case "pill": menuChips = MenuBarDesktopsView(screen: main, context: context, style: .pill)
+        case "numbers": menuChips = MenuBarDesktopsView(screen: main, context: context, style: .numbers)
+        default: menuChips = DesktopChipsView(screen: main, context: context, compact: true)
+        }
+        (menuChips as? MenuBarDesktopsView)?.onSizeChange = { [weak self] in self?.onMenuChipsChange?() }
+    }
+    private var menuChipsStyle = ""
+
+    /// The desktop chips for the system menu bar: the main screen's desktops, drawn flat in system colours. The
+    /// app embeds the view in its status item and is told when it changed size.
+    private(set) var menuChips: (NSView & MenuBarDesktops)?
+    var onMenuChipsChange: (() -> Void)?
+
+    private func renderMenuChips() {
+        guard let chips = menuChips else { return }
+        var flat = config
+        flat.barChipStyle = "flat"
+        let active = config.barActiveColor.lowercased() == "accent" ? NSColor.controlAccentColor : (NSColor(hex: config.barActiveColor) ?? .controlAccentColor)
+        chips.render(BarStyle(textColor: .labelColor, activeColor: active, focusOutline: nil, config: flat))
+        onMenuChipsChange?()
     }
 
     func focusChanged() { refresh() }
 
-    /// The desktop chip under a point in AX coordinates, on any bar.
+    /// The desktop chip under a point in AX coordinates, on any bar or in the menu bar.
     func desktop(at pointAX: CGPoint) -> Int? {
-        (widgets[.desktops] as? DesktopsWidget)?.chipDesktop(atScreenPoint: CGRect(origin: pointAX, size: .zero).toCocoa().origin)
+        let p = CGRect(origin: pointAX, size: .zero).toCocoa().origin
+        if let chips = menuChips, let w = chips.window, w.isVisible, w.frame.contains(p) {
+            return chips.chipDesktop(at: chips.convert(w.convertPoint(fromScreen: p), from: nil))
+        }
+        return (widgets[.desktops] as? DesktopsWidget)?.chipDesktop(atScreenPoint: p)
     }
 
     /// Lights up one desktop's chip (on every bar showing it) while a dragged window is over it.
-    func highlightDrop(_ desktop: Int?) { (widgets[.desktops] as? DesktopsWidget)?.setDropTarget(desktop) }
+    func highlightDrop(_ desktop: Int?) {
+        (widgets[.desktops] as? DesktopsWidget)?.setDropTarget(desktop)
+        menuChips?.setDropTarget(desktop)
+    }
 
     /// A screen switching to a fullscreen Space: hide at once, before the first frame of the animation; the
     /// deferred refresh decides what comes back.
@@ -188,8 +227,10 @@ final class StatusBar {
     }
 
     private func refreshNow() {
-        guard config.bar else { return }
-        Spaces.withSpaceTypesCached { buildAndRender() }
+        Spaces.withSpaceTypesCached {
+            renderMenuChips()
+            if config.bar { buildAndRender() }
+        }
     }
 
     private func buildAndRender() {
@@ -282,6 +323,13 @@ final class ChipView: NSView {
     private let stack = NSStackView()
     private var icons: [NSImageView] = []
     private static var iconCache: [String: NSImage] = [:]
+    /// An app's icon, cached by bundle id.
+    static func icon(for pid: pid_t) -> NSImage? {
+        let app = NSRunningApplication(processIdentifier: pid)
+        let key = app?.bundleIdentifier ?? "\(pid)"
+        if iconCache[key] == nil, let icon = app?.icon { iconCache[key] = icon }
+        return iconCache[key]
+    }
 
     /// Liquid Glass behind the chip, where the system has it and the style asks for it, and a wash of colour over
     /// it for the active chip: the glass's own tint is too faint to tell the chips apart.
@@ -315,36 +363,69 @@ final class ChipView: NSView {
         }
     }
 
-    override init(frame: NSRect) {
-        super.init(frame: frame)
+    /// Menu bar size: as tall as a menu bar icon, with tighter padding and smaller app icons.
+    private let compact: Bool
+    private var iconSize: CGFloat { compact ? 16 : 14 }
+
+    init(compact: Bool = false) {
+        self.compact = compact
+        super.init(frame: .zero)
         wantsLayer = true
-        layer?.cornerRadius = 5
+        layer?.cornerRadius = compact ? 6 : 5
         stack.orientation = .horizontal
-        stack.spacing = 3
-        stack.edgeInsets = NSEdgeInsets(top: 0, left: 6, bottom: 0, right: 6)
+        stack.spacing = compact ? 2 : 3
+        stack.edgeInsets = compact ? NSEdgeInsets(top: 0, left: 5, bottom: 0, right: 5) : NSEdgeInsets(top: 0, left: 6, bottom: 0, right: 6)
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(number)
         addSubview(stack)
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: leadingAnchor), stack.trailingAnchor.constraint(equalTo: trailingAnchor),
             stack.topAnchor.constraint(equalTo: topAnchor), stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            heightAnchor.constraint(equalToConstant: 18), widthAnchor.constraint(greaterThanOrEqualToConstant: 22),
+            heightAnchor.constraint(equalToConstant: compact ? 22 : 18), widthAnchor.constraint(greaterThanOrEqualToConstant: compact ? 22 : 22),
         ])
     }
     required init?(coder: NSCoder) { fatalError() }
 
     /// One icon per window, so two Chrome windows show two Chrome icons; the focused window's icon is outlined.
+    /// Compact chips fan their icons out like stacked avatars, each overlapping the one before, three at most.
+    private let fan = NSView()
+    private var fanWidth: NSLayoutConstraint?
+    private static let fanOverlap: CGFloat = 5
+    private static let fanLimit = 3
+
     func setApps(_ apps: [(pid: pid_t, windows: [WindowID])], focused: WindowID?, color: NSColor) {
-        let pids = apps.flatMap { app in app.windows.isEmpty ? [(app.pid, WindowID(0))] : app.windows.map { (app.pid, $0) } }
+        var pids = apps.flatMap { app in app.windows.isEmpty ? [(app.pid, WindowID(0))] : app.windows.map { (app.pid, $0) } }
+        if compact { pids = Array(pids.prefix(Self.fanLimit)) }
+        if compact, fan.superview == nil {
+            fan.translatesAutoresizingMaskIntoConstraints = false
+            fan.heightAnchor.constraint(equalToConstant: iconSize).isActive = true
+            fanWidth = fan.widthAnchor.constraint(equalToConstant: 0)
+            fanWidth?.isActive = true
+            stack.addArrangedSubview(fan)
+        }
         while icons.count < pids.count {
             let v = NSImageView()
             v.imageScaling = .scaleProportionallyUpOrDown
             v.wantsLayer = true
             v.layer?.cornerRadius = 4
-            v.widthAnchor.constraint(equalToConstant: 14).isActive = true
-            v.heightAnchor.constraint(equalToConstant: 14).isActive = true
             icons.append(v)
-            stack.addArrangedSubview(v)
+            if compact {
+                fan.addSubview(v)
+            } else {
+                v.widthAnchor.constraint(equalToConstant: iconSize).isActive = true
+                v.heightAnchor.constraint(equalToConstant: iconSize).isActive = true
+                stack.addArrangedSubview(v)
+            }
+        }
+        if compact {
+            let step = iconSize - Self.fanOverlap
+            fanWidth?.constant = pids.isEmpty ? 0 : iconSize + step * CGFloat(pids.count - 1)
+            fan.isHidden = pids.isEmpty
+            // Later icons lie under earlier ones, so each shows its left edge whole.
+            for (i, v) in icons.enumerated() where i < pids.count {
+                v.frame = NSRect(x: step * CGFloat(i), y: 0, width: iconSize, height: iconSize)
+                fan.addSubview(v, positioned: .below, relativeTo: i == 0 ? nil : icons[i - 1])
+            }
         }
         for (i, v) in icons.enumerated() {
             v.isHidden = i >= pids.count

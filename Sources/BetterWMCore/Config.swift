@@ -139,6 +139,11 @@ public struct Config {
     public var focusRingFloatingColor: String = "same"
     public var ignoreApps: [String] = Config.defaultIgnoreApps
     public var bar: Bool = true
+    /// Desktop chips in the system menu bar, next to the BetterWM icon; useful with the bar off.
+    public var menuBarChips: Bool = false
+    /// How the menu bar shows the desktops: "chips" (icons, three at most), "numbers", "dots", or "pill" (one
+    /// pill with slashes; only the active desktop shows its icons).
+    public var menuBarChipStyle: String = "chips"
     public var barHeight: CGFloat = 32
     public var barClockFormat: String = "EEE d MMM  HH:mm"
     /// Active window label; {app} and {title} are replaced. The title part is dropped when the title is empty.
@@ -444,6 +449,10 @@ public struct Config {
 
         # Status bar under the (auto-hidden) system menu bar: desktops, active window, weather, clock.
         bar = \(bar)
+        # Desktop chips in the system menu bar next to the BetterWM icon, with or without the bar.
+        menuBarChips = \(menuBarChips)
+        # Their look: chips, numbers, dots, or pill (one pill with slashes, icons on the active desktop only).
+        menuBarChipStyle = \(menuBarChipStyle)
         barHeight = \(num(barHeight))
         # Unicode date format pattern for the clock.
         barClockFormat = \(barClockFormat)
@@ -599,6 +608,8 @@ public struct Config {
             case "focusRingColor": cfg.focusRingColor = value
             case "focusRingFloatingColor": cfg.focusRingFloatingColor = value
             case "bar": cfg.bar = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "menuBarChips": cfg.menuBarChips = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "menuBarChipStyle": cfg.menuBarChipStyle = ["chips", "numbers", "dots", "pill"].contains(value.lowercased()) ? value.lowercased() : "chips"
             case "barHeight": cfg.barHeight = Double(value).map { CGFloat($0) } ?? cfg.barHeight
             case "barClockFormat": cfg.barClockFormat = value
             case "barTitleFormat": cfg.barTitleFormat = value

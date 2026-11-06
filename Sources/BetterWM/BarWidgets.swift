@@ -396,17 +396,21 @@ final class DesktopChipsView: NSStackView {
     /// Desktop index of each visible chip, left to right.
     private(set) var chipDesktops: [Int] = []
     /// The floating windows shared across desktops, after the desktop chips; hidden when there are none.
-    private let floatingChip = ChipView()
+    private let floatingChip: ChipView
+    /// Menu bar size for every chip.
+    let compact: Bool
     private var activeColor = NSColor.controlAccentColor
     private var chipDrag: ReorderDrag?
     private var settlingChips: ReorderDrag?
 
-    init(screen: NSScreen, context: BarContext) {
+    init(screen: NSScreen, context: BarContext, compact: Bool = false) {
         self.screen = screen
         self.context = context
+        self.compact = compact
+        floatingChip = ChipView(compact: compact)
         super.init(frame: .zero)
         orientation = .horizontal
-        spacing = 10
+        spacing = compact ? 6 : 10
         alignment = .centerY
     }
     required init(coder: NSCoder) { fatalError() }
@@ -445,7 +449,7 @@ final class DesktopChipsView: NSStackView {
         let focused = context.focusedWindow()
         chipDesktops = desktops
         while chips.count < desktops.count {
-            let c = ChipView()
+            let c = ChipView(compact: compact)
             // Chips change places in `chips` after a drag, so each looks its index up when asked.
             let indexOf: (ChipView) -> Int? = { [weak self] c in self?.chips.firstIndex { $0 === c } }
             c.onClick = { [weak self, weak c] in
