@@ -87,13 +87,18 @@ final class StatusBar {
     private var inUseWidgets: [Config.BarWidget] { config.barLeftWidgets + config.barWidgets + (config.barCat ? [.cats] : []) }
 
     /// Distance from the screen's top edge to the bar's bottom edge; zero when the bar is off.
-    func inset(for screen: NSScreen) -> CGFloat { config.bar ? config.barTopOffset + height(for: screen) : 0 }
+    /// Room the bar takes at its edge of the screen: (top, bottom), one of them zero.
+    func insets(for screen: NSScreen) -> (top: CGFloat, bottom: CGFloat) {
+        guard config.bar else { return (0, 0) }
+        let room = config.barTopOffset + height(for: screen)
+        return config.barAtBottom ? (0, room) : (room, 0)
+    }
 
     /// Dev aid: opens the sound popover on the first bar.
     func showSoundPopover() { (widgets[.sound] as? SoundWidget)?.showPopover() }
 
     /// Whether the bar runs through the notch row: its top lies above the notch's bottom edge.
-    private func meetsNotch(_ screen: NSScreen) -> Bool { config.barTopOffset < screen.safeAreaInsets.top }
+    private func meetsNotch(_ screen: NSScreen) -> Bool { !config.barAtBottom && config.barTopOffset < screen.safeAreaInsets.top }
 
     private func height(for screen: NSScreen) -> CGFloat {
         // Through the notch row the bar must reach the notch's bottom edge, or the notch pokes below it.
@@ -146,7 +151,9 @@ final class StatusBar {
         guard config.bar else { onLayoutChange?(); return }
         for screen in NSScreen.screens {
             let h = height(for: screen), m = config.barMargin
-            let frame = NSRect(x: screen.frame.minX + m, y: screen.frame.maxY - config.barTopOffset - h, width: screen.frame.width - 2 * m, height: h)
+            // At the bottom the bar stands on the visible frame, so it clears a Dock that is always shown.
+            let y = config.barAtBottom ? screen.visibleFrame.minY + config.barTopOffset : screen.frame.maxY - config.barTopOffset - h
+            let frame = NSRect(x: screen.frame.minX + m, y: y, width: screen.frame.width - 2 * m, height: h)
             let w = BarWindow(frame: frame, screen: screen)
             w.view.apply(config, avoidNotch: meetsNotch(screen))
             w.view.setLeftWidgets(config.barLeftWidgets.compactMap { widgets[$0]?.makeView(for: screen) })
@@ -158,7 +165,7 @@ final class StatusBar {
         }
         refresh()
         onLayoutChange?()
-        maybeSuggestMenuBarAutoHide()
+        if !config.barAtBottom { maybeSuggestMenuBarAutoHide() }
     }
 
     /// Events come in bursts and a refresh scans every window for the desktop chips; one pass per burst.

@@ -34,10 +34,10 @@ final class DesktopSlide {
     }
 
     private func area(of screen: NSScreen) -> CGRect {
-        // Below the bar only: the bar stays put and live, like the menu bar in Spaces.
-        let inset = manager.system.topInset(screen)
+        // Between the bar and the other edge only: the bar stays put and live, like the menu bar in Spaces.
+        let insets = manager.system.barInsets(screen)
         let screenAX = screen.frame.toCocoa()
-        return CGRect(x: screenAX.minX, y: screenAX.minY + inset, width: screenAX.width, height: screenAX.height - inset)
+        return CGRect(x: screenAX.minX, y: screenAX.minY + insets.top, width: screenAX.width, height: screenAX.height - insets.top - insets.bottom)
     }
 
     /// Fingers are down; capture the screen now, off the main thread, in case a swipe follows.

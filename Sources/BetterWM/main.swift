@@ -76,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overview = Overview(manager: manager)
         slide = DesktopSlide(manager: manager)
         bar = StatusBar(config: config)
-        manager.system.topInset = { [weak self] screen in self?.bar.inset(for: screen) ?? 0 }
+        manager.system.barInsets = { [weak self] screen in self?.bar.insets(for: screen) ?? (0, 0) }
         bar.onLayoutChange = { [weak self] in self?.manager.apply() }
         bar.onSelectDesktop = { [weak self] in self?.manager.switchDesktop($0) }
         bar.onSelectFullscreen = { [weak self] in self?.manager.activateSpace($0) }

@@ -78,7 +78,8 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `barRadius` | 0 | Corner radius |
 | `barPadding` | 24 | Inset of the content from the bar's edges |
 | `barMargin` | 0 | Distance from the screen sides; above zero the bar floats |
-| `barTopOffset` | 0 | Distance from the top edge |
+| `barPosition` | top | `top`, where the hidden menu bar lives, or `bottom`, above the Dock |
+| `barTopOffset` | 0 | Distance from the edge the bar sits at |
 | `barWeather`, `barBattery`, `barWifi`, `barInputSource`, `barCpu`, `barMemory`, `barDisk`, `barClock` | mirror `barWidgets` | Kept for older versions; setting one adds or removes the widget |
 
 ## Cats

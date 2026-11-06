@@ -35,8 +35,9 @@ final class SystemObserver {
     /// The frontmost app's focused standard window as of the last snapshot or `refreshFocused`.
     private(set) var focused: AXWindow?
 
-    /// Space to keep free at the top of each screen (the status bar), in points.
-    var topInset: (NSScreen) -> CGFloat = { _ in 0 }
+    /// Space to keep free at the top and bottom of each screen (the status bar), in points.
+    var barInsets: (NSScreen) -> (top: CGFloat, bottom: CGFloat) = { _ in (0, 0) }
+    func topInset(_ s: NSScreen) -> CGFloat { barInsets(s).top }
     /// Model Space of a screen / of a window: the virtual workspace ids the manager assigns.
     var spaceOf: (NSScreen) -> SpaceID = { Spaces.current(for: $0) }
     var spacesOfWindow: (WindowID) -> [SpaceID] = { Spaces.spaces(of: $0) }
@@ -67,12 +68,15 @@ final class SystemObserver {
     func screens() -> [ScreenInfo] {
         NSScreen.screens.map { s in
             var area = s.visibleFrame.toCocoa()
-            // The status bar is anchored to the screen's top edge; keep tiled windows below its bottom edge.
-            let barBottom = s.frame.toCocoa().minY + topInset(s)
-            if topInset(s) > 0, area.minY < barBottom {
+            // The status bar is anchored to a screen edge; tiled windows keep clear of it.
+            let insets = barInsets(s)
+            let barBottom = s.frame.toCocoa().minY + insets.top
+            if insets.top > 0, area.minY < barBottom {
                 area.size.height -= barBottom - area.minY
                 area.origin.y = barBottom
             }
+            // A bottom bar stands on the visible frame (above a shown Dock), so it is the area's bottom edge.
+            if insets.bottom > 0 { area.size.height -= insets.bottom }
             return ScreenInfo(space: spaceOf(s), area: area)
         }
     }

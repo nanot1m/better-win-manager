@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-11-06
+
+### Added
+- `barPosition = bottom` (Settings › Status bar › Position): the status bar can sit at the bottom of the screen, above the Dock; tiled windows keep clear of it there, and `barTopOffset` measures from whichever edge it sits at.
+
 ## [0.43.1] - 2026-11-06
 
 ### Changed

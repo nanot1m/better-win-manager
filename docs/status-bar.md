@@ -43,7 +43,8 @@ Older configs have `barWeather`, `barCpu` and similar booleans. They are still r
 | `barRadius` | Corner radius; combine with `barMargin` for a floating pill |
 | `barPadding` | Inset of the content from the bar's edges |
 | `barMargin` | Horizontal distance from the screen sides; above zero the bar floats |
-| `barTopOffset` | Distance from the top edge; 0 sits where the hidden menu bar lives |
+| `barPosition` | `top` (where the hidden menu bar lives) or `bottom` (above the Dock); tiled windows keep clear of the bar either way |
+| `barTopOffset` | Distance from the edge the bar sits at; 0 sticks it to the edge |
 
 Colours are stored without a leading `#`.
 

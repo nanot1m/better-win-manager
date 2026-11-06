@@ -282,8 +282,11 @@ public struct Config {
     public var barPadding: CGFloat = 24
     /// Horizontal gap between the bar and the screen edges; above zero the bar floats.
     public var barMargin: CGFloat = 0
-    /// Distance from the top edge of the screen to the bar.
+    /// Distance from the screen edge the bar sits at.
     public var barTopOffset: CGFloat = 0
+    /// "top" (where the hidden menu bar lives) or "bottom" (above the Dock).
+    public var barPosition: String = "top"
+    public var barAtBottom: Bool { barPosition == "bottom" }
     public var floatSmallWindows: Bool = true
     public var smallWindowWidth: CGFloat = 500
     public var smallWindowHeight: CGFloat = 400
@@ -480,7 +483,9 @@ public struct Config {
         barPadding = \(num(barPadding))
         # Horizontal gap from the screen edges; above zero the bar floats.
         barMargin = \(num(barMargin))
-        # Distance from the top of the screen. 0 sticks the bar to the edge (where the hidden menu bar lives).
+        # Which edge the bar sits at: top (where the hidden menu bar lives) or bottom (above the Dock).
+        barPosition = \(barPosition)
+        # Distance from that edge. 0 sticks the bar to it.
         barTopOffset = \(num(barTopOffset))
 
         # Apps never tiled automatically, by bundle identifier, comma separated. Manual ⌥-drag still works.
@@ -621,6 +626,7 @@ public struct Config {
             case "barPadding": cfg.barPadding = Double(value).map { CGFloat($0) } ?? cfg.barPadding
             case "barMargin": cfg.barMargin = Double(value).map { CGFloat($0) } ?? cfg.barMargin
             case "barTopOffset": cfg.barTopOffset = Double(value).map { CGFloat($0) } ?? cfg.barTopOffset
+            case "barPosition": cfg.barPosition = value.lowercased() == "bottom" ? "bottom" : "top"
             case "ignoreApps": cfg.ignoreApps = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             case "floatSmallWindows": cfg.floatSmallWindows = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "smallWindowSize":
