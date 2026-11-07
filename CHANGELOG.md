@@ -6,6 +6,18 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-11-07
+
+### Fixed
+- The built-in cat walked backwards when heading left: its mirrored look was a layer transform that AppKit reset on every move. The left-facing frames are drawn as such now.
+
+### Added
+- BetterWM's own windows (Settings, the welcome tour) are listed with the floating windows: in the ⧉ chip, the ⌃F cycle and the ⌥Tab switcher's Floating group, so they can be reached like any other window.
+- A welcome tour on first launch (and from the menu as Welcome & Setup…): permissions, a choice between desktops in the menu bar and a status bar of BetterWM's own (with the menu bar auto-hide recommendation when the bar is chosen, checked live), and the three macOS settings to hand over, each with a button to its pane.
+
+### Changed
+- New defaults for fresh installs: the status bar is off and the desktops show as numbers in the system menu bar next to the BetterWM icon. Existing configs keep their settings.
+
 ## [0.45.0] - 2026-11-06
 
 ### Added

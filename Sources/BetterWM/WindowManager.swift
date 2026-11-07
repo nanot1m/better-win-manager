@@ -203,18 +203,31 @@ final class WindowManager {
 
     /// The floating windows shared across desktops, oldest first (window ids grow with creation), for their chip
     /// in the status bar and the focus cycle; focusing one must not reorder them.
+    /// BetterWM's own titled windows (Settings, Welcome): floating windows like any other, reached through AppKit
+    /// since Accessibility calls into our own process would stall the main thread.
+    var ownWindows: [NSWindow] { NSApp.windows.filter { $0.isVisible && $0.styleMask.contains(.titled) } }
+    func ownWindow(_ id: WindowID) -> NSWindow? { ownWindows.first { CGWindowID($0.windowNumber) == id } }
+
     func sharedFloatingApps() -> [(pid: pid_t, windows: [WindowID])] {
         guard config.floatingOnAllDesktops else { return [] }
         let shared = currentAppsByDesktop().values.flatMap { $0 }.flatMap { app in app.windows.map { (pid: app.pid, id: $0) } }.filter { follows($0.id) }
+            + ownWindows.map { (pid: getpid(), id: CGWindowID($0.windowNumber)) }
         return shared.sorted { $0.id < $1.id }.map { ($0.pid, [$0.id]) }
     }
 
     /// Cycles focus through the floating windows: the next after the focused one, or the first.
     func focusFloating() {
-        let ids = (config.floatingOnAllDesktops ? sharedFloatingApps().flatMap(\.windows) : windowsByDesktop().first(where: { $0.desktop == currentDesktop })?.windows.compactMap(id).filter { !state.isTiled($0) } ?? [])
+        let ids = (config.floatingOnAllDesktops ? sharedFloatingApps().flatMap(\.windows)
+                   : (windowsByDesktop().first(where: { $0.desktop == currentDesktop })?.windows.compactMap(id).filter { !state.isTiled($0) } ?? []) + ownWindows.map { CGWindowID($0.windowNumber) })
         guard !ids.isEmpty else { return }
-        let current = system.focused.flatMap(id)
+        let current = (NSApp.isActive ? NSApp.keyWindow.map { CGWindowID($0.windowNumber) } : nil) ?? system.focused.flatMap(id)
         let next = current.flatMap { ids.firstIndex(of: $0) }.map { ids[($0 + 1) % ids.count] } ?? ids[0]
+        if let own = ownWindow(next) {
+            own.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            Log.write("focus", "focus floating -> own window '\(own.title)'")
+            return
+        }
         focusWindow(id: next)
         Log.write("focus", "focus floating -> \(describe(next))")
     }

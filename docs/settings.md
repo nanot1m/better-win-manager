@@ -57,9 +57,9 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `bar` | true | Show the bar |
-| `menuBarChips` | false | Desktop chips in the system menu bar next to the BetterWM icon, with or without the bar |
-| `menuBarChipStyle` | chips | `chips` (icons, three at most), `numbers`, `dots`, or `pill`: one pill with slashes between the desktops, icons on the active one only in a fixed-width slot, which slides over on a switch |
+| `bar` | false | Show the bar |
+| `menuBarChips` | true | Desktop chips in the system menu bar next to the BetterWM icon, with or without the bar |
+| `menuBarChipStyle` | numbers | `chips` (icons, three at most), `numbers`, `dots`, or `pill`: one pill with slashes between the desktops, icons on the active one only in a fixed-width slot, which slides over on a switch |
 | `barHeight` | 32 | Height; at least the notch height on notched screens |
 | `barTitleFormat` | {app} | Active window label; `{app}` and `{title}` are replaced |
 | `barClockFormat` | EEE d MMM  HH:mm | Unicode date pattern for the clock |

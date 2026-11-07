@@ -24,11 +24,12 @@ On first launch, while Accessibility is missing, a welcome window lists both per
 
 ## The first five minutes
 
-1. **The status bar** appears at the top of each screen. It is meant to replace the system menu bar: set "Automatically hide and show the menu bar" to Always in System Settings › Control Center. The app offers to open that pane once.
+1. **Your desktops** show as numbers in the system menu bar, next to the BetterWM icon: click one to switch, drop a window on one to send it there (`menuBarChips`, `menuBarChipStyle`). Prefer a bar of its own? Turn on the status bar in Settings (`bar`); it is meant to replace the system menu bar, so set "Automatically hide and show the menu bar" to Always in System Settings › Control Center when you do.
 2. **Tile a window.** Hold ⌥ and drag any window. Drop zones light up: the left or right half of another window makes a new column on that side, the top or bottom half stacks it in that column. Let go to tile. Tiled windows drag the same way without ⌥, and dragging their edges resizes the tiles.
 3. **Untile.** Move or resize a tiled window by hand and it leaves the grid, or press ⌃⌥T. Toggling again puts it back where it floated.
 4. **Switch desktops.** ⌃1 to ⌃9, or click a chip in the bar. Desktops beyond the ones you have are created the moment you switch or send a window to them, and disappear again when empty. ⌃⌥1 to ⌃⌥9 send the focused window.
-5. **Everything else** is in the menu behind the grid button at the right end of the bar (or the menu bar icon when the system bar is visible), and in the Window Actions popup, ⌥⌘Space.
+5. **The welcome tour** (Welcome & Setup… in the menu) walks through all of this: permissions, where to show the desktops, and the three macOS settings to hand over, each with a button to the right pane.
+6. **Everything else** is in the menu behind the BetterWM icon in the menu bar (or the grid button at the right end of the status bar), and in the Window Actions popup, ⌥⌘Space.
 
 The windows open when a desktop is first seen are tiled left to right. Turn that off with "Tile existing windows" in Settings › General if you would rather start from a clean slate.
 

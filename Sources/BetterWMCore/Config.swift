@@ -138,12 +138,12 @@ public struct Config {
     /// Ring colour for a focused window that is floating (untiled); "same" uses focusRingColor.
     public var focusRingFloatingColor: String = "same"
     public var ignoreApps: [String] = Config.defaultIgnoreApps
-    public var bar: Bool = true
+    public var bar: Bool = false
     /// Desktop chips in the system menu bar, next to the BetterWM icon; useful with the bar off.
-    public var menuBarChips: Bool = false
+    public var menuBarChips: Bool = true
     /// How the menu bar shows the desktops: "chips" (icons, three at most), "numbers", "dots", or "pill" (one
     /// pill with slashes; only the active desktop shows its icons).
-    public var menuBarChipStyle: String = "chips"
+    public var menuBarChipStyle: String = "numbers"
     public var barHeight: CGFloat = 32
     public var barClockFormat: String = "EEE d MMM  HH:mm"
     /// Active window label; {app} and {title} are replaced. The title part is dropped when the title is empty.

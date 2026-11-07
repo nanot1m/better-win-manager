@@ -134,6 +134,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         slide.onActiveChange = { [weak self] in self?.drag.refreshState() }
         KeyRecorderView.onActiveChange = { [weak self] in self?.drag.refreshState() }
         applyGestureSetting(config)
+        onboarding.config = { [weak self] in self?.manager.config }
+        onboarding.apply = { [weak self] in self?.apply(config: $0) }
+        onboarding.openSettings = { [weak self] in self?.showSettings() }
+        // First run: the tour, once; a relaunch with Accessibility granted lands on the desktops step.
+        if onboarding.needed { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.onboarding.show() } }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = StatusIcon.make(paused: false)
         statusItem.menu = buildMenu()
@@ -246,7 +251,7 @@ extension AppDelegate {
         section("BetterWM")
         add("Settings…", #selector(showSettings))
         add("Check for Updates…", #selector(checkForUpdates))
-        add("Permissions…", #selector(showPermissions))
+        add("Welcome & Setup…", #selector(showPermissions))
         add("Open Config File", #selector(openConfig))
         add("Reload Config", #selector(reloadConfig))
         let diag = NSMenu(title: "Diagnostics")

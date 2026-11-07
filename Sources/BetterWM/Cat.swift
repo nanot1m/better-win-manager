@@ -10,6 +10,10 @@ final class Cat {
     let sheet: CatSheet?
     private var walkFrames: [NSImage] = []
     private var idle: [Mode: [NSImage]] = [:]
+    /// The same frames facing left: drawn mirrored, since a layer transform on the sprite is reset by AppKit
+    /// every time the view moves.
+    private var walkFramesLeft: [NSImage] = []
+    private var idleLeft: [Mode: [NSImage]] = [:]
     var mode: Mode = .walk
     var modeUntil = Date.distantFuture
     var direction: CGFloat = 1
@@ -74,22 +78,26 @@ final class Cat {
 
     func rebuildBuiltin(color: NSColor) {
         guard sheet == nil else { return }
-        func render(_ rows: [String]) -> NSImage {
+        func render(_ rows: [String], mirrored: Bool) -> NSImage {
             let s = Cat.builtinScale
             return NSImage(size: Cat.builtinSize, flipped: true) { _ in
                 NSGraphicsContext.current?.imageInterpolation = .none
                 for (y, row) in rows.enumerated() {
                     for (x, ch) in row.enumerated() where ch == "#" {
+                        let col = mirrored ? row.count - 1 - x : x
                         color.setFill()
-                        NSRect(x: CGFloat(x) * s, y: CGFloat(y) * s, width: s, height: s).fill()
+                        NSRect(x: CGFloat(col) * s, y: CGFloat(y) * s, width: s, height: s).fill()
                     }
                 }
                 return true
             }
         }
-        walkFrames = BuiltinCatArt.walk.map(render)
-        idle = [.sit: BuiltinCatArt.sit.map(render), .groom: BuiltinCatArt.groom.map(render),
-                .sleep: BuiltinCatArt.sleep.map(render), .stretch: BuiltinCatArt.stretch.map(render)]
+        walkFrames = BuiltinCatArt.walk.map { render($0, mirrored: false) }
+        walkFramesLeft = BuiltinCatArt.walk.map { render($0, mirrored: true) }
+        idle = [.sit: BuiltinCatArt.sit.map { render($0, mirrored: false) }, .groom: BuiltinCatArt.groom.map { render($0, mirrored: false) },
+                .sleep: BuiltinCatArt.sleep.map { render($0, mirrored: false) }, .stretch: BuiltinCatArt.stretch.map { render($0, mirrored: false) }]
+        idleLeft = [.sit: BuiltinCatArt.sit.map { render($0, mirrored: true) }, .groom: BuiltinCatArt.groom.map { render($0, mirrored: true) },
+                    .sleep: BuiltinCatArt.sleep.map { render($0, mirrored: true) }, .stretch: BuiltinCatArt.stretch.map { render($0, mirrored: true) }]
     }
 
     /// Current frame for an animation, advancing every `every` ticks; sheet frames are per direction.
@@ -98,13 +106,15 @@ final class Cat {
         if let sheet {
             frames = sheet.frames(name, right: direction > 0)
         } else {
+            let left = direction < 0
+            let set = left ? idleLeft : idle
             switch name {
-            case "walk", "run": frames = walkFrames
-            case "sit": frames = idle[.sit] ?? []
-            case "groom": frames = idle[.groom] ?? []
-            case "sleep": frames = idle[.sleep] ?? []
-            case "stretch": frames = idle[.stretch] ?? []
-            default: frames = idle[.sit] ?? []
+            case "walk", "run": frames = left ? walkFramesLeft : walkFrames
+            case "sit": frames = set[.sit] ?? []
+            case "groom": frames = set[.groom] ?? []
+            case "sleep": frames = set[.sleep] ?? []
+            case "stretch": frames = set[.stretch] ?? []
+            default: frames = set[.sit] ?? []
             }
         }
         guard !frames.isEmpty else { return nil }
@@ -180,11 +190,6 @@ final class Cat {
         if mode == .groom, let sheet, sheet.has(groomStyle) { resolved = groomStyle }
         sprite.image = frame(resolved, tick: tick, every: every)
         ghost.image = sprite.image
-        // Built-in art faces right and is mirrored when facing left (about its own width; the layer anchor stays at the origin).
-        let mirror = sheet == nil && direction < 0
-        let t = mirror ? CGAffineTransform(translationX: size.width, y: 0).scaledBy(x: -1, y: 1) : .identity
-        sprite.layer?.setAffineTransform(t)
-        ghost.layer?.setAffineTransform(t)
     }
 
     /// Shows only the part of `view` between `lo` and `hi` (in the cat's own left-to-right coordinates); nil shows all.

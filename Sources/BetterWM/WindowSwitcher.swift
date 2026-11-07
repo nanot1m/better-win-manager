@@ -5,7 +5,8 @@ import Cocoa
 /// Escape cancels; items are clickable.
 final class WindowSwitcher {
     struct Item {
-        let window: AXWindow
+        /// Nil for one of BetterWM's own windows, raised through AppKit instead.
+        let window: AXWindow?
         let id: WindowID
         let desktop: Int
         let title: String
@@ -77,7 +78,10 @@ final class WindowSwitcher {
         groups = manager.windowsByDesktop().map { desktop, windows in
             Group(desktop: desktop, items: items(windows.filter { $0.windowID.map { !shared.contains($0) } ?? true }, desktop: desktop))
         }
-        let floating = items(shared.sorted().compactMap { manager.system.axWindow($0) }, desktop: Self.floatingGroup)
+        var floating = items(shared.sorted().compactMap { manager.system.axWindow($0) }, desktop: Self.floatingGroup)
+        for own in manager.ownWindows {
+            floating.append(Item(window: nil, id: CGWindowID(own.windowNumber), desktop: Self.floatingGroup, title: own.title, app: "BetterWM", icon: NSApp.applicationIconImage))
+        }
         if !floating.isEmpty { groups.append(Group(desktop: Self.floatingGroup, items: floating)) }
         groups = groups.filter { !$0.items.isEmpty }
         flat = groups.flatMap(\.items)
@@ -133,8 +137,14 @@ final class WindowSwitcher {
         let item = flat.indices.contains(selected) ? flat[selected] : nil
         close()
         guard let item else { return }
-        Log.write("switcher", "pick \(manager.describe(item.window)) on desktop \(item.desktop + 1)")
-        manager.activate(item.window, onDesktop: item.desktop)
+        guard let window = item.window else {
+            Log.write("switcher", "pick own window '\(item.title)'")
+            manager.ownWindow(item.id)?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        Log.write("switcher", "pick \(manager.describe(window)) on desktop \(item.desktop + 1)")
+        manager.activate(window, onDesktop: item.desktop)
     }
 }
 
