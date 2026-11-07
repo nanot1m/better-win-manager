@@ -125,6 +125,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             }
         }
         populate()
+        // Only the shown section lives in the window; the others wait in `sections`, and need hooking too.
+        for s in sections { hookControls(in: s.view) }
         window?.center()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -170,14 +172,12 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         path.textColor = .secondaryLabelColor
         path.lineBreakMode = .byTruncatingMiddle
         path.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        savedLabel = NSTextField(labelWithString: "Saved")
+        savedLabel = NSTextField(labelWithString: "Changes apply as you make them")
         savedLabel.textColor = .secondaryLabelColor
-        savedLabel.isHidden = true
-        let save = NSButton(title: "Save & Apply", target: self, action: #selector(save))
-        save.keyEquivalent = "\r"
+        savedLabel.font = .systemFont(ofSize: 11)
         let importButton = NSButton(title: "Import…", target: self, action: #selector(importConfig))
         let exportButton = NSButton(title: "Export…", target: self, action: #selector(exportConfig))
-        let footer = NSStackView(views: [path, NSView(), importButton, exportButton, savedLabel, save])
+        let footer = NSStackView(views: [path, NSView(), savedLabel, importButton, exportButton])
         footer.edgeInsets = NSEdgeInsets(top: 10, left: 16, bottom: 12, right: 16)
         footer.translatesAutoresizingMaskIntoConstraints = false
         let footerLine = NSBox(); footerLine.boxType = .separator; footerLine.translatesAutoresizingMaskIntoConstraints = false
@@ -767,6 +767,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var expandedWidgets: Set<Config.BarWidget> = []
 
     private func rebuildWidgetRows() {
+        defer { for s in sections { hookControls(in: s.view) } }
         for (side, list) in widgetLists.enumerated() {
             list.stack.arrangedSubviews.forEach { list.stack.removeArrangedSubview($0); $0.removeFromSuperview() }
             list.rowViews = []
@@ -832,6 +833,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         let list = widgetLists[sender.tag / 100], i = sender.tag % 100
         guard list.order.indices.contains(i) else { return }
         list.order[i].1 = sender.state == .on
+        changed()
     }
 
     @objc private func widgetDisclosed(_ sender: NSButton) {
@@ -877,6 +879,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             let item = list.order.remove(at: index)
             list.order.insert(item, at: target)
             rebuildWidgetRows()
+            changed()
         }
     }
 
@@ -1062,6 +1065,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private func isOn(_ s: NSSwitch) -> Bool { s.state == .on }
 
     private func populate() {
+        populating = true
+        defer { populating = false }
         for (kp, _, slider, value) in sliders {
             slider.doubleValue = Double(config[keyPath: kp])
             value.stringValue = "\(Int(config[keyPath: kp])) pt"
@@ -1255,18 +1260,49 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.message = "Import a BetterWM settings file; press Save & Apply afterwards to keep it"
+        panel.message = "Import a BetterWM settings file; it applies at once"
         guard panel.runModal() == .OK, let url = panel.url, let text = try? String(contentsOf: url, encoding: .utf8) else { return }
         config = Config.parse(text)
         populate()
+        save()
     }
+
+    /// Every change is saved and applied on its own, a moment after it, so a slider drag or typing a number does
+    /// not re-layout on every step.
+    private var autosave: DispatchWorkItem?
+    private var populating = false
+    func changed() {
+        guard !populating else { return }
+        autosave?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.save() }
+        autosave = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+    }
+    @objc private func controlChanged(_ sender: Any?) {
+        if let sender = sender as AnyObject?, let original = forwardedActions[ObjectIdentifier(sender)] { _ = perform(original, with: sender) }
+        changed()
+    }
+    /// Controls that had an action of their own before autosave took them over; it still runs first.
+    private var forwardedActions: [ObjectIdentifier: Selector] = [:]
+
+    /// Points every control in the window at `controlChanged`, keeping whatever action it had.
+    private func hookControls(in view: NSView) {
+        for v in view.subviews {
+            if let c = v as? NSControl, !(c is NSTextView), c.target !== self || c.action != #selector(controlChanged(_:)) {
+                if c.target === self, let a = c.action { forwardedActions[ObjectIdentifier(c)] = a }
+                if c.target == nil || c.target === self { c.target = self; c.action = #selector(controlChanged(_:)) }
+            }
+            if let r = v as? KeyRecorderView { r.onChange = { [weak self] in self?.changed() } }
+            if let t = v as? NSTextView, let s = t as NSTextView? { textObservers.append(NotificationCenter.default.addObserver(forName: NSText.didChangeNotification, object: s, queue: .main) { [weak self] _ in self?.changed() }) }
+            hookControls(in: v)
+        }
+    }
+    private var textObservers: [Any] = []
 
     @objc private func save() {
         config = collect()
         config.save()
         onSave?(config)
-        savedLabel.isHidden = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.savedLabel.isHidden = true }
     }
 }
 
@@ -1296,7 +1332,8 @@ final class KeyRecorderView: NSView {
     static weak var active: KeyRecorderView? { didSet { onActiveChange?() } }
     static var onActiveChange: (() -> Void)?
 
-    var spec: String? { didSet { needsDisplay = true } }
+    var spec: String? { didSet { needsDisplay = true; if spec != oldValue { onChange?() } } }
+    var onChange: (() -> Void)?
     private var recording = false {
         didSet {
             needsDisplay = true

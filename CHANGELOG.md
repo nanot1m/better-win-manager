@@ -6,6 +6,12 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-11-07
+
+### Changed
+- Settings apply as you change them: every switch, field, colour, slider, hotkey and widget reorder is saved and applied a moment later, so there is no Save & Apply button any more. Import applies at once too.
+- The welcome tour recommends a menu bar background (System Settings › Menu Bar, macOS 26) when the desktops live in the menu bar, so the numbers read on any wallpaper.
+
 ## [0.46.0] - 2026-11-07
 
 ### Fixed

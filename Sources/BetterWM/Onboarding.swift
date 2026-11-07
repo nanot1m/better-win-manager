@@ -13,6 +13,7 @@ final class OnboardingWindow {
     private let next = NSButton(title: "Continue", target: nil, action: nil)
     private let progress = NSTextField(labelWithString: "")
     private var menuBarCard: RecommendationView?
+    private var menuBackgroundCard: RecommendationView?
     private var barChoice: NSButton!, menuChoice: NSButton!
     /// The configuration to read and write choices through; set by the app once it has booted.
     var config: () -> Config? = { nil }
@@ -93,6 +94,7 @@ final class OnboardingWindow {
         next.title = step == pages.numberOfTabViewItems - 1 ? "Done" : "Continue"
         progress.stringValue = "Step \(step + 1) of \(pages.numberOfTabViewItems)"
         menuBarCard?.isHidden = barChoice.state != .on
+        menuBackgroundCard?.isHidden = barChoice.state == .on
     }
 
     @objc private func goBack() { showStep(step - 1) }
@@ -177,8 +179,12 @@ final class OnboardingWindow {
             Self.open(["x-apple.systempreferences:com.apple.Menu-Bar-Settings.extension", "x-apple.systempreferences:com.apple.ControlCenter-Settings.extension"])
         }
         menuBarCard = card
+        let background = RecommendationView(title: "Give the menu bar a background", text: "The desktop numbers read best on a solid menu bar. In System Settings › Menu Bar, set \"Menu bar background\" to Always (macOS 26 and later) so the bar is not see-through over a busy wallpaper.", button: "Open Menu Bar Settings", image: SetupIllustration.image(.menuBarBackground)) {
+            Self.open(["x-apple.systempreferences:com.apple.Menu-Bar-Settings.extension", "x-apple.systempreferences:com.apple.Appearance-Settings.extension"])
+        }
+        menuBackgroundCard = background
         return page("Your desktops", "BetterWM's desktops replace macOS Spaces: they switch instantly and keep their layouts. Pick where to see them; you can change this in Settings later.",
-                    [menuChoice, menuNote, barChoice, barNote, card])
+                    [menuChoice, menuNote, barChoice, barNote, card, background])
     }
 
     private func note(_ text: String) -> NSView {
@@ -198,6 +204,7 @@ final class OnboardingWindow {
         apply(c)
         c.save()
         menuBarCard?.isHidden = !c.bar
+        menuBackgroundCard?.isHidden = c.bar
     }
 
     private func handoverPage() -> NSView {
@@ -232,7 +239,7 @@ final class OnboardingWindow {
 /// Schematic pictures of the settings to change: a few rows of a pane with the ones that matter marked, drawn in
 /// the theme's colours, so they read at a glance where a screenshot would be a thumbnail.
 enum SetupIllustration {
-    enum Kind { case oneDesktop, shortcuts, gestures, menuBar }
+    enum Kind { case oneDesktop, shortcuts, gestures, menuBar, menuBarBackground }
 
     static func image(_ kind: Kind) -> NSImage {
         let size = NSSize(width: 150, height: 96)
@@ -293,7 +300,20 @@ enum SetupIllustration {
             arrow.lineWidth = 2; NSColor.controlAccentColor.setStroke(); arrow.stroke()
             let ours = NSRect(x: 10, y: rect.maxY - 36, width: rect.width - 20, height: 10)
             NSColor.controlAccentColor.withAlphaComponent(0.85).setFill(); NSBezierPath(roundedRect: ours, xRadius: 3, yRadius: 3).fill()
-            label("Hide menu bar: Always", at: NSPoint(x: 14, y: rect.minY + 10), bold: false)
+            label("Hide menu bar: Always", at: NSPoint(x: 10, y: rect.minY + 10), bold: false)
+            toggle(on: true, at: NSPoint(x: rect.maxX - 40, y: rect.minY + 12))
+        case .menuBarBackground:
+            // A menu bar with a solid backing over a busy wallpaper, desktop numbers readable on it.
+            let sky = NSBezierPath(roundedRect: NSRect(x: 10, y: rect.maxY - 46, width: rect.width - 20, height: 36), xRadius: 4, yRadius: 4)
+            NSColor.systemTeal.blended(withFraction: 0.4, of: .systemPurple)?.setFill(); sky.fill()
+            let bar = NSRect(x: 10, y: rect.maxY - 20, width: rect.width - 20, height: 10)
+            NSColor.windowBackgroundColor.withAlphaComponent(0.92).setFill(); NSBezierPath(roundedRect: bar, xRadius: 2, yRadius: 2).fill()
+            for i in 0..<3 {
+                let chip = NSRect(x: rect.maxX - 58 + CGFloat(i) * 14, y: bar.minY + 2, width: 10, height: 6)
+                (i == 1 ? NSColor.controlAccentColor : NSColor.labelColor.withAlphaComponent(0.35)).setFill()
+                NSBezierPath(roundedRect: chip, xRadius: 2, yRadius: 2).fill()
+            }
+            label("Background: Always", at: NSPoint(x: 14, y: rect.minY + 10), bold: false)
             toggle(on: true, at: NSPoint(x: rect.maxX - 40, y: rect.minY + 12))
         }
     }

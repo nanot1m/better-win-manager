@@ -111,4 +111,4 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 
 ## The Settings window
 
-Sections in the sidebar mirror this page: General, Tiling, Focus Ring, Status Bar, Widgets, Cats, Apps, Hotkeys. Nothing is applied until Save & Apply; the bar, hotkeys and focus ring then pick up the new values without a relaunch. Menu toggles (Pause, Auto-tile, Strategy, Switcher, Overlay) save immediately.
+Sections in the sidebar mirror this page: General, Tiling, Focus Ring, Status Bar, Widgets, Cats, Apps, Hotkeys. Every change is saved and applied as you make it; the bar, hotkeys and focus ring pick up the new values without a relaunch. Menu toggles (Pause, Auto-tile, Strategy, Switcher, Overlay) save immediately.
