@@ -67,7 +67,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ringActions.hotkeyLabel = { [weak self] key in self?.manager.config.hotkeys[key].map(KeyRecorderView.pretty) }
         manager.focusRing.onChange = { [weak self] frame, inactive, clearance, overlap, color, under in
             guard let self else { return }
-            self.ringActions.configure(keys: self.manager.config.focusRingActionKeys)
+            // In zen the pill offers one thing: the way out. Everything else would break the calm it is for.
+            self.ringActions.configure(keys: self.manager.focusedScreenIsZen ? ["toggleZen"] : self.manager.config.focusRingActionKeys)
             // No window actions for our own windows (Settings) or a dialog: the actions act on a standard app window.
             let own = NSApp.isActive && NSApp.keyWindow?.styleMask.contains(.titled) == true
             let dialog = self.manager.system.focused == nil
@@ -92,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         bar.desktopsOn = { [weak self] in self?.manager.desktopList(on: $0) ?? [] }
         bar.shownOn = { [weak self] in self?.manager.shownDesktop(on: $0) }
+        bar.zenOn = { [weak self] screen in self?.manager.shownDesktop(on: screen).map { self?.manager.isZen(desktop: $0) ?? false } ?? false }
         bar.activeDesktop = { [weak self] in self?.manager.currentDesktop }
         bar.desktopApps = { [weak self] in self?.manager.appsByDesktop() ?? [:] }
         bar.floatingApps = { [weak self] in self?.manager.sharedFloatingApps() ?? [] }
@@ -112,6 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.warmSwitcherThumbnails() }
         manager.onFocusChange = { [weak self] in self?.bar.focusChanged() }
+        manager.onConfigChange = { [weak self] cfg in self?.configWindow.refresh(config: cfg) }
         manager.tabMenuItems = { [weak self] menu, stacked in self?.addTabItems(to: menu, stacked: stacked) }
         systemReveal.onChange = { [weak self] active in
             self?.manager.focusRing.hiddenForSystemReveal = active
@@ -213,6 +216,7 @@ extension AppDelegate {
         add("Shrink Window", #selector(shrinkWindow), action: "shrink")
         add("Equalize Sizes", #selector(equalize), action: "equalize")
         add("Toggle Stacked Layout", #selector(toggleStack), action: "toggleStack")
+        add("Toggle Zen Mode", #selector(toggleZen), action: "toggleZen")
 
         section("Desktops")
         let desktops = NSMenuItem(title: "Switch to Desktop", action: nil, keyEquivalent: "")
@@ -307,6 +311,7 @@ extension AppDelegate {
             "toggleTile": { [weak self] in self?.resumeForTiling(); self?.manager.toggleFocused() },
             "retile": { [weak self] in self?.resumeForTiling(); self?.manager.retileCurrentScreen() },
             "toggleStack": { [weak self] in self?.manager.toggleStackedLayout() },
+            "toggleZen": { [weak self] in self?.manager.toggleZen() },
             "toggleTabs": { [weak self] in self?.toggleTabs() },
             "refreshRing": { [weak self] in self?.manager.focusRing.remeasureCorners() },
             "equalize": { [weak self] in self?.manager.equalize() },
@@ -446,6 +451,7 @@ extension AppDelegate {
     }
     @objc func menuSendDesktopToNextScreen(_ s: NSMenuItem) { if let d = desktop(of: s) { manager.sendDesktopToNextScreen(d) } }
     @objc func toggleStack() { manager.toggleStackedLayout() }
+    @objc func toggleZen() { manager.toggleZen() }
     @objc func equalize() { manager.equalize() }
     @objc func reloadConfig() {
         manager.reloadConfig()

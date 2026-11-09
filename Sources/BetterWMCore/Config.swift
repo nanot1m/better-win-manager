@@ -2,7 +2,7 @@ import Foundation
 
 public struct Config {
     /// Bumped whenever a key is renamed or its meaning changes; `parse` migrates older files.
-    public static let schemaVersion = 4
+    public static let schemaVersion = 5
     public init() {}
     public var gap: CGFloat = 16
     public var outerGap: CGFloat = 16
@@ -25,7 +25,7 @@ public struct Config {
             "focusNext": "ctrl+]", "focusPrevious": "ctrl+[", "focusFloating": "ctrl+f",
             "moveLeft": "ctrl+alt+left", "moveRight": "ctrl+alt+right", "moveUp": "ctrl+alt+up", "moveDown": "ctrl+alt+down",
             "mergeLeft": "ctrl+alt+shift+left", "mergeRight": "ctrl+alt+shift+right",
-            "toggleTile": "ctrl+alt+t", "toggleStack": "ctrl+alt+s", "retile": "ctrl+alt+r", "equalize": "ctrl+alt+e",
+            "toggleTile": "ctrl+alt+t", "toggleStack": "ctrl+alt+s", "toggleZen": "ctrl+alt+z", "retile": "ctrl+alt+r", "equalize": "ctrl+alt+e",
             "grow": "ctrl+=", "shrink": "ctrl+-",
             "desktopNext": "ctrl+right", "desktopPrevious": "ctrl+left",
         ]
@@ -61,6 +61,10 @@ public struct Config {
     public var tabTitleFormat: String = "{app} — {title}"
     /// A tab above every tiled window too, so renamed tabs and titles read outside the stacked layout.
     public var tiledTabs: Bool = false
+    /// Zen mode: the widest the one window shown gets, in points; 0 for the whole screen.
+    public var zenMaxWidth: CGFloat = 1600
+    /// Zen mode also hides the status bar on that screen, the window taking its room.
+    public var zenHidesBar: Bool = false
     /// Move left/right at the edge of the grid: carry the window to the neighbouring desktop instead of cycling its width.
     public var moveAcrossDesktops: Bool = false
     /// How much the grow and shrink actions change a window, in points.
@@ -129,7 +133,7 @@ public struct Config {
     public var focusRingActionKeys: [String] = Config.defaultRingActionKeys
     public static let defaultRingActionKeys = ["toggleTile", "toggleStack", "toggleTabs", "retile", "sendToDesktop"]
     /// Actions that make sense as a ring button, in the order they appear.
-    public static let ringActionChoices = ["toggleTile", "toggleStack", "toggleTabs", "grow", "shrink", "equalize", "retile",
+    public static let ringActionChoices = ["toggleTile", "toggleStack", "toggleZen", "toggleTabs", "grow", "shrink", "equalize", "retile",
                                            "sendToDesktop", "sendToPreviousDesktop", "sendToNextDesktop", "overview", "popup"]
     /// Measure each window's real corner radius once and match it; `focusRingRadius` is the fallback.
     public var focusRingAutoRadius: Bool = true
@@ -341,6 +345,7 @@ public struct Config {
         ("mergeLeft", "Merge into left column"), ("mergeRight", "Merge into right column"),
         ("toggleTile", "Tile / untile focused window"), ("grow", "Grow focused window"), ("shrink", "Shrink focused window"),
         ("toggleStack", "Toggle stacked layout on this screen"),
+        ("toggleZen", "Toggle zen mode on this screen"),
         ("toggleTabs", "Tabs: show or hide them on tiled windows; on a stacked screen, the next stacked look"),
         ("retile", "Retile current screen"),
         ("equalize", "Equalize sizes"), ("pause", "Pause / resume tiling"), ("refreshRing", "Re-measure window corners for the focus ring"),
@@ -413,6 +418,9 @@ public struct Config {
         tabTitleFormat = \(tabTitleFormat)
         # Also a tab above every tiled window (in the columns layout), to see titles and renamed tabs.
         tiledTabs = \(tiledTabs)
+        # Zen mode (toggleZen): one window at a time, centred, at most this wide; 0 for the whole screen.
+        zenMaxWidth = \(num(zenMaxWidth))
+        zenHidesBar = \(zenHidesBar)
         # Move left/right at the grid's edge carries the window to the previous/next desktop instead of cycling its width.
         moveAcrossDesktops = \(moveAcrossDesktops)
         # How much the grow and shrink actions change the focused window, in points.
@@ -587,6 +595,8 @@ public struct Config {
             case "tabWidth": cfg.tabWidth = Double(value).map { CGFloat($0) } ?? cfg.tabWidth
             case "tabTitleFormat": cfg.tabTitleFormat = value
             case "tiledTabs": cfg.tiledTabs = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "zenMaxWidth": cfg.zenMaxWidth = Double(value).map { CGFloat($0) } ?? cfg.zenMaxWidth
+            case "zenHidesBar": cfg.zenHidesBar = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "moveAcrossDesktops": cfg.moveAcrossDesktops = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "resizeStep": cfg.resizeStep = Double(value).map { CGFloat($0) } ?? cfg.resizeStep
             case "stackScreensNarrowerThan": cfg.stackScreensNarrowerThan = Double(value).map { CGFloat($0) } ?? cfg.stackScreensNarrowerThan
@@ -670,6 +680,7 @@ public struct Config {
             // v3 added the menu widget; files that already pinned an explicit widget order get it appended.
             if !cfg.barWidgets.contains(.menu) { cfg.barWidgets.append(.menu) }
         }
+        if version < 5, hadHotkeys, cfg.hotkeys["toggleZen"] == nil { cfg.hotkeys["toggleZen"] = defaultHotkeys["toggleZen"] }
         if version < 4, hadHotkeys, cfg.hotkeys["focusFloating"] == nil {
             // v4 added the focus-floating action; an unbound action is written commented out, which reads as
             // absent, so only files from before the action get its default.

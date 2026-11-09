@@ -15,6 +15,9 @@ public struct Column: Equatable {
 /// the geometry needs. A plain value; geometry and mutations are pure functions of it.
 public struct Grid: Equatable {
     public var mode: LayoutMode = .columns
+    /// Zen: one window at a time, centred and no wider than the configured limit; the others wait off screen.
+    /// The columns stay as they are underneath, so leaving zen restores the layout.
+    public var zen = false
     public var columns: [Column] = []
     /// The columns as they were before the screen was stacked; switching back restores them.
     public var columnsBeforeStack: [Column]?
@@ -312,6 +315,7 @@ public struct GridGeometry {
 
     /// The side a tab strip runs along, if any; the strip is the outermost element there.
     private var stripSide: Config.StackStyle? {
+        if grid.zen { return nil }
         if grid.mode == .stacked { return config.stackStyle == .cascade ? nil : config.stackStyle }
         return config.tiledTabs ? .tabsTop : nil
     }
@@ -382,6 +386,7 @@ public struct GridGeometry {
     }
 
     private func slotFrames() -> [(WindowID, CGRect)] {
+        if grid.zen { return zenFrames() }
         if grid.mode == .stacked { return stackedFrames() }
         guard config.tiledTabs else { return tiledSlots() }
         let t = config.tabHeight + config.focusRingOutset
@@ -390,7 +395,7 @@ public struct GridGeometry {
 
     /// The strips above tiled windows, one tab each; empty unless `tiledTabs` is on.
     public func tiledTabFrames() -> [(WindowID, CGRect)] {
-        guard grid.mode == .columns, config.tiledTabs else { return [] }
+        guard grid.mode == .columns, !grid.zen, config.tiledTabs else { return [] }
         // As wide as the ring around the window below, so strip and ring share their edges.
         let o = config.focusRingOutset
         return tiledSlots().map { w, f in (w, CGRect(x: f.minX - o, y: f.minY, width: f.width + 2 * o, height: config.tabHeight + config.ringButtonsOverlap)) }
@@ -420,7 +425,7 @@ public struct GridGeometry {
 
     /// The strip the tabs occupy on a stacked screen, or nil for a cascade (and for other layouts).
     public func tabStripFrame() -> CGRect? {
-        guard grid.mode == .stacked else { return nil }
+        guard grid.mode == .stacked, !grid.zen else { return nil }
         // The strip runs the full length of the outer gap's inside; only across is it bound to the slots. It reaches
         // over the ring as far as the ring buttons do, so tabs and buttons stand on the same line.
         // A side strip spans the ring's height, which starts below any room kept for the ring buttons.
@@ -435,12 +440,12 @@ public struct GridGeometry {
 
     /// Where a tabbed stack's hidden windows wait; a window there is done moving whatever its size.
     public func waitsAside(_ frame: CGRect) -> Bool {
-        grid.mode == .stacked && config.stackStyle != .cascade && frame.minX == area.maxX - 2 && frame.minY == area.maxY - 2
+        (grid.zen || (grid.mode == .stacked && config.stackStyle != .cascade)) && frame.minX == area.maxX - 2 && frame.minY == area.maxY - 2
     }
 
     /// Whether a real frame sits at the waiting corner, give or take the clamping macOS applies to it.
     public func isWaitingAside(_ frame: CGRect, tolerance: CGFloat = 100) -> Bool {
-        grid.mode == .stacked && config.stackStyle != .cascade
+        (grid.zen || (grid.mode == .stacked && config.stackStyle != .cascade))
             && abs(frame.minX - (area.maxX - 2)) <= tolerance && abs(frame.minY - (area.maxY - 2)) <= tolerance
     }
 
@@ -456,6 +461,18 @@ public struct GridGeometry {
     }
 
     /// Cascade: every window as large as the screen allows, shifted right by `stackOffset` per position.
+    /// The front window centred in the inner area, capped at `zenMaxWidth` (0 for the whole width); the rest wait
+    /// past the corner like hidden tabs.
+    private func zenFrames() -> [(WindowID, CGRect)] {
+        let ws = grid.windows
+        guard !ws.isEmpty else { return [] }
+        let width = config.zenMaxWidth > 0 ? min(config.zenMaxWidth, inner.width) : inner.width
+        let slot = CGRect(x: inner.midX - width / 2, y: inner.minY, width: width, height: inner.height)
+        guard let front, ws.contains(front) else { return ws.map { ($0, slot) } }
+        let hidden = CGRect(x: area.maxX - 2, y: area.maxY - 2, width: slot.width, height: slot.height)
+        return ws.map { ($0, $0 == front ? slot : hidden) }
+    }
+
     private func stackedFrames() -> [(WindowID, CGRect)] {
         let ws = grid.windows
         guard !ws.isEmpty else { return [] }
@@ -484,7 +501,7 @@ public struct GridGeometry {
 
     /// Each window is split by its diagonals: the nearest edge decides. Left/right create a column, top/bottom stack.
     public func zone(at p: CGPoint, dragging dragged: WindowID?) -> (DropZone, CGRect)? {
-        guard inner.contains(p) else { return nil }
+        guard inner.contains(p), !grid.zen else { return nil }
         if grid.mode == .stacked { return stackedZone(at: p, dragging: dragged) }
         let cf = columnFrames()
         if cf.isEmpty { return (.newColumn(index: 0), inner) }

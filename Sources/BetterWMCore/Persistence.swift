@@ -30,11 +30,12 @@ public struct SavedLayout: Codable, Equatable {
         public var floating: [Window]
         /// A stacked space's columns from before it was stacked, to come back to.
         public var columnsBeforeStack: [Column]?
-        public init(id: SpaceID, columns: [Column], mode: LayoutMode = .columns, floating: [Window] = [], columnsBeforeStack: [Column]? = nil) {
-            self.id = id; self.columns = columns; self.mode = mode; self.floating = floating; self.columnsBeforeStack = columnsBeforeStack
+        public var zen: Bool
+        public init(id: SpaceID, columns: [Column], mode: LayoutMode = .columns, floating: [Window] = [], columnsBeforeStack: [Column]? = nil, zen: Bool = false) {
+            self.id = id; self.columns = columns; self.mode = mode; self.floating = floating; self.columnsBeforeStack = columnsBeforeStack; self.zen = zen
         }
 
-        enum CodingKeys: String, CodingKey { case id, columns, mode, floating, columnsBeforeStack }
+        enum CodingKeys: String, CodingKey { case id, columns, mode, floating, columnsBeforeStack, zen }
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             id = try c.decode(SpaceID.self, forKey: .id)
@@ -42,6 +43,7 @@ public struct SavedLayout: Codable, Equatable {
             mode = try c.decodeIfPresent(LayoutMode.self, forKey: .mode) ?? .columns
             floating = try c.decodeIfPresent([Window].self, forKey: .floating) ?? []
             columnsBeforeStack = try c.decodeIfPresent([Column].self, forKey: .columnsBeforeStack)
+            zen = try c.decodeIfPresent(Bool.self, forKey: .zen) ?? false
         }
     }
     /// Bumped when the meaning of stored ids changes; `migrated(currentSpace:)` upgrades older files.
@@ -130,7 +132,7 @@ public struct SavedLayout: Codable, Equatable {
             }
             let columns = describe(grid.columns)
             if !columns.isEmpty || grid.mode != .columns {
-                out.spaces.append(Space(id: space, columns: columns, mode: grid.mode, columnsBeforeStack: grid.columnsBeforeStack.map(describe)))
+                out.spaces.append(Space(id: space, columns: columns, mode: grid.mode, columnsBeforeStack: grid.columnsBeforeStack.map(describe), zen: grid.zen))
             }
         }
         for w in snapshot.windows where !state.isTiled(w.id) {
@@ -184,6 +186,7 @@ public struct SavedLayout: Codable, Equatable {
         }
         var grid = Grid()
         grid.mode = saved.mode
+        grid.zen = saved.zen
         // Saved window id → the window it was matched to, so the remembered columns can name the same windows.
         var matched: [WindowID: WindowID] = [:]
         for col in saved.columns {

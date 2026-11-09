@@ -27,6 +27,7 @@ Hotkeys are registered globally with Carbon. A combination macOS already uses, s
 | `retile` | ⌃⌥R | Tile every window on the screen: columns and their stacks stay as arranged, sizes go back to equal shares, hand-floated windows join in columns of their own |
 | `equalize` | ⌃⌥E | Reset all column widths and row heights to equal weights |
 | `toggleStack` | ⌃⌥S | Switch the screen between columns and stacked layout |
+| `toggleZen` | ⌃⌥Z | Zen mode on this screen: one window at a time, centred and at most `zenMaxWidth` wide, the others waiting off screen; focus actions cycle through them, and grow/shrink change the width (all the way to the whole screen). Toggling again restores the layout |
 | `toggleTabs` | unbound; a ring button by default | On a columns screen, show or hide the tabs above tiled windows (`tiledTabs`); on a stacked screen, step to the next stacked look (cascade, tabs on top, left, right) |
 | `pause` | unbound | Stop reconciling until pressed again; windows stay where they are |
 | `refreshRing` | unbound | Re-measure window corner radii for the focus ring |

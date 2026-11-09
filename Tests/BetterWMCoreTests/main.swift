@@ -561,6 +561,23 @@ struct ReconcilerTests {
         expect(frames[3]!.height > 100 && abs(frames[3]!.height - frames[2]!.height) < frames[2]!.height, #function, #line)
     }
 
+    func testZenCentresOneWindowAndHidesTheRest() {
+        var c = config
+        c.zenMaxWidth = 500
+        var g = Grid()
+        g.columns = [Column([1]), Column([2, 3])]
+        g.zen = true
+        let geo = GridGeometry(grid: g, area: area, config: c, front: 2)
+        let frames = Dictionary(uniqueKeysWithValues: geo.windowFrames())
+        expect(frames[2]!.width == 500 && abs(frames[2]!.midX - geo.inner.midX) < 1 && frames[2]!.height == geo.inner.height, #function, #line)
+        expect(geo.waitsAside(frames[1]!) && geo.waitsAside(frames[3]!), #function, #line)
+        expect(geo.tabStripFrame() == nil && geo.zone(at: CGPoint(x: area.midX, y: area.midY), dragging: nil) == nil, #function, #line)
+        c.zenMaxWidth = 0
+        expect(GridGeometry(grid: g, area: area, config: c, front: 2).frame(of: 2)!.width == geo.inner.width, #function, #line)
+        g.zen = false
+        expect(GridGeometry(grid: g, area: area, config: c).windowFrames().count == 3 && g.columns.count == 2, #function, #line)
+    }
+
     func testStackedModeGeometry() {
         var c = config
         c.stackStyle = .cascade
@@ -1029,6 +1046,7 @@ let tests: [(String, () -> Void)] = [
     ("droppedWindowSharesTheColumnsWeightScale", t.testDroppedWindowSharesTheColumnsWeightScale),
     ("newColumnSharesTheWeightScale", t.testNewColumnSharesTheWeightScale),
     ("busyWindowWaitingAsideDoesNotTakeTheStackFront", t.testBusyWindowWaitingAsideDoesNotTakeTheStackFront),
+    ("zenCentresOneWindowAndHidesTheRest", t.testZenCentresOneWindowAndHidesTheRest),
 ]
 for (name, run) in tests {
     let before = failures

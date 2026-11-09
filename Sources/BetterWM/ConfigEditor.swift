@@ -51,6 +51,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var stackStylePopup: NSPopUpButton!
     private var tabHeightField: NSTextField!
     private var tiledTabsSwitch: NSSwitch!
+    private var zenWidthField: NSTextField!
+    private var zenHidesBarSwitch: NSSwitch!
     private var moveAcrossSwitch: NSSwitch!
     private var tabWidthField: NSTextField!
     private var tabTitleField: NSTextField!
@@ -112,6 +114,12 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var menuBarChipsSwitch: NSSwitch!
     private var menuBarChipStyleMode: NSPopUpButton!
     private var barPositionMode: NSPopUpButton!
+
+    /// The configuration changed outside this window (a zen width step): the fields follow if it is open.
+    func refresh(config: Config) {
+        self.config = config
+        if window?.isVisible == true { populate() }
+    }
 
     func show(config: Config, onSave: @escaping (Config) -> Void) {
         self.config = config
@@ -528,6 +536,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             mods.addArrangedSubview(b)
         }
         stackOffsetField = numberField("48")
+        zenWidthField = numberField("1600")
+        zenHidesBarSwitch = toggle()
         stackNarrowField = numberField("0")
         stackStylePopup = NSPopUpButton()
         for st in Config.StackStyle.allCases {
@@ -555,6 +565,10 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             ]),
             group("Moving", [
                 row("Move past the edge to the next desktop", "Move left or right on the outermost column carries the window to the previous or next desktop, entering on the side it left from, and follows it. Off, the move cycles the column's width.", [moveAcrossSwitch]),
+            ]),
+            group("Zen mode", [
+                row("Widest window", "Zen (⌃⌥Z by default) shows one window at a time, centred, and no wider than this; 0 lets it fill the screen. The other windows come back when zen is toggled off.", [zenWidthField, unit("pt")]),
+                row("Hide the status bar too", "The window takes the bar's room while zen is on.", [zenHidesBarSwitch]),
             ]),
             group("Stacked layout", [
                 row("Look", "Cascade shifts each window right; tabs give every window the whole screen behind a row of tabs. Toggle the layout per screen from the menu or with its hotkey.", [stackStylePopup]),
@@ -962,7 +976,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             ("Move & Layout", [
                 "moveLeft", "moveRight", "moveUp", "moveDown",
                 "mergeLeft", "mergeRight",
-                "toggleTile", "grow", "shrink", "toggleStack", "toggleTabs", "retile", "equalize",
+                "toggleTile", "grow", "shrink", "toggleStack", "toggleZen", "toggleTabs", "retile", "equalize",
                 "pause", "refreshRing",
             ]),
             ("Actions & Overview", [
@@ -1079,6 +1093,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         on(checkUpdatesSwitch, config.checkForUpdates)
         on(autoUpdateSwitch, config.autoUpdate)
         stackOffsetField.stringValue = String(Int(config.stackOffset))
+        zenWidthField.stringValue = String(Int(config.zenMaxWidth))
+        on(zenHidesBarSwitch, config.zenHidesBar)
         for (f, v) in zip([edgeGapFields.0, edgeGapFields.1, edgeGapFields.2, edgeGapFields.3], [config.outerGapTop, config.outerGapLeft, config.outerGapBottom, config.outerGapRight]) {
             f.stringValue = v.map { String(Int($0)) } ?? ""
         }
@@ -1178,6 +1194,8 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.checkForUpdates = isOn(checkUpdatesSwitch)
         config.autoUpdate = isOn(autoUpdateSwitch)
         config.stackOffset = number(stackOffsetField, or: defaults.stackOffset)
+        config.zenMaxWidth = max(0, number(zenWidthField, or: defaults.zenMaxWidth))
+        config.zenHidesBar = isOn(zenHidesBarSwitch)
         func optional(_ f: NSTextField) -> CGFloat? { Double(f.stringValue).map { CGFloat($0) } }
         config.outerGapTop = optional(edgeGapFields.0)
         config.outerGapLeft = optional(edgeGapFields.1)

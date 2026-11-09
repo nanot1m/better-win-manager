@@ -10,7 +10,7 @@ final class RingActions {
         let action: String
     }
     static let symbols: [String: String] = [
-        "toggleTile": "rectangle.split.2x1", "toggleStack": "rectangle.stack", "toggleTabs": "rectangle.topthird.inset.filled", "grow": "plus.magnifyingglass",
+        "toggleTile": "rectangle.split.2x1", "toggleStack": "rectangle.stack", "toggleZen": "rectangle.center.inset.filled", "toggleTabs": "rectangle.topthird.inset.filled", "grow": "plus.magnifyingglass",
         "shrink": "minus.magnifyingglass", "equalize": "equal.square", "retile": "arrow.triangle.2.circlepath",
         "sendToPreviousDesktop": "arrow.left.square", "sendToNextDesktop": "arrow.right.square", "sendToDesktop": "rectangle.portrait.and.arrow.right",
         "overview": "square.grid.2x2", "popup": "ellipsis.circle",
@@ -18,6 +18,8 @@ final class RingActions {
     static func button(for key: String) -> Button {
         Button(symbol: symbols[key] ?? "bolt", title: Config.actions.first { $0.key == key }?.title ?? key, action: key)
     }
+    /// The pill shown in zen: the single way out, named for what it does there.
+    static let exitZen = Button(symbol: "arrow.down.right.and.arrow.up.left", title: "Exit zen mode", action: "toggleZen")
     private var keys: [String] = []
 
     private let panel: NSPanel
@@ -58,7 +60,7 @@ final class RingActions {
     func configure(keys: [String]) {
         guard keys != self.keys else { return }
         self.keys = keys
-        view.setButtons(keys.map(Self.button(for:)))
+        view.setButtons(keys.map { $0 == "toggleZen" && keys.count == 1 ? Self.exitZen : Self.button(for: $0) })
         panel.setContentSize(view.fittingSize)
     }
 

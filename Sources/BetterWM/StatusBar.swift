@@ -89,8 +89,12 @@ final class StatusBar {
 
     /// Distance from the screen's top edge to the bar's bottom edge; zero when the bar is off.
     /// Room the bar takes at its edge of the screen: (top, bottom), one of them zero.
+    /// Whether a screen is in zen mode; with `zenHidesBar` the bar steps aside there.
+    var zenOn: (NSScreen) -> Bool = { _ in false }
+    private func hiddenForZen(_ screen: NSScreen) -> Bool { config.zenHidesBar && zenOn(screen) }
+
     func insets(for screen: NSScreen) -> (top: CGFloat, bottom: CGFloat) {
-        guard config.bar else { return (0, 0) }
+        guard config.bar, !hiddenForZen(screen) else { return (0, 0) }
         let room = config.barTopOffset + height(for: screen)
         return config.barAtBottom ? (0, room) : (room, 0)
     }
@@ -236,7 +240,7 @@ final class StatusBar {
     private func buildAndRender() {
         // A fullscreen app owns the whole screen; stay out of its way.
         for w in windows {
-            let fullscreen = Spaces.showsFullscreen(w.targetScreen) || hiddenForSystemReveal
+            let fullscreen = Spaces.showsFullscreen(w.targetScreen) || hiddenForSystemReveal || hiddenForZen(w.targetScreen)
             if fullscreen { w.orderOut(nil) } else if !w.isVisible { w.orderFrontRegardless() }
         }
         // The cats come last: they read the battery and CPU from the other widgets' fresh readings.

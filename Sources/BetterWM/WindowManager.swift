@@ -102,6 +102,8 @@ final class WindowManager {
         return interactionScreens!
     }
     var onFocusChange: (() -> Void)?
+    /// The manager changed the configuration itself (zen width); the app persists the rest of its state from it.
+    var onConfigChange: ((Config) -> Void)?
     var onWindowsChange: (() -> Void)?
     private var lastWindowIDs: Set<WindowID> = []
     var onDesktopChange: (() -> Void)?
@@ -1183,7 +1185,7 @@ final class WindowManager {
         guard let focused else { return }
         // A stacked deck re-fans around the focused window; put the ring where it is about to land. Only when
         // the focused window is in that deck: a floating dialog over a stack keeps its own ring.
-        for screen in system.screens() where state.grid(for: screen.space).mode == .stacked {
+        for screen in system.screens() where state.grid(for: screen.space).mode == .stacked || state.grid(for: screen.space).zen {
             let grid = state.grid(for: screen.space)
             guard grid.contains(focused), let frame = reconciler.geometry(grid, screen, front: focused).frame(of: focused) else { continue }
             focusRing.show(windowID: focused, frame: frame)
@@ -1355,7 +1357,7 @@ final class WindowManager {
 
     /// Stacked screens lay out by z-order, so a focus change must re-run the reconcile promptly.
     private func refanStackedScreens() {
-        guard system.screens().contains(where: { state.grid(for: $0.space).mode == .stacked }) else { return }
+        guard system.screens().contains(where: { state.grid(for: $0.space).mode == .stacked || state.grid(for: $0.space).zen }) else { return }
         tick()
     }
 
@@ -1365,6 +1367,12 @@ final class WindowManager {
         let anchor = system.focused?.frame.center ?? NSEvent.mouseLocation.toAX()
         guard let screen = screen(at: anchor) else { return false }
         return state.grid(for: screen.space).mode == .stacked
+    }
+    /// Whether the screen holding the focused window (or the cursor) is in zen mode.
+    var focusedScreenIsZen: Bool {
+        let anchor = system.focused?.frame.center ?? NSEvent.mouseLocation.toAX()
+        guard let screen = screen(at: anchor) else { return false }
+        return state.grid(for: screen.space).zen
     }
 
     /// Flips the layout mode of the screen holding the focused window (or the cursor).
@@ -1376,12 +1384,35 @@ final class WindowManager {
         apply()
     }
 
+    /// Zen on the screen holding the focused window (or the cursor): one centred window at a time.
+    func toggleZen() {
+        let anchor = system.focused?.frame.center ?? NSEvent.mouseLocation.toAX()
+        guard let screen = screen(at: anchor) else { return }
+        state.mutate(screen.space) { $0.zen.toggle() }
+        Log.write("layout", "space \(screen.space) zen -> \(state.grid(for: screen.space).zen)")
+        // The bar may step aside or come back, and the layout area with it.
+        onDesktopChange?()
+        apply()
+    }
+    func isZen(desktop d: Int) -> Bool { state.grid(for: VirtualWorkspaces.spaceID(d)).zen }
+
     /// Grows or shrinks the focused window by `config.resizeStep`: a tiled one against its neighbours, a floating
     /// one around its centre, within its screen.
     func resizeFocused(grow: Bool) {
         guard let w = system.focused, let id = id(w) else { return }
         let delta = grow ? config.resizeStep : -config.resizeStep
         if let space = state.space(containing: id), let geo = geometry(for: space) {
+            // In zen the only size there is: the width limit, kept as a setting so it holds across screens and launches.
+            if geo.grid.zen {
+                let current = config.zenMaxWidth > 0 ? min(config.zenMaxWidth, geo.inner.width) : geo.inner.width
+                let next = min(max(400, current + delta * 2), geo.inner.width)
+                config.zenMaxWidth = next >= geo.inner.width ? 0 : next
+                config.save()
+                Log.write("layout", "zen width -> \(config.zenMaxWidth == 0 ? "full" : String(Int(config.zenMaxWidth)))")
+                onConfigChange?(config)
+                apply()
+                return
+            }
             state.grids[space] = geo.resizing(window: id, by: delta)
             Log.write("layout", "\(grow ? "grow" : "shrink") \(describe(w)) by \(Int(config.resizeStep))")
             apply()
@@ -1466,8 +1497,8 @@ final class WindowManager {
         }
         i = (i + (reverse ? -1 : 1) + count) % count
         if i < others.count {
-            if let id = id(others[i]) { intendFront(id) }
-            others[i].raise()
+            // The same path as directional focus: ring and tab marked ahead, then the raise.
+            if let id = id(others[i]) { focusWindow(id: id) } else { others[i].raise() }
         } else {
             own[i - others.count].makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -1704,7 +1735,7 @@ final class WindowManager {
             return
         }
         let grid = state.grid(for: space)
-        guard grid.mode == .stacked, let frame = reconciler.geometry(grid, screen, front: id).frame(of: id) else {
+        guard grid.mode == .stacked || grid.zen, let frame = reconciler.geometry(grid, screen, front: id).frame(of: id) else {
             if raise { system.execute([.raise(id)]) }
             return
         }

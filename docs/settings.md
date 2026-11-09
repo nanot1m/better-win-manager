@@ -2,7 +2,7 @@
 
 Settings live in `~/.config/betterwm/config.conf`: one `key = value` per line, `#` starts a comment (a `#` directly after `=` is a value, so colours never need quoting). The Settings window in the menu edits the same file; Reload Config re-reads it after a manual edit. Import… and Export… move whole files around; exports include unsaved edits.
 
-The file carries `version = 4`. Older files are migrated on load: `#`-prefixed colours lose the `#`, missing switcher bindings are added, explicit widget lists gain the menu widget, and files from before the focus-floating action get its default binding. Keys from removed features (`workspaces`, `virtualWorkspaces`, `focusRingStyle`) are accepted and ignored, so a file from any earlier release loads unchanged. Unknown keys are skipped.
+The file carries `version = 5`. Older files are migrated on load: `#`-prefixed colours lose the `#`, missing switcher bindings are added, explicit widget lists gain the menu widget, files from before the focus-floating action get its default binding, and files from before zen mode get its binding. Keys from removed features (`workspaces`, `virtualWorkspaces`, `focusRingStyle`) are accepted and ignored, so a file from any earlier release loads unchanged. Unknown keys are skipped.
 
 Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 
@@ -30,6 +30,8 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `tabHeight` / `tabWidth` | 30 / 240 | Thickness of the tab strip (its height on top, its width on the left, where tabs read sideways), and the longest a tab gets; the windows get the rest |
 | `tabTitleFormat` | `{app} — {title}` | Tab label; `{app}` and `{title}` are replaced |
 | `moveAcrossDesktops` | false | Move left/right on the outermost column carries the window to the previous/next desktop and follows it; off, the move cycles the column width |
+| `zenMaxWidth` | 1600 | Zen mode: the widest the one window shown gets; 0 for the whole screen |
+| `zenHidesBar` | false | Zen mode also hides the status bar on that screen, the window taking its room |
 | `tiledTabs` | false | A tab above every window in the columns layout too, showing its title or the name given to it |
 | `resizeStep` | 40 | Points the `grow` / `shrink` actions resize the focused window by |
 | `stackScreensNarrowerThan` | 0 | Screens narrower than this start in stacked layout; 0 never |

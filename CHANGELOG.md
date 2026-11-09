@@ -6,6 +6,14 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-11-09
+
+### Added
+- Zen mode (`toggleZen`, ⌃⌥Z; also a ring button choice): the screen shows one window at a time, centred and no wider than `zenMaxWidth` (1600 by default, 0 for the whole screen), the other tiled windows waiting off screen; focus next/previous and directional focus cycle through them. Toggling again brings the columns back as they were. Saved with the layout. `zenHidesBar` hides the status bar on that screen as well. In zen the ring's buttons reduce to one, Exit zen mode, and grow/shrink (⌃= / ⌃-) change the zen width, saved as `zenMaxWidth`.
+
+### Fixed
+- Focus next/previous (and a desktop hotkey pressed on the desktop already shown) now moves focus the way directional focus does: the ring and the tab mark the target at once, so the tabs no longer blink while the app catches up.
+
 ## [0.47.0] - 2026-11-07
 
 ### Changed
