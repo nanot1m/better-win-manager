@@ -32,6 +32,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `moveAcrossDesktops` | false | Move left/right on the outermost column carries the window to the previous/next desktop and follows it; off, the move cycles the column width |
 | `zenMaxWidth` | 1600 | Zen mode: the widest the one window shown gets; 0 for the whole screen |
 | `zenHidesBar` | false | Zen mode also hides the status bar on that screen, the window taking its room |
+| `zenBackground` | blank | Drawn under the zen window, fading in and out: a hex colour, a path to a picture, or blank for the wallpaper |
 | `tiledTabs` | false | A tab above every window in the columns layout too, showing its title or the name given to it |
 | `resizeStep` | 40 | Points the `grow` / `shrink` actions resize the focused window by |
 | `stackScreensNarrowerThan` | 0 | Screens narrower than this start in stacked layout; 0 never |

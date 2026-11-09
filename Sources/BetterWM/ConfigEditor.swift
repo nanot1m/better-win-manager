@@ -53,6 +53,9 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var tiledTabsSwitch: NSSwitch!
     private var zenWidthField: NSTextField!
     private var zenHidesBarSwitch: NSSwitch!
+    private var zenBackgroundMode: NSPopUpButton!
+    private var zenBackgroundColor: NSColorWell!
+    private var zenBackgroundPath: NSTextField!
     private var moveAcrossSwitch: NSSwitch!
     private var tabWidthField: NSTextField!
     private var tabTitleField: NSTextField!
@@ -538,6 +541,11 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         stackOffsetField = numberField("48")
         zenWidthField = numberField("1600")
         zenHidesBarSwitch = toggle()
+        zenBackgroundMode = choice(["Wallpaper", "Colour", "Picture"], #selector(zenBackgroundChanged))
+        zenBackgroundColor = well()
+        zenBackgroundPath = NSTextField(string: "")
+        zenBackgroundPath.placeholderString = "~/Pictures/zen.jpg"
+        zenBackgroundPath.widthAnchor.constraint(equalToConstant: 200).isActive = true
         stackNarrowField = numberField("0")
         stackStylePopup = NSPopUpButton()
         for st in Config.StackStyle.allCases {
@@ -569,6 +577,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             group("Zen mode", [
                 row("Widest window", "Zen (⌃⌥Z by default) shows one window at a time, centred, and no wider than this; 0 lets it fill the screen. The other windows come back when zen is toggled off.", [zenWidthField, unit("pt")]),
                 row("Hide the status bar too", "The window takes the bar's room while zen is on.", [zenHidesBarSwitch]),
+                row("Background", "Drawn under the window while zen is on, fading in and out: the wallpaper as it is, a colour, or a picture (a path, or Choose…).", [zenBackgroundMode, zenBackgroundColor, zenBackgroundPath, NSButton(title: "Choose…", target: self, action: #selector(chooseZenPicture))]),
             ]),
             group("Stacked layout", [
                 row("Look", "Cascade shifts each window right; tabs give every window the whole screen behind a row of tabs. Toggle the layout per screen from the menu or with its hotkey.", [stackStylePopup]),
@@ -1095,6 +1104,11 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         stackOffsetField.stringValue = String(Int(config.stackOffset))
         zenWidthField.stringValue = String(Int(config.zenMaxWidth))
         on(zenHidesBarSwitch, config.zenHidesBar)
+        let zenColor = NSColor(hex: config.zenBackground)
+        zenBackgroundMode.selectItem(at: config.zenBackground.isEmpty ? 0 : zenColor != nil ? 1 : 2)
+        zenBackgroundColor.color = zenColor ?? NSColor(white: 0.08, alpha: 1)
+        zenBackgroundPath.stringValue = zenColor == nil ? config.zenBackground : ""
+        zenBackgroundChanged()
         for (f, v) in zip([edgeGapFields.0, edgeGapFields.1, edgeGapFields.2, edgeGapFields.3], [config.outerGapTop, config.outerGapLeft, config.outerGapBottom, config.outerGapRight]) {
             f.stringValue = v.map { String(Int($0)) } ?? ""
         }
@@ -1196,6 +1210,11 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.stackOffset = number(stackOffsetField, or: defaults.stackOffset)
         config.zenMaxWidth = max(0, number(zenWidthField, or: defaults.zenMaxWidth))
         config.zenHidesBar = isOn(zenHidesBarSwitch)
+        switch zenBackgroundMode.indexOfSelectedItem {
+        case 1: config.zenBackground = zenBackgroundColor.color.hexString
+        case 2: config.zenBackground = zenBackgroundPath.stringValue.trimmingCharacters(in: .whitespaces)
+        default: config.zenBackground = ""
+        }
         func optional(_ f: NSTextField) -> CGFloat? { Double(f.stringValue).map { CGFloat($0) } }
         config.outerGapTop = optional(edgeGapFields.0)
         config.outerGapLeft = optional(edgeGapFields.1)
@@ -1272,6 +1291,24 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         panel.message = "Export the current settings (as shown, including unsaved edits)"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         try? collect().serialized().write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    @objc private func zenBackgroundChanged() {
+        let mode = zenBackgroundMode.indexOfSelectedItem
+        zenBackgroundColor.isHidden = mode != 1
+        zenBackgroundPath.isHidden = mode != 2
+        if let button = zenBackgroundPath.superview?.subviews.first(where: { ($0 as? NSButton)?.title == "Choose…" }) { button.isHidden = mode != 2 }
+    }
+
+    @objc private func chooseZenPicture() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.image]
+        panel.message = "A picture to show behind the zen window"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        zenBackgroundPath.stringValue = url.path
+        changed()
     }
 
     @objc private func importConfig() {

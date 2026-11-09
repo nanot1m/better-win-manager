@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-11-09
+
+### Added
+- `zenBackground` (Settings › Tiling › Zen mode › Background): a colour or a picture drawn under the zen window over the wallpaper and desktop icons, fading in as zen begins and out as it ends.
+
 ## [0.48.1] - 2026-11-09
 
 ### Fixed

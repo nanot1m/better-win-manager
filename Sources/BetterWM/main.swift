@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var manager: WindowManager!
     var drag: DragController!
     var statusItem: NSStatusItem!
+    var zenBackdrop: ZenBackdrop!
     /// The icon drawn beside the menu bar chips; the button's own image is used when there are no chips.
     let statusIconView = NSImageView()
     var pauseItem: NSMenuItem?
@@ -107,7 +108,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.onWindowsChange = { [weak self] in self?.bar.focusChanged() }
         let ringFocusChanged = manager.focusRing.onFocusChange
         manager.focusRing.onFocusChange = { [weak self] in ringFocusChanged?(); self?.bar.focusChanged() }
+        zenBackdrop = ZenBackdrop(config: config)
+        manager.onZenChange = { [weak self] in self?.updateZenBackdrop() }
         manager.onDesktopChange = { [weak self] in
+            self?.updateZenBackdrop()
             self?.bar.focusChanged()
             self?.overview.desktopChanged()
             self?.warmSwitcherThumbnails()
@@ -452,6 +456,13 @@ extension AppDelegate {
     @objc func menuSendDesktopToNextScreen(_ s: NSMenuItem) { if let d = desktop(of: s) { manager.sendDesktopToNextScreen(d) } }
     @objc func toggleStack() { manager.toggleStackedLayout() }
     @objc func toggleZen() { manager.toggleZen() }
+
+    func updateZenBackdrop() {
+        zenBackdrop.update { [weak self] screen in
+            guard let self, let d = self.manager.shownDesktop(on: screen) else { return false }
+            return self.manager.isZen(desktop: d)
+        }
+    }
     @objc func equalize() { manager.equalize() }
     @objc func reloadConfig() {
         manager.reloadConfig()
@@ -637,6 +648,8 @@ extension AppDelegate {
         updater.config = cfg
         drag.refreshState()
         bar.apply(cfg)
+        zenBackdrop.apply(cfg)
+        updateZenBackdrop()
         manager.relayout()
         registerHotKeys(cfg)
         applyGestureSetting(cfg)

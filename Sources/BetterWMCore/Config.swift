@@ -65,6 +65,8 @@ public struct Config {
     public var zenMaxWidth: CGFloat = 1600
     /// Zen mode also hides the status bar on that screen, the window taking its room.
     public var zenHidesBar: Bool = false
+    /// Drawn under the windows while zen is on, fading in and out: a hex colour, a path to a picture, or blank for none.
+    public var zenBackground: String = ""
     /// Move left/right at the edge of the grid: carry the window to the neighbouring desktop instead of cycling its width.
     public var moveAcrossDesktops: Bool = false
     /// How much the grow and shrink actions change a window, in points.
@@ -421,6 +423,8 @@ public struct Config {
         # Zen mode (toggleZen): one window at a time, centred, at most this wide; 0 for the whole screen.
         zenMaxWidth = \(num(zenMaxWidth))
         zenHidesBar = \(zenHidesBar)
+        # Behind the zen window, fading in: a hex colour (RRGGBB or RRGGBBAA), a path to a picture, or blank for the wallpaper.
+        zenBackground = \(zenBackground)
         # Move left/right at the grid's edge carries the window to the previous/next desktop instead of cycling its width.
         moveAcrossDesktops = \(moveAcrossDesktops)
         # How much the grow and shrink actions change the focused window, in points.
@@ -597,6 +601,7 @@ public struct Config {
             case "tiledTabs": cfg.tiledTabs = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "zenMaxWidth": cfg.zenMaxWidth = Double(value).map { CGFloat($0) } ?? cfg.zenMaxWidth
             case "zenHidesBar": cfg.zenHidesBar = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "zenBackground": cfg.zenBackground = value
             case "moveAcrossDesktops": cfg.moveAcrossDesktops = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "resizeStep": cfg.resizeStep = Double(value).map { CGFloat($0) } ?? cfg.resizeStep
             case "stackScreensNarrowerThan": cfg.stackScreensNarrowerThan = Double(value).map { CGFloat($0) } ?? cfg.stackScreensNarrowerThan

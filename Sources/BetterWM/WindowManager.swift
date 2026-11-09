@@ -108,6 +108,8 @@ final class WindowManager {
     var onFocusChange: (() -> Void)?
     /// The manager changed the configuration itself (zen width); the app persists the rest of its state from it.
     var onConfigChange: ((Config) -> Void)?
+    /// A screen entered or left zen mode.
+    var onZenChange: (() -> Void)?
     var onWindowsChange: (() -> Void)?
     private var lastWindowIDs: Set<WindowID> = []
     var onDesktopChange: (() -> Void)?
@@ -1395,6 +1397,7 @@ final class WindowManager {
         state.mutate(screen.space) { $0.zen.toggle() }
         Log.write("layout", "space \(screen.space) zen -> \(state.grid(for: screen.space).zen)")
         // The bar may step aside or come back, and the layout area with it.
+        onZenChange?()
         onDesktopChange?()
         apply()
     }
