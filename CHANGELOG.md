@@ -6,6 +6,9 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+### Changed
+- Entering and leaving zen mode glides the window to its new frame over a quarter of a second instead of jumping (off with Reduce Motion or fades disabled).
+
 ## [0.49.0] - 2026-11-09
 
 ### Added

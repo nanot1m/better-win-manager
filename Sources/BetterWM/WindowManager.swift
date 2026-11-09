@@ -1155,7 +1155,8 @@ final class WindowManager {
         anticipateRing(plan, snap.focused)
         // The window under an edge drag belongs to the user until the mouse goes up; laying it out mid-drag
         // would fight the drag and jitter. Only its neighbours follow.
-        let commands = edgeDragged.map { id in plan.commands.filter { if case let .setFrame(w, _) = $0 { return w != id }; return true } } ?? plan.commands
+        let held = Set([edgeDragged, animating].compactMap { $0 })
+        let commands = held.isEmpty ? plan.commands : plan.commands.filter { if case let .setFrame(w, _) = $0 { return !held.contains(w) }; return true }
         if interacting { system.executeLatest(commands) } else { system.execute(commands) }
         if let full = pendingSnapshot { scheduleSave(full) }
         refreshChrome()
@@ -1221,6 +1222,8 @@ final class WindowManager {
     /// side) has nothing to trade with; the window snaps back to its slot when the mouse goes up.
     /// The tiled window whose edge the user is dragging right now.
     private var edgeDragged: WindowID?
+    /// A window gliding to its zen frame (or back); the layout leaves it to the animation meanwhile.
+    private var animating: WindowID?
 
     private func followEdgeDrag(_ id: WindowID) -> Bool {
         // Once an edge drag has started, only the dragged window counts: the neighbours' resizes arrive a frame
@@ -1399,6 +1402,18 @@ final class WindowManager {
         // The bar may step aside or come back, and the layout area with it.
         onZenChange?()
         onDesktopChange?()
+        // The window in front glides to its new frame rather than jumping; the others take theirs at once.
+        let grid = state.grid(for: screen.space)
+        let front = system.focused.flatMap(id).flatMap { grid.contains($0) ? $0 : nil } ?? zOrder.first(where: grid.contains)
+        if Fade.enabled, let front, let target = system.screens().first(where: { $0.space == screen.space }).flatMap({ reconciler.geometry(grid, $0, front: front).frame(of: front) }) {
+            animating = front
+            apply()
+            system.animateFrame(front, to: target) { [weak self] in
+                self?.animating = nil
+                self?.apply()
+            }
+            return
+        }
         apply()
     }
     func isZen(desktop d: Int) -> Bool { state.grid(for: VirtualWorkspaces.spaceID(d)).zen }

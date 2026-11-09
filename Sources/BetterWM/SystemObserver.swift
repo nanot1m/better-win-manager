@@ -272,6 +272,25 @@ final class SystemObserver {
         AX.queue.async { self.run(commands) }
     }
 
+    /// Moves a window to `target` in small steps over `duration`, eased, on the queue; `done` runs on the main
+    /// thread. The app applies each step itself, so a slow app just gets fewer, larger steps.
+    func animateFrame(_ id: WindowID, to target: CGRect, duration: TimeInterval = 0.25, done: @escaping () -> Void) {
+        AX.queue.async {
+            guard let w = self.ax[id] else { DispatchQueue.main.async(execute: done); return }
+            let start = w.frame
+            let t0 = Date()
+            while true {
+                let t = min(1, Date().timeIntervalSince(t0) / duration)
+                let e = t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2
+                w.frame = CGRect(x: start.minX + (target.minX - start.minX) * e, y: start.minY + (target.minY - start.minY) * e,
+                                 width: start.width + (target.width - start.width) * e, height: start.height + (target.height - start.height) * e)
+                if t >= 1 { break }
+                usleep(16_000)
+            }
+            DispatchQueue.main.async(execute: done)
+        }
+    }
+
     private func run(_ commands: [Command]) {
         for c in commands {
             switch c {
