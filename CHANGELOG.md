@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.48.1] - 2026-11-09
+
+### Fixed
+- After a display was connected or disconnected, tiles could stay large and refuse to shrink: minimum sizes learned on the old screens (often from macOS clamping windows during the change) were kept. They are forgotten whenever the display set changes.
+
 ## [0.48.0] - 2026-11-09
 
 ### Added

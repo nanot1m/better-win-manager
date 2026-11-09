@@ -66,7 +66,11 @@ final class WindowManager {
 
     private func connectDisplays(_ ids: [DisplayID]) {
         desktops.connect(ids)
-        Log.write("screen", "displays \(ids.map { $0.prefix(8) }); desktops \(ids.map { d in desktops.desktops(on: d).map { $0 + 1 } })")
+        // Minimum sizes were learned on the old screens, where macOS itself clamped windows during the change; on
+        // the new set they only keep tiles large. Every grid learns afresh.
+        for k in state.grids.keys { state.grids[k]?.minSizes.removeAll() }
+        state.executor.reset()
+        Log.write("screen", "displays \(ids.map { $0.prefix(8) }); desktops \(ids.map { d in desktops.desktops(on: d).map { $0 + 1 } }); learned minimum sizes forgotten")
     }
 
     /// Displays the model still counts on that are not connected right now (within the grace period).
