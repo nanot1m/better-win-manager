@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.52.2] - 2026-11-10
+
+### Fixed
+- The tab of a tiled window behind another window of the same app no longer lights up as if focused; only the app's front window does.
+
 ## [0.52.1] - 2026-11-10
 
 ### Fixed

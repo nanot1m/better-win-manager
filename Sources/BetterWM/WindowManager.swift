@@ -1888,14 +1888,17 @@ final class WindowManager {
             // happened, whatever Accessibility still says), else the focused window, else the topmost. Accessibility
             // names the focused window a round trip after the front changes, and an app slow to answer (Unity)
             // holds that up for seconds; going by it alone marked the old tab, then greyed it, then marked the new.
+            // The frontmost app's own front window, not any window of that app: a second window of the same app
+            // on the desktop is behind, and its tab must not light up with the focused one's.
             let frontmostPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+            let appFront = frontmostPid.flatMap { p in zOrder.first { system.pid(of: $0) == p } }
             let top = zOrder.first(where: ids.contains)
             if let p = intendedFront, p.until < Date() || focused == p.id { intendedFront = nil }
             let intended = intendedFront.flatMap { ids.contains($0.id) ? $0.id : nil }
             let front = intended
-                ?? (top.flatMap { system.pid(of: $0) == frontmostPid ? $0 : nil })
+                ?? (top.flatMap { $0 == appFront ? $0 : nil })
                 ?? focused.flatMap { ids.contains($0) ? $0 : nil } ?? top
-            let frontFocused = front == intended || front == focused || front.flatMap(system.pid(of:)) == frontmostPid
+            let frontFocused = front == intended || front == focused || front == appFront
             // No ring on the front window (focus is on a floating window ringed instead): the strip, which would
             // hang loose over the ring's gap, moves over it to touch its window.
             if let front, !frontFocused, focusRing.ringedWindow != front {
