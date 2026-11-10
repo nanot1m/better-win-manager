@@ -180,6 +180,11 @@ final class FocusRing {
                 self?.update()
             }
         }
+        // A closing window is still key and visible while the notification runs; look again once it is gone.
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: .main) { [weak self] n in
+            guard let w = n.object as? NSWindow, w.styleMask.contains(.titled) else { return }
+            DispatchQueue.main.async { self?.update() }
+        }
         // Safety net only; WindowServer events do the real work.
         timer = Timer.scheduledTimer(withTimeInterval: WindowServerEvents.available ? 5.0 : 0.1, repeats: true) { [weak self] _ in self?.update() }
         update()

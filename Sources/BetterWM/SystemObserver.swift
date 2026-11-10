@@ -125,6 +125,11 @@ final class SystemObserver {
                 keptFromCache.remove(id)
                 continue
             }
+            if let w = ax[id], let cached = lastInfo[id], w.resolves, alive(id), !closedByItsApp(id, shownSpaces: shownSpaces) {
+                infos.append(cached)
+                if keptFromCache.insert(id).inserted { Log.write("snapshot", "#\(id) unreadable but still a window; keeping last known state") }
+                continue
+            }
             ax[id] = nil
             standardKnown.remove(id)
             notStandardKnown.remove(id)

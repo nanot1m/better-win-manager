@@ -177,6 +177,14 @@ final class AXWindow: Hashable {
         return id
     }
 
+    /// Whether the element still names a WindowServer window, asked afresh: an unreadable window that does is
+    /// invisible (a native background tab, another Space), not closed.
+    var resolves: Bool {
+        guard AX.onQueue else { return false }
+        var id: CGWindowID = 0
+        return _AXUIElementGetWindow(element, &id) == .success && id != 0
+    }
+
     var bundleID: String? { NSRunningApplication(processIdentifier: pid)?.bundleIdentifier }
 
     /// A window that cannot be asked is taken to still exist; the window list says when it is gone.

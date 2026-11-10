@@ -1,4 +1,5 @@
 import Cocoa
+import IOKit
 
 /// Four-finger swipes from the trackpad's raw contact frames: vertical scrubs the overview, horizontal switches
 /// desktops. Read, via the private MultitouchSupport framework
@@ -66,6 +67,12 @@ final class SwipeGesture {
 
     private static weak var shared: SwipeGesture?
 
+    /// Multitouch devices come and go (a Magic Trackpad connecting, the lid closing); the device list is a
+    /// snapshot, so the watcher re-reads it when one arrives or leaves.
+    private var notifyPort: IONotificationPortRef?
+    private var arrivalIterator: io_iterator_t = 0, removalIterator: io_iterator_t = 0
+    private var restartWork: DispatchWorkItem?
+
     private static let callback: Callback = { _, touches, count, timestamp, _ in
         guard let g = shared, let touches else { return 0 }
         let n = Int(count)
@@ -76,6 +83,12 @@ final class SwipeGesture {
     /// Returns false when the framework or the device list is unavailable.
     @discardableResult
     func start() -> Bool {
+        let listening = startDevices()
+        watchDevices()
+        return listening
+    }
+
+    private func startDevices() -> Bool {
         guard devices.isEmpty, let list = SwipeGesture.createList?()?.takeRetainedValue(), let register = SwipeGesture.register,
               let start = SwipeGesture.start else { return false }
         SwipeGesture.shared = self
@@ -91,11 +104,55 @@ final class SwipeGesture {
     }
 
     func stop() {
+        stopDevices()
+        restartWork?.cancel()
+        if let port = notifyPort {
+            IOObjectRelease(arrivalIterator)
+            IOObjectRelease(removalIterator)
+            IONotificationPortDestroy(port)
+            notifyPort = nil
+        }
+    }
+
+    private func stopDevices() {
         for d in devices {
             SwipeGesture.unregister?(d, SwipeGesture.callback)
             _ = SwipeGesture.stop?(d)
         }
         devices.removeAll()
+    }
+
+    private func watchDevices() {
+        guard notifyPort == nil, let port = IONotificationPortCreate(kIOMainPortDefault) else { return }
+        notifyPort = port
+        CFRunLoopAddSource(CFRunLoopGetMain(), IONotificationPortGetRunLoopSource(port).takeUnretainedValue(), .defaultMode)
+        let me = Unmanaged.passUnretained(self).toOpaque()
+        let changed: IOServiceMatchingCallback = { refcon, iterator in
+            // Drain, or the notification never fires again.
+            while case let s = IOIteratorNext(iterator), s != 0 { IOObjectRelease(s) }
+            guard let refcon else { return }
+            Unmanaged<SwipeGesture>.fromOpaque(refcon).takeUnretainedValue().devicesChanged()
+        }
+        for (kind, keyPath) in [(kIOFirstMatchNotification, \SwipeGesture.arrivalIterator), (kIOTerminatedNotification, \SwipeGesture.removalIterator)] {
+            var it: io_iterator_t = 0
+            guard IOServiceAddMatchingNotification(port, kind, IOServiceMatching("AppleMultitouchDevice"), changed, me, &it) == KERN_SUCCESS else { continue }
+            // The first call hands back what already exists; those are the devices listened on.
+            while case let s = IOIteratorNext(it), s != 0 { IOObjectRelease(s) }
+            self[keyPath: keyPath] = it
+        }
+    }
+
+    /// Arrival and removal both fire for one device, and the framework needs a moment before it lists a new pad.
+    private func devicesChanged() {
+        restartWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.stopDevices()
+            Log.write("gesture", "multitouch devices changed; listening again")
+            _ = self.startDevices()
+        }
+        restartWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
     }
 
     private func frame(_ touches: [Touch], at t: Double) {

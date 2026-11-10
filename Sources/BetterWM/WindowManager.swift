@@ -741,6 +741,15 @@ final class WindowManager {
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             self?.saveNow()
         }
+        // Closing our last own window (Settings, Welcome) leaves BetterWM frontmost with nothing to focus, as any
+        // app's last window does; macOS picks no other app, so the top window of the desktop gets the focus.
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: .main) { [weak self] n in
+            guard let w = n.object as? NSWindow, w.styleMask.contains(.titled) else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                guard let self, NSApp.isActive, !self.ownWindows.contains(where: { $0 !== w }) else { return }
+                self.focusTopWindow()
+            }
+        }
         // The ring learns of activation at once (its own observer); the tabs colour, hide and show with it, not
         // after the Accessibility round-trip below.
         focusRing.onFocusChange = { [weak self] in self?.refreshTabStrips() }
@@ -887,6 +896,12 @@ final class WindowManager {
             }
             var snap = snap
             self.markAway(&snap)
+            // A window appearing while the mouse button is down may be a tab torn out of its window, still in the
+            // user's hand; adopting it now would tile it mid-drag. It joins once the button is up.
+            if NSEvent.pressedMouseButtons & 1 != 0, snap.windows.contains(where: { !self.desktops.isKnown($0.id) }) {
+                snap.windows.removeAll { !self.desktops.isKnown($0.id) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.tick() }
+            }
             Spaces.withSpaceTypesCached {
                 self.zOrder = snap.windows.map(\.id)
                 // Placing windows changes what the next snapshot shows, and apps unhiding during launch add windows
@@ -939,6 +954,10 @@ final class WindowManager {
         tickInFlight = false
         drainTickCompletions()
         if tickPending { tickPending = false; tick() }
+        // A window its app keeps alive after closing (Finder, Ghostty) sends no destroy event; the snapshot that
+        // noticed it is the only signal. Pruning waits for the next tick, so bring that forward rather than
+        // leave the app frontmost with nothing to focus until the timer fires.
+        else if !system.closedByApp.isEmpty { scheduleTick(after: 0.05) }
     }
 
     private func drainTickCompletions() {

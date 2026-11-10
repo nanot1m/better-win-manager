@@ -6,6 +6,15 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.52.1] - 2026-11-10
+
+### Fixed
+- Swipes work on a trackpad connected after launch, and keep working on the built-in one after an external trackpad is disconnected: the gesture listener follows multitouch devices as they come and go.
+- Closing the last window of an app that keeps its windows alive after closing (Finder, Ghostty) moves focus to the desktop's top window at once; the ring and the tabs used to vanish for up to five seconds until the next timer tick noticed.
+- Closing Settings or the Welcome window hides its ring at once and hands focus to the desktop's top window, instead of leaving BetterWM frontmost with the ring up for ten seconds.
+- A tab torn out of a browser window is no longer tiled while it is still in your hand: new windows wait until the mouse button is up.
+- A window Accessibility cannot read but that WindowServer still knows as a window (a native background tab, a window on another Space) keeps its place instead of counting as closed.
+
 ## [0.52.0] - 2026-11-10
 
 ### Added
