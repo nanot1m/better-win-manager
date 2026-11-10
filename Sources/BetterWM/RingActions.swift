@@ -74,9 +74,10 @@ final class RingActions {
         guard enabled, !keys.isEmpty, let ring else { Fade.hide(panel); return }
         view.setColor(color)
         let size = panel.frame.size
-        let origin = NSPoint(x: ring.maxX - clearance - size.width, y: ring.maxY - overlap)
-        if panel.frame.origin != origin { panel.setFrameOrigin(origin) }
-        let order = { [panel] in
+        place(NSPoint(x: ring.maxX - clearance - size.width, y: ring.maxY - overlap))
+        let order = { [panel, weak self] in
+            // Ordering makes AppKit reassert the frame it knows; after WindowServer moves that is stale.
+            if let p = self?.placedOrigin, panel.frame.origin != p { panel.setFrameOrigin(p) }
             if let under { panel.order(.below, relativeTo: Int(under)) } else if !panel.isVisible { panel.orderFrontRegardless() }
         }
         if panel.isVisible || !Fade.enabled {
@@ -92,6 +93,21 @@ final class RingActions {
         }
     }
     private var showGeneration = 0
+
+    /// Where the pill was last put. A WindowServer move leaves AppKit's `panel.frame` stale.
+    private var placedOrigin: NSPoint?
+
+    /// Moves the pill the way the ring moves: straight through WindowServer while it is up, so during a drag
+    /// both land in the same frame as the window. AppKit's own move shows a frame later.
+    private func place(_ origin: NSPoint) {
+        guard placedOrigin != origin else { return }
+        placedOrigin = origin
+        let axOrigin = NSRect(origin: origin, size: panel.frame.size).toCocoa().origin
+        if panel.isVisible, WindowServerEvents.move(CGWindowID(panel.windowNumber), to: axOrigin) { return }
+        // Asked for the frame it already believes it has, AppKit does nothing and leaves the pill where the server put it.
+        if panel.frame.origin == origin { panel.setFrameOrigin(NSPoint(x: origin.x + 1, y: origin.y)) }
+        panel.setFrameOrigin(origin)
+    }
 
     func hide() { showGeneration += 1; Fade.hide(panel); tip.hide() }
 

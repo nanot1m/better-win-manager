@@ -65,7 +65,7 @@ final class WindowManager {
     }
 
     private func connectDisplays(_ ids: [DisplayID]) {
-        desktops.connect(ids)
+        desktops.connect(ids, origins: Dictionary(NSScreen.screens.map { (Self.displayID($0), $0.frame.origin) }) { a, _ in a })
         // Minimum sizes were learned on the old screens, where macOS itself clamped windows during the change; on
         // the new set they only keep tiles large. Every grid learns afresh.
         for k in state.grids.keys { state.grids[k]?.minSizes.removeAll() }
@@ -161,9 +161,9 @@ final class WindowManager {
         saveNow()
         // Parked tiled windows have no remembered frame; their grid slot is where they go.
         for id in desktops.parkedWindows where state.isTiled(id) {
-            if let f = targetFrame(of: id) { system.execute([.setFrame(id, f)]) }
+            if let f = targetFrame(of: id) { system.execute([.setFrame(id, f)], force: true) }
         }
-        desktops.unparkAll(setFrame: { self.system.execute([.setFrame($0, $1)]) }, fit: { self.fit($1, toDesktopOf: $0) })
+        desktops.unparkAll(setFrame: { self.system.execute([.setFrame($0, $1)], force: true) }, fit: { self.fit($1, toDesktopOf: $0) })
         system.waitForCommands()
     }
 

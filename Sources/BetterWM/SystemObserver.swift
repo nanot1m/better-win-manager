@@ -268,8 +268,8 @@ final class SystemObserver {
 
     // MARK: Commands
 
-    func execute(_ commands: [Command]) {
-        AX.queue.async { self.run(commands) }
+    func execute(_ commands: [Command], force: Bool = false) {
+        AX.queue.async { self.run(commands, force: force) }
     }
 
     /// Moves a window to `target` in small steps over `duration`, eased, on the queue; `done` runs on the main
@@ -277,6 +277,7 @@ final class SystemObserver {
     func animateFrame(_ id: WindowID, to target: CGRect, duration: TimeInterval = 0.25, done: @escaping () -> Void) {
         AX.queue.async {
             guard let w = self.ax[id] else { DispatchQueue.main.async(execute: done); return }
+            AXEnhancedUI.suspended(for: [w.pid]) {
             let start = w.frame
             let t0 = Date()
             while true {
@@ -287,15 +288,19 @@ final class SystemObserver {
                 if t >= 1 { break }
                 usleep(16_000)
             }
+            }
             DispatchQueue.main.async(execute: done)
         }
     }
 
-    private func run(_ commands: [Command]) {
-        for c in commands {
-            switch c {
-            case let .setFrame(id, f): self.ax[id]?.frame = f
-            case let .raise(id): self.ax[id]?.raise()
+    private func run(_ commands: [Command], force: Bool = false) {
+        let pids = Set(commands.compactMap { if case let .setFrame(id, _) = $0 { return ax[id]?.pid }; return nil })
+        AXEnhancedUI.suspended(for: pids) {
+            for c in commands {
+                switch c {
+                case let .setFrame(id, f): ax[id]?.setFrame(f, force: force)
+                case let .raise(id): ax[id]?.raise()
+                }
             }
         }
     }

@@ -6,6 +6,16 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-11-10
+
+### Changed
+- Frame changes switch off the app's `AXEnhancedUserInterface` for the duration of the batch, the way yabai and Rectangle do. Electron, Chrome and some Apple apps animated or refused moves and resizes while it was on, so tiles can land a few points off.
+
+### Fixed
+- The ring's action pill now moves with a dragged window in the same frame as the ring; it used to trail a frame behind.
+- A display that appears where another just vanished (closing the lid at a dock, or waking away from it) takes over that display's desktops and the desktop it showed, so you carry on where you were. Desktops used to fall back to the main display by rule and the screen could come up on whichever desktop it showed last time, which made waking with a different display unreliable.
+- Quitting (or `pkill`) now puts back the parked windows of an app that was slow to answer during the session; they used to be left off screen with nobody to bring them back.
+
 ## [0.50.0] - 2026-11-10
 
 ### Changed

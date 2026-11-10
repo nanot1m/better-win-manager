@@ -25,6 +25,8 @@ public final class VirtualWorkspaces {
     public private(set) var shownOn: [DisplayID: Int] = [:]
     /// Connected displays, main first.
     public private(set) var displays: [DisplayID] = []
+    /// Top-left corner of every display seen, kept after it is gone so a successor can be matched to it.
+    private var origins: [DisplayID: CGPoint] = [:]
 
     private let log: (String) -> Void
 
@@ -77,7 +79,22 @@ public final class VirtualWorkspaces {
 
     /// Sets the connected displays, main first. A display that comes with no desktop of its own gets a new one;
     /// desktops whose display left show on the main display until it is back.
-    public func connect(_ ds: [DisplayID]) {
+    /// A display arriving where another just left (given both `origins`) takes over its desktops and the one it
+    /// showed: the lid closed at a dock or opened away from it swaps the only display, and the user expects to
+    /// carry on where they were, not on whatever the other screen showed last time.
+    public func connect(_ ds: [DisplayID], origins o: [DisplayID: CGPoint] = [:]) {
+        let gone = displays.filter { !ds.contains($0) && origins[$0] != nil }
+        let arrived = ds.filter { !displays.contains($0) && o[$0] != nil }
+        func nearest(_ p: CGPoint, in c: [DisplayID], _ at: [DisplayID: CGPoint]) -> DisplayID? {
+            c.min { hypot(at[$0]!.x - p.x, at[$0]!.y - p.y) < hypot(at[$1]!.x - p.x, at[$1]!.y - p.y) }
+        }
+        for old in gone {
+            guard let new = nearest(origins[old]!, in: arrived, o), nearest(o[new]!, in: gone, origins) == old else { continue }
+            homes = homes.mapValues { $0 == old ? new : $0 }
+            if let ws = shownOn.removeValue(forKey: old) { shownOn[new] = ws }
+            log("display \(new.prefix(8)) takes over from \(old.prefix(8)) at the same spot")
+        }
+        origins.merge(o) { _, new in new }
         displays = ds
         guard let main = ds.first else { return }
         settleHomes()

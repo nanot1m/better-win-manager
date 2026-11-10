@@ -21,6 +21,31 @@ enum AX {
     static func run(_ body: @escaping () -> Void) { onQueue ? body() : queue.async(execute: body) }
 }
 
+/// Some apps (Electron, Chrome, a few of Apple's) animate or refuse frame changes while their
+/// `AXEnhancedUserInterface` is on, which macOS turns on for any app an assistive client has touched. Turning
+/// it off around a batch of frame writes, as yabai and Rectangle do, makes the writes land exactly.
+enum AXEnhancedUI {
+    private static var apps: [pid_t: AXUIElement] = [:]
+
+    /// On the AX queue. Restores the attribute for every app it switched off, whatever `body` does.
+    static func suspended(for pids: Set<pid_t>, _ body: () -> Void) {
+        var restore: [AXUIElement] = []
+        for pid in pids {
+            let app = apps[pid] ?? {
+                let a = AXUIElementCreateApplication(pid)
+                AXResponsiveness.tune(a)
+                apps[pid] = a
+                return a
+            }()
+            var v: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(app, "AXEnhancedUserInterface" as CFString, &v) == .success, v as? Bool == true else { continue }
+            if AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse) == .success { restore.append(app) }
+        }
+        defer { for app in restore { AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue) } }
+        body()
+    }
+}
+
 /// A hung app would stall every call for the default 6 s. Every element we touch gets a short timeout, and an
 /// app that times out once is left alone: no call reaches it until a probe finds it answering again. Probes back
 /// off up to ten seconds.
@@ -205,16 +230,20 @@ final class AXWindow: Hashable {
             cached { lastFrame = f }
             return f
         }
-        set {
-            AX.run { [self] in
-                // A move the app cannot take now is not worth waiting for; the next layout pass asks again.
-                guard !AXResponsiveness.isUnresponsive(pid) else { return }
-                var pos = newValue.origin, size = newValue.size
-                // Shrink first so the position is not clamped by the old size at screen edges.
-                if let s = AXValueCreate(.cgSize, &size) { AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, s) }
-                if let p = AXValueCreate(.cgPoint, &pos) { AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, p) }
-                if let s = AXValueCreate(.cgSize, &size) { AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, s) }
-            }
+        set { setFrame(newValue) }
+    }
+
+    /// `force` reaches an app in backoff too, for the quit restore: a window left parked off screen has nobody
+    /// to bring it back once we are gone. Each call is still bounded by the short messaging timeout.
+    func setFrame(_ f: CGRect, force: Bool = false) {
+        AX.run { [self] in
+            // A move the app cannot take now is not worth waiting for; the next layout pass asks again.
+            guard force || !AXResponsiveness.isUnresponsive(pid) else { return }
+            var pos = f.origin, size = f.size
+            // Shrink first so the position is not clamped by the old size at screen edges.
+            if let s = AXValueCreate(.cgSize, &size) { AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, s) }
+            if let p = AXValueCreate(.cgPoint, &pos) { AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, p) }
+            if let s = AXValueCreate(.cgSize, &size) { AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, s) }
         }
     }
 

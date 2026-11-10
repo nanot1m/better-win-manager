@@ -840,6 +840,21 @@ struct ReconcilerTests {
         expect(v.display(of: 4) == "B", #function, #line)
     }
 
+    func testDisplayArrivingWhereOneLeftTakesOverItsDesktops() {
+        let v = VirtualWorkspaces(count: 3) { _ in }
+        v.connect(["A"], origins: ["A": .zero])
+        v.switchTo(2)
+        // The lid closes at a dock: the built-in display goes, the external arrives at the same spot.
+        v.connect(["B"], origins: ["B": .zero])
+        expect(v.desktops(on: "B") == [0, 1, 2] && v.shownDesktop(on: "B") == 2 && v.active == 2 && v.count == 3, #function, #line)
+        // A second display beside it is new, not a successor: it gets a desktop of its own.
+        v.connect(["B", "C"], origins: ["B": .zero, "C": CGPoint(x: 2000, y: 0)])
+        expect(v.desktops(on: "B") == [0, 1, 2] && v.desktops(on: "C") == [3], #function, #line)
+        // Without positions nothing is matched; the old rule holds.
+        v.connect(["D"])
+        expect(v.desktops(on: "D") == [0, 1, 2, 3] && v.display(of: 0) == "D", #function, #line)
+    }
+
     func testSendingLastDesktopLeavesANewOne() {
         let v = desktops(1)
         v.connect(["A", "B"])
@@ -1039,6 +1054,7 @@ let tests: [(String, () -> Void)] = [
     ("desktopsLiveOnDisplays", t.testDesktopsLiveOnDisplays),
     ("mainDisplayChangeKeepsDesktops", t.testMainDisplayChangeKeepsDesktops),
     ("sendingLastDesktopLeavesANewOne", t.testSendingLastDesktopLeavesANewOne),
+    ("displayArrivingWhereOneLeftTakesOverItsDesktops", t.testDisplayArrivingWhereOneLeftTakesOverItsDesktops),
     ("directionalFocusInGrid", t.testDirectionalFocusInGrid),
     ("ringButtonsGetRoomWhenNoTabsAbove", t.testRingButtonsGetRoomWhenNoTabsAbove),
     ("edgeGapsOverrideTheOuterGap", t.testEdgeGapsOverrideTheOuterGap),
