@@ -69,7 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.focusRing.onChange = { [weak self] frame, inactive, clearance, overlap, color, under in
             guard let self else { return }
             // In zen the pill offers one thing: the way out. Everything else would break the calm it is for.
-            self.ringActions.configure(keys: self.manager.focusedScreenIsZen ? ["toggleZen"] : self.manager.config.focusRingActionKeys)
+            self.ringActions.configure(keys: self.manager.focusedScreenIsZen ? ["toggleZen"] : self.manager.config.focusRingActionKeys,
+                                       pinned: under.flatMap { self.manager.state.isTiled($0) ? nil : self.manager.state.pinned.contains($0) })
             // No window actions for our own windows (Settings) or a dialog: the actions act on a standard app window.
             let own = NSApp.isActive && NSApp.keyWindow?.styleMask.contains(.titled) == true
             let dialog = self.manager.system.focused == nil
@@ -97,7 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.zenOn = { [weak self] screen in self?.manager.shownDesktop(on: screen).map { self?.manager.isZen(desktop: $0) ?? false } ?? false }
         bar.activeDesktop = { [weak self] in self?.manager.currentDesktop }
         bar.desktopApps = { [weak self] in self?.manager.appsByDesktop() ?? [:] }
-        bar.floatingApps = { [weak self] in self?.manager.sharedFloatingApps() ?? [] }
+        bar.floatingApps = { [weak self] in self?.manager.sharedFloatingApps(on: $0) ?? [] }
         bar.onSelectFloating = { [weak self] in self?.manager.focusFloating() }
         // The window that really has focus; the ring's may be a tiled window kept marked behind a floating one.
         bar.focusedWindow = { [weak self] in self?.manager.system.focused?.windowID ?? self?.manager.focusRing.currentWindowID }
@@ -182,6 +183,7 @@ extension AppDelegate {
         section("Window")
         add("Window Actions…", #selector(showPopup), action: "popup")
         add("Tile / Untile Focused Window", #selector(toggleFocused), action: "toggleTile")
+        add("Pin / Unpin Focused Window", #selector(togglePin), action: "togglePin")
         let moveMenu = NSMenu(title: "Move")
         moveMenu.delegate = self
         moveMenu.autoenablesItems = false
@@ -281,6 +283,7 @@ extension AppDelegate {
     @objc func desktopPrevious() { manager.switchDesktop(next: false) }
     @objc func sendToDesktop(_ sender: NSMenuItem) { manager.sendFocusedWindow(toDesktop: sender.tag) }
     @objc func toggleFocused() { resumeForTiling(); manager.toggleFocused() }
+    @objc func togglePin() { manager.togglePin() }
     @objc func showPopup() { popup.toggle() }
 
     func perform(action name: String) -> Bool {
@@ -313,6 +316,7 @@ extension AppDelegate {
             "mergeLeft": { [weak self] in self?.manager.moveFocused(.mergeLeft) },
             "mergeRight": { [weak self] in self?.manager.moveFocused(.mergeRight) },
             "toggleTile": { [weak self] in self?.resumeForTiling(); self?.manager.toggleFocused() },
+            "togglePin": { [weak self] in self?.manager.togglePin() },
             "retile": { [weak self] in self?.resumeForTiling(); self?.manager.retileCurrentScreen() },
             "toggleStack": { [weak self] in self?.manager.toggleStackedLayout() },
             "toggleZen": { [weak self] in self?.manager.toggleZen() },

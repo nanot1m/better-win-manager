@@ -10,7 +10,7 @@ final class RingActions {
         let action: String
     }
     static let symbols: [String: String] = [
-        "toggleTile": "rectangle.split.2x1", "toggleStack": "rectangle.stack", "toggleZen": "rectangle.center.inset.filled", "toggleTabs": "rectangle.topthird.inset.filled", "grow": "plus.magnifyingglass",
+        "toggleTile": "rectangle.split.2x1", "togglePin": "pin", "toggleStack": "rectangle.stack", "toggleZen": "rectangle.center.inset.filled", "toggleTabs": "rectangle.topthird.inset.filled", "grow": "plus.magnifyingglass",
         "shrink": "minus.magnifyingglass", "equalize": "equal.square", "retile": "arrow.triangle.2.circlepath",
         "sendToPreviousDesktop": "arrow.left.square", "sendToNextDesktop": "arrow.right.square", "sendToDesktop": "rectangle.portrait.and.arrow.right",
         "overview": "square.grid.2x2", "popup": "ellipsis.circle",
@@ -20,7 +20,10 @@ final class RingActions {
     }
     /// The pill shown in zen: the single way out, named for what it does there.
     static let exitZen = Button(symbol: "arrow.down.right.and.arrow.up.left", title: "Exit zen mode", action: "toggleZen")
+    static let unpin = Button(symbol: "pin.slash", title: "Unpin window", action: "togglePin")
     private var keys: [String] = []
+    /// Whether the ringed window is pinned; nil for a tiled one, which has no pin button.
+    private var pinned: Bool?
 
     private let panel: NSPanel
     private let view = PillView()
@@ -56,11 +59,20 @@ final class RingActions {
         }
     }
 
-    /// The buttons to show, by action key; rebuilt only when the list changes.
-    func configure(keys: [String]) {
-        guard keys != self.keys else { return }
+    /// The buttons to show, by action key; rebuilt only when the list or the window's pin state changes.
+    /// `pinned` is nil for a tiled window: pinning is a floating window's affair, so it gets no pin button.
+    func configure(keys: [String], pinned: Bool?) {
+        guard keys != self.keys || pinned != self.pinned else { return }
         self.keys = keys
-        view.setButtons(keys.map { $0 == "toggleZen" && keys.count == 1 ? Self.exitZen : Self.button(for: $0) })
+        self.pinned = pinned
+        view.setButtons(keys.compactMap {
+            switch $0 {
+            case "toggleZen" where keys.count == 1: Self.exitZen
+            case "togglePin" where pinned == nil: nil
+            case "togglePin" where pinned == true: Self.unpin
+            default: Self.button(for: $0)
+            }
+        })
         panel.setContentSize(view.fittingSize)
     }
 

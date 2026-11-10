@@ -27,7 +27,7 @@ final class BarContext {
     var shownOn: (NSScreen) -> Int? = { _ in nil }
     var activeDesktop: () -> Int? = { nil }
     var desktopApps: () -> [Int: [(pid: pid_t, windows: [WindowID])]] = { [:] }
-    var floatingApps: () -> [(pid: pid_t, windows: [WindowID])] = { [] }
+    var floatingApps: (NSScreen) -> [(pid: pid_t, windows: [WindowID])] = { _ in [] }
     var onSelectFloating: (() -> Void)?
     var focusedWindow: () -> WindowID? = { nil }
     var fullscreenSpaces: () -> [(space: UInt64, pids: [pid_t])] = { [] }
@@ -491,7 +491,7 @@ final class DesktopChipsView: NSStackView {
     }
 
     private func renderFloatingChip(_ style: BarStyle, focused: WindowID?) {
-        let floating = context.floatingApps()
+        let floating = context.floatingApps(screen)
         if floatingChip.superview == nil {
             floatingChip.onClick = { [weak self] in self?.context.onSelectFloating?() }
             addArrangedSubview(floatingChip)

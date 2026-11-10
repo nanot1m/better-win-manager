@@ -2,7 +2,7 @@ import Foundation
 
 public struct Config {
     /// Bumped whenever a key is renamed or its meaning changes; `parse` migrates older files.
-    public static let schemaVersion = 5
+    public static let schemaVersion = 6
     public init() {}
     public var gap: CGFloat = 16
     public var outerGap: CGFloat = 16
@@ -25,7 +25,7 @@ public struct Config {
             "focusNext": "ctrl+]", "focusPrevious": "ctrl+[", "focusFloating": "ctrl+f",
             "moveLeft": "ctrl+alt+left", "moveRight": "ctrl+alt+right", "moveUp": "ctrl+alt+up", "moveDown": "ctrl+alt+down",
             "mergeLeft": "ctrl+alt+shift+left", "mergeRight": "ctrl+alt+shift+right",
-            "toggleTile": "ctrl+alt+t", "toggleStack": "ctrl+alt+s", "toggleZen": "ctrl+alt+z", "retile": "ctrl+alt+r", "equalize": "ctrl+alt+e",
+            "toggleTile": "ctrl+alt+t", "togglePin": "ctrl+alt+p", "toggleStack": "ctrl+alt+s", "toggleZen": "ctrl+alt+z", "retile": "ctrl+alt+r", "equalize": "ctrl+alt+e",
             "grow": "ctrl+=", "shrink": "ctrl+-",
             "desktopNext": "ctrl+right", "desktopPrevious": "ctrl+left",
         ]
@@ -75,8 +75,8 @@ public struct Config {
     public var stackScreensNarrowerThan: CGFloat = 0
     /// Remember each desktop's grid and put matching windows back into it on the next launch.
     public var restoreLayouts: Bool = true
-    /// Floating windows belong to no desktop: they follow to whichever desktop shows instead of being parked.
-    public var floatingOnAllDesktops: Bool = true
+    /// Pin every window that starts out floating, so it follows to whichever desktop shows instead of parking.
+    public var autoPinFloating: Bool = false
     /// Action log at ~/.config/betterwm/log.txt (menu: Open Log File / Copy Diagnostics Report).
     public var debugLog: Bool = true
     /// Ask GitHub once a day whether a newer release exists; `autoUpdate` installs it without asking.
@@ -133,9 +133,9 @@ public struct Config {
     public var fadeAnimations: Bool = true
     /// Which actions the ring buttons run, in order; keys from `actions`.
     public var focusRingActionKeys: [String] = Config.defaultRingActionKeys
-    public static let defaultRingActionKeys = ["toggleTile", "toggleStack", "toggleTabs", "retile", "sendToDesktop"]
+    public static let defaultRingActionKeys = ["toggleTile", "togglePin", "toggleStack", "toggleTabs", "retile", "sendToDesktop"]
     /// Actions that make sense as a ring button, in the order they appear.
-    public static let ringActionChoices = ["toggleTile", "toggleStack", "toggleZen", "toggleTabs", "grow", "shrink", "equalize", "retile",
+    public static let ringActionChoices = ["toggleTile", "togglePin", "toggleStack", "toggleZen", "toggleTabs", "grow", "shrink", "equalize", "retile",
                                            "sendToDesktop", "sendToPreviousDesktop", "sendToNextDesktop", "overview", "popup"]
     /// Measure each window's real corner radius once and match it; `focusRingRadius` is the fallback.
     public var focusRingAutoRadius: Bool = true
@@ -345,7 +345,7 @@ public struct Config {
         ("focusLeft", "Focus left"), ("focusRight", "Focus right"), ("focusUp", "Focus up"), ("focusDown", "Focus down"),
         ("moveLeft", "Move left"), ("moveRight", "Move right"), ("moveUp", "Move up"), ("moveDown", "Move down"),
         ("mergeLeft", "Merge into left column"), ("mergeRight", "Merge into right column"),
-        ("toggleTile", "Tile / untile focused window"), ("grow", "Grow focused window"), ("shrink", "Shrink focused window"),
+        ("toggleTile", "Tile / untile focused window"), ("togglePin", "Pin / unpin focused floating window"), ("grow", "Grow focused window"), ("shrink", "Shrink focused window"),
         ("toggleStack", "Toggle stacked layout on this screen"),
         ("toggleZen", "Toggle zen mode on this screen"),
         ("toggleTabs", "Tabs: show or hide them on tiled windows; on a stacked screen, the next stacked look"),
@@ -390,8 +390,8 @@ public struct Config {
         autoUpdate = \(autoUpdate)
         # Remember each desktop's grid (state.json next to this file) and restore matching windows on launch.
         restoreLayouts = \(restoreLayouts)
-        # Floating (untiled) windows follow to whichever desktop is shown instead of staying on one.
-        floatingOnAllDesktops = \(floatingOnAllDesktops)
+        # Pin every window that starts out floating: it follows to whichever desktop is shown (togglePin does it by hand).
+        autoPinFloating = \(autoPinFloating)
         # ⌥Tab window switcher grouped by desktop; previews need Screen Recording permission, otherwise icons only.
         switcher = \(switcher)
         switcherThumbnails = \(switcherThumbnails)
@@ -592,7 +592,8 @@ public struct Config {
             case "checkForUpdates": cfg.checkForUpdates = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "autoUpdate": cfg.autoUpdate = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "restoreLayouts": cfg.restoreLayouts = ["true", "yes", "1", "on"].contains(value.lowercased())
-            case "floatingOnAllDesktops": cfg.floatingOnAllDesktops = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "autoPinFloating": cfg.autoPinFloating = ["true", "yes", "1", "on"].contains(value.lowercased())
+            case "floatingOnAllDesktops": break
             case "stackOffset": cfg.stackOffset = Double(value).map { CGFloat($0) } ?? cfg.stackOffset
             case "stackStyle": cfg.stackStyle = StackStyle(rawValue: value) ?? cfg.stackStyle
             case "tabHeight": cfg.tabHeight = Double(value).map { CGFloat($0) } ?? cfg.tabHeight
@@ -684,6 +685,10 @@ public struct Config {
         if version < 3 {
             // v3 added the menu widget; files that already pinned an explicit widget order get it appended.
             if !cfg.barWidgets.contains(.menu) { cfg.barWidgets.append(.menu) }
+        }
+        if version < 6, hadHotkeys, cfg.hotkeys["togglePin"] == nil { cfg.hotkeys["togglePin"] = defaultHotkeys["togglePin"] }
+        if version < 6, !cfg.focusRingActionKeys.contains("togglePin") {
+            cfg.focusRingActionKeys.insert("togglePin", at: (cfg.focusRingActionKeys.firstIndex(of: "toggleTile") ?? -1) + 1)
         }
         if version < 5, hadHotkeys, cfg.hotkeys["toggleZen"] == nil { cfg.hotkeys["toggleZen"] = defaultHotkeys["toggleZen"] }
         if version < 4, hadHotkeys, cfg.hotkeys["focusFloating"] == nil {

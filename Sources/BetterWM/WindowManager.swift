@@ -172,8 +172,8 @@ final class WindowManager {
     /// Every window with the desktop it lives on, in the order the bar's chips show them (grid order, then
     /// floating windows in their chip order), current desktop first. The switcher and the overview read this,
     /// so what they list is exactly what the bar lists.
-    /// Desktops in chip order with their windows in chip order; the floating windows shared across desktops
-    /// join the current desktop's list, where they are.
+    /// Desktops in chip order with their windows in chip order; the pinned floating windows join the current
+    /// desktop's list, where they are.
     func windowsByDesktop() -> [(desktop: Int, windows: [AXWindow])] {
         let apps = appsByDesktop()
         let shared = sharedFloatingApps().flatMap(\.windows)
@@ -194,7 +194,7 @@ final class WindowManager {
     func appsByDesktop() -> [Int: [(pid: pid_t, windows: [WindowID])]] {
         var out: [Int: [(pid: pid_t, windows: [WindowID])]] = [:]
         for (desktop, apps) in currentAppsByDesktop() {
-            // Floating windows shared across desktops belong to no desktop's chip; they have one of their own.
+            // Pinned floating windows belong to no desktop's chip; they have one of their own.
             let all = apps.flatMap { app in app.windows.map { (pid: app.pid, id: $0) } }.filter { !follows($0.id) }
             let gridOrder = state.grid(for: VirtualWorkspaces.spaceID(desktop)).windows
             var ordered = gridOrder.compactMap { id in all.first { $0.id == id } }
@@ -209,24 +209,28 @@ final class WindowManager {
         return out
     }
 
-    /// The floating windows shared across desktops, oldest first (window ids grow with creation), for their chip
-    /// in the status bar and the focus cycle; focusing one must not reorder them.
     /// BetterWM's own titled windows (Settings, Welcome): floating windows like any other, reached through AppKit
     /// since Accessibility calls into our own process would stall the main thread.
     var ownWindows: [NSWindow] { NSApp.windows.filter { $0.isVisible && $0.styleMask.contains(.titled) } }
     func ownWindow(_ id: WindowID) -> NSWindow? { ownWindows.first { CGWindowID($0.windowNumber) == id } }
 
-    func sharedFloatingApps() -> [(pid: pid_t, windows: [WindowID])] {
-        guard config.floatingOnAllDesktops else { return [] }
-        let shared = currentAppsByDesktop().values.flatMap { $0 }.flatMap { app in app.windows.map { (pid: app.pid, id: $0) } }.filter { follows($0.id) }
-            + ownWindows.map { (pid: getpid(), id: CGWindowID($0.windowNumber)) }
+    /// The pinned floating windows, oldest first (window ids grow with creation), for their chip in the status
+    /// bar and the switcher; focusing one must not reorder them. With `screen`, only those sitting on it.
+    func sharedFloatingApps(on screen: NSScreen? = nil) -> [(pid: pid_t, windows: [WindowID])] {
+        let area = screen?.frame.toCocoa()
+        func onScreen(_ id: WindowID) -> Bool {
+            guard let area else { return true }
+            return system.axWindow(id).map { area.contains($0.frame.center) } ?? false
+        }
+        let shared = currentAppsByDesktop().values.flatMap { $0 }.flatMap { app in app.windows.map { (pid: app.pid, id: $0) } }
+            .filter { follows($0.id) && onScreen($0.id) }
         return shared.sorted { $0.id < $1.id }.map { ($0.pid, [$0.id]) }
     }
 
-    /// Cycles focus through the floating windows: the next after the focused one, or the first.
+    /// Cycles focus through the floating windows on the current desktop, pinned ones and our own included: the
+    /// next after the focused one, or the first.
     func focusFloating() {
-        let ids = (config.floatingOnAllDesktops ? sharedFloatingApps().flatMap(\.windows)
-                   : (windowsByDesktop().first(where: { $0.desktop == currentDesktop })?.windows.compactMap(id).filter { !state.isTiled($0) } ?? []) + ownWindows.map { CGWindowID($0.windowNumber) })
+        let ids = (windowsByDesktop().first(where: { $0.desktop == currentDesktop })?.windows.compactMap(id).filter { !state.isTiled($0) } ?? []) + ownWindows.map { CGWindowID($0.windowNumber) }
         guard !ids.isEmpty else { return }
         let current = (NSApp.isActive ? NSApp.keyWindow.map { CGWindowID($0.windowNumber) } : nil) ?? system.focused.flatMap(id)
         let next = current.flatMap { ids.firstIndex(of: $0) }.map { ids[($0 + 1) % ids.count] } ?? ids[0]
@@ -575,7 +579,7 @@ final class WindowManager {
         let v = desktops
         let onActive: (WindowID) -> Bool = { v.workspace(of: $0) == v.active }
         let remembered = lastFocusedByWorkspace[VirtualWorkspaces.spaceID(v.active)].flatMap { r in system.axWindow(r)?.isValid == true && onActive(r) ? r : nil }
-        // A window that came along (floating on every desktop) keeps the focus it had.
+        // A pinned window that came along keeps the focus it had.
         let cameAlong = lastFocusedID.flatMap { follows($0) && onActive($0) ? $0 : nil }
         guard let id = cameAlong ?? remembered ?? zOrder.first(where: onActive) else {
             focusRing.suspended = false
@@ -628,7 +632,8 @@ final class WindowManager {
                 refusals: { self.state.executor.refused[$0]?.count ?? 0 },
                 // Moves ignored while macOS is waking or rearranging displays say nothing about the window.
                 claimAllowed: snap.now >= claimsSuspendedUntil,
-                follows: { self.follows($0) })
+                follows: { self.follows($0) },
+                displayAt: { f in self.screen(containing: f.center).map(Self.displayID) })
         return state.executor.submit(plan, actual: snap.ownFrame(of:), now: snap.now)
     }
 
@@ -875,6 +880,7 @@ final class WindowManager {
                 self.finishTick(timing)
                 return
             }
+            let hadWindows = self.sawWindows
             if !self.sawWindows, !snap.windows.isEmpty {
                 self.sawWindows = true
                 self.virtualRestoreDeadline = Date().addingTimeInterval(20)
@@ -896,6 +902,14 @@ final class WindowManager {
                 self.state = next
                 self.watchTracked()
                 let ids = Set(snap.windows.map(\.id))
+                // Only windows appearing after launch: the first snapshot is the whole desktop, whose floaters
+                // the saved layout pins or not as they were.
+                if self.config.autoPinFloating, hadWindows {
+                    for id in ids.subtracting(self.lastWindowIDs) where !next.isTiled(id) {
+                        self.state.pinned.insert(id)
+                        Log.write("pin", "auto-pin \(self.describe(id))")
+                    }
+                }
                 if ids != self.lastWindowIDs { self.lastWindowIDs = ids; self.onWindowsChange?() }
                 self.scheduleSave(snap)
                 let t1 = Date()
@@ -1022,9 +1036,10 @@ final class WindowManager {
                 guard let ws = VirtualWorkspaces.workspace(of: savedSpace.id) else { continue }
                 if !atLaunch, desktops.isShown(ws) { continue }
                 let candidates = pool.filter { eligible($0) }
-                for (id, frame) in layout.restoreFloating(space: savedSpace.id, candidates: candidates, exactTitle: !atLaunch) {
+                for (id, frame, pinned) in layout.restoreFloating(space: savedSpace.id, candidates: candidates, exactTitle: !atLaunch) {
                     desktops.move(id, to: ws)
                     state.floating.insert(id)
+                    if pinned { state.pinned.insert(id) }
                     system.execute([.setFrame(id, fit(frame, toDesktopOf: id))])
                     pool.removeAll { $0.id == id }
                     Log.write("restore", "\(describe(id)) floats on workspace \(ws + 1) at \(frame)")
@@ -1330,8 +1345,23 @@ final class WindowManager {
         apply()
     }
 
-    /// Whether a window goes along to whichever desktop shows: a floating one, when configured.
-    func follows(_ id: WindowID) -> Bool { config.floatingOnAllDesktops && !state.isTiled(id) }
+    /// Whether a window goes along to whichever desktop shows: a pinned floating one.
+    func follows(_ id: WindowID) -> Bool { state.pinned.contains(id) && !state.isTiled(id) }
+
+    /// Pins the focused window so it follows to whichever desktop shows, or unpins it; a tiled one is untiled first.
+    func togglePin() {
+        guard let w = system.focused, let id = id(w) else { return }
+        if state.pinned.contains(id) {
+            state.pinned.remove(id)
+            Log.write("pin", "unpin \(describe(w))")
+        } else {
+            if isTiled(w) { toggleFocused() }
+            state.pinned.insert(id)
+            Log.write("pin", "pin \(describe(w))")
+        }
+        apply()
+        onWindowsChange?()
+    }
 
     func toggleFocused() {
         guard let w = system.focused else { return }
@@ -1500,8 +1530,8 @@ final class WindowManager {
     }
 
     /// Cycles through every window on the current desktop, tiled or floating, in reading order
-    /// (left to right, top to bottom), starting from the focused one. From a tiled window the floating
-    /// windows shared across desktops stay out of the cycle; they have `focusFloating` for themselves.
+    /// (left to right, top to bottom), starting from the focused one. From a tiled window the pinned floating
+    /// windows stay out of the cycle; they are on every desktop and would crowd each one's cycle.
     func focusNext(reverse: Bool = false) {
         guard let current = currentDesktop else { return }
         let fromTiled = !NSApp.isActive && (system.focused.flatMap(id).map { state.isTiled($0) } ?? false)
@@ -1509,7 +1539,7 @@ final class WindowManager {
             .filter { !fromTiled || !(id($0).map(follows) ?? false) }
         // Our own titled windows (Settings, Welcome) are not in the list: Accessibility calls into our own
         // process would stall the main thread. They join the cycle through AppKit instead.
-        let own = fromTiled && config.floatingOnAllDesktops ? [] : ownWindows
+        let own = ownWindows
         let count = others.count + own.count
         guard count > 0 else { return }
         var i: Int
@@ -1726,15 +1756,14 @@ final class WindowManager {
         guard index >= 0, index < 9, index != v.workspace(of: id) else { return }
         if index >= v.count { v.setCount(index + 1) }
         let wasTiled = isTiled(w)
-        // A floating window shared across desktops would only follow the user straight back; sending it means
-        // tiling it over there.
-        let tileThere = wasTiled || config.floatingOnAllDesktops
-        Log.write("desktop", "send \(describe(w)) to workspace \(index + 1) (tiled: \(wasTiled), tiled there: \(tileThere))")
+        // A pinned window would only follow the user straight back; sending it unpins it.
+        let wasPinned = state.pinned.remove(id) != nil
+        Log.write("desktop", "send \(describe(w)) to workspace \(index + 1) (tiled: \(wasTiled), unpinned: \(wasPinned))")
         untile(w)
         v.move(id, to: index)
         // The sent window is still focused for a moment; don't let that pull us into its workspace.
         ignoreOwnFocusChanges()
-        if tileThere {
+        if wasTiled {
             // Pre-place it in the target workspace's grid so it is tiled when that workspace shows.
             let space = VirtualWorkspaces.spaceID(index)
             state.mutate(space) { $0.apply(.newColumn(index: entering == .left ? 0 : $0.columns.count), to: id) }

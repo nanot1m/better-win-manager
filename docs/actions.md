@@ -10,12 +10,13 @@ Hotkeys are registered globally with Carbon. A combination macOS already uses, s
 | --- | --- | --- |
 | `popup` | ⌥⌘Space | Window Actions popup, centred on the focused window |
 | `toggleTile` | ⌃⌥T | Tile the focused window where it sits, or untile it back to its remembered floating spot |
+| `togglePin` | ⌃⌥P | Pin the focused floating window so it follows to whichever desktop is shown (a tiled one is untiled first), or unpin it; pinned windows share a ⧉ chip in the status bar. The ring button shows only on floating windows |
 | `moveLeft` / `moveRight` | ⌃⌥← / ⌃⌥→ | Move to the neighbouring column; at the edge, cycle the column width, or with `moveAcrossDesktops` carry the window to the previous/next desktop. A floating window is tiled first |
 | `moveUp` / `moveDown` | ⌃⌥↑ / ⌃⌥↓ | Reorder within the column |
 | `mergeLeft` / `mergeRight` | ⌃⌥⇧← / ⌃⌥⇧→ | Fold into the neighbouring column |
 | `grow` / `shrink` | ⌃= / ⌃- | Resize the focused window by `resizeStep`: a tiled one takes space from (or gives it to) its neighbours in every direction it has one; a floating one grows around its centre |
 | `focusNext` / `focusPrevious` | ⌃] / ⌃[ | Cycle focus through the desktop's windows in reading order, tiled or floating |
-| `focusFloating` | ⌃F | Cycle focus through the floating windows: the ones shared across desktops (their own chip in the status bar), or this desktop's when sharing is off |
+| `focusFloating` | ⌃F | Cycle focus through the floating windows on this desktop, pinned ones included |
 | `focusLeft` / `focusRight` / `focusUp` / `focusDown` | unbound | i3-style directional focus: the neighbouring column or the window above/below in the column. At the screen edge, left and right go to the neighbouring display, or else to the previous or next desktop of this display (round and round), landing on the window nearest the entry side; up and down wrap within the grid. A floating window picks the nearest window in that direction |
 | `switcher` / `switcherBack` | ⌥Tab / ⌥⇧Tab | ⌘Tab-style strip of all windows grouped by desktop; release ⌥ or press Return to pick, Esc to cancel |
 | `overview` | unbound; the Mission Control key (F3) when `overviewKey` is on | Desktop overview: every desktop in a strip along the top, the current desktop's windows spread out below. Click a window to focus it, a desktop to switch, drag a window onto a desktop or the + tile to move it; Esc or a click on the backdrop closes. With `overviewGesture` on, a four-finger swipe up opens it and follows your fingers, swipe down closes |

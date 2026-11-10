@@ -13,8 +13,10 @@ public struct SavedLayout: Codable, Equatable {
         public var id: WindowID?
         /// A name the user gave the window's tab, in place of its title.
         public var label: String?
-        public init(bundleID: String?, title: String, frame: CGRect, heightWeight: CGFloat, id: WindowID? = nil, label: String? = nil) {
-            self.bundleID = bundleID; self.title = title; self.frame = frame; self.heightWeight = heightWeight; self.id = id; self.label = label
+        /// A floating window pinned to follow the shown desktop; absent for tiled and unpinned windows.
+        public var pinned: Bool?
+        public init(bundleID: String?, title: String, frame: CGRect, heightWeight: CGFloat, id: WindowID? = nil, label: String? = nil, pinned: Bool? = nil) {
+            self.bundleID = bundleID; self.title = title; self.frame = frame; self.heightWeight = heightWeight; self.id = id; self.label = label; self.pinned = pinned
         }
     }
     public struct Column: Codable, Equatable {
@@ -137,7 +139,7 @@ public struct SavedLayout: Codable, Equatable {
         }
         for w in snapshot.windows where !state.isTiled(w.id) {
             guard let space = floatingSpace(w) else { continue }
-            let slot = Window(bundleID: w.bundleID, title: w.title, frame: w.frame, heightWeight: 1, id: w.id)
+            let slot = Window(bundleID: w.bundleID, title: w.title, frame: w.frame, heightWeight: 1, id: w.id, pinned: state.pinned.contains(w.id) ? true : nil)
             if let i = out.spaces.firstIndex(where: { $0.id == space }) { out.spaces[i].floating.append(slot) }
             else { out.spaces.append(Space(id: space, columns: [], floating: [slot])) }
         }
@@ -148,16 +150,16 @@ public struct SavedLayout: Codable, Equatable {
     /// Pairs saved floating windows of `space` with `candidates` (same app and title, else nearest frame) and
     /// returns each match with the frame to put it back at.
     /// With `exactTitle`, only a window with the slot's exact title qualifies (no nearest-frame fallback).
-    public func restoreFloating(space: SpaceID, candidates: [WindowInfo], exactTitle: Bool = false) -> [(id: WindowID, frame: CGRect)] {
+    public func restoreFloating(space: SpaceID, candidates: [WindowInfo], exactTitle: Bool = false) -> [(id: WindowID, frame: CGRect, pinned: Bool)] {
         guard let saved = spaces.first(where: { $0.id == space }), !saved.floating.isEmpty else { return [] }
         var pool = candidates
-        var out: [(WindowID, CGRect)] = []
+        var out: [(WindowID, CGRect, Bool)] = []
         for slot in saved.floating {
             let sameApp = pool.indices.filter { pool[$0].bundleID == slot.bundleID }
             guard !sameApp.isEmpty else { continue }
             let exact = sameApp.first { pool[$0].id == slot.id } ?? sameApp.first { pool[$0].title == slot.title }
             guard let pick = exact ?? (exactTitle ? nil : sameApp.min { distance(pool[$0].frame, slot.frame) < distance(pool[$1].frame, slot.frame) }) else { continue }
-            out.append((pool.remove(at: pick).id, slot.frame))
+            out.append((pool.remove(at: pick).id, slot.frame, slot.pinned ?? false))
         }
         return out
     }

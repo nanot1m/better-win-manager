@@ -22,7 +22,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `autoTileStrategy` | rightmost | Where an auto-tiled window goes: `rightmost`, `leftmost`, `position` (where it appeared), `nextToFocused` (i3 default), `stackFocused` (below the focused window), `autoSplit` (beside if the focused window is wider than tall, else below; i3 autotiling), `spiral` (alternately beside and below the last tiled window) |
 | `tileExistingOnStart` | true | When a desktop is first seen, tile the windows already on it, left to right |
 | `restoreLayouts` | true | Save grids, floating windows and the active workspace to `state.json` and restore them on launch |
-| `floatingOnAllDesktops` | true | Floating (untiled) windows follow to whichever desktop is shown instead of staying on one; tiling a window pins it to its desktop again |
+| `autoPinFloating` | false | Pin every window that starts out floating, so it follows to whichever desktop is shown; `togglePin` pins and unpins by hand |
 | `dragModifiers` | alt | Keys held while dragging to tile: `cmd`, `alt`, `ctrl`, `shift` joined with `+` |
 | `stackOffset` | 48 | Horizontal shift between cascaded windows in stacked layout |
 | `stackStyle` | tabsTop | How a stacked screen looks: `cascade`, `tabsTop` (every window full size under a row of tabs), `tabsLeft` or `tabsRight` (sideways tabs down that edge) |
@@ -53,7 +53,7 @@ Colours are `RRGGBB` or `RRGGBBAA`, no `#`. Sizes are points.
 | `focusRingAutoRadius` | true | Measure each window's own corner radius |
 | `focusRingActions` | true | Small icon buttons on the ring's top edge near the right corner. When no tab strip sits above the ring (columns layout without `tiledTabs`, or side tabs), the layout keeps room for them under the status bar |
 | `fadeAnimations` | true | Transitions for the ring, tab strips and action buttons: fades in and out, the ring's colour cross-fade, tabs growing in and sliding over. Off with Reduce Motion in System Settings |
-| `focusRingActionKeys` | toggleTile, toggleStack, toggleTabs, retile, sendToDesktop | Which actions the buttons run, left to right; any of toggleTile, toggleStack, toggleTabs, grow, shrink, equalize, retile, sendToPreviousDesktop, sendToNextDesktop, overview, popup |
+| `focusRingActionKeys` | toggleTile, togglePin, toggleStack, toggleTabs, retile, sendToDesktop | Which actions the buttons run, left to right; any of toggleTile, togglePin, toggleStack, toggleZen, toggleTabs, grow, shrink, equalize, retile, sendToDesktop, sendToPreviousDesktop, sendToNextDesktop, overview, popup. The pin button appears on floating windows only and shows a crossed pin on a pinned one |
 | `focusRingRadius` | 24 | Corner radius when measuring is not possible |
 
 ## Status bar

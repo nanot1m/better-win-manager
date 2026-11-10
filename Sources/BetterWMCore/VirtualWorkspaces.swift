@@ -207,16 +207,19 @@ public final class VirtualWorkspaces {
     /// `refusals` is how often the executor saw a window ignore its park; one that will not leave the screen is
     /// claimed for the active desktop when `claimAllowed` (not while macOS is waking or rearranging displays).
     /// Tiled windows are not restored here: their grid is laid out by the reconciler once the desktop shows.
-    /// A `follows` window belongs to whichever desktop its display shows and is never parked.
+    /// A `follows` window is pinned to the display it sits on (`displayAt` its frame; its desktop's display when
+    /// that is off screen): it belongs to whichever desktop that display shows and is never parked.
     public func apply(windows: [WindowID], isTiled: (WindowID) -> Bool, frame: (WindowID) -> CGRect?,
                       parkOrigin: (WindowID, CGRect) -> CGPoint, isInCorner: (WindowID, CGRect) -> Bool,
                       fit: (WindowID, CGRect) -> CGRect,
-                      refusals: (WindowID) -> Int, claimAllowed: Bool, follows: (WindowID) -> Bool = { _ in false }) -> Plan {
+                      refusals: (WindowID) -> Int, claimAllowed: Bool, follows: (WindowID) -> Bool = { _ in false },
+                      displayAt: (CGRect) -> DisplayID? = { _ in nil }) -> Plan {
         var plan = Plan()
         for w in windows { adopt(w) }
         let shown = self.shown
-        for w in windows where follows(w) && !shown.contains(workspace(of: w)) {
-            guard let d = display(of: workspace(of: w)), let target = shownDesktop(on: d) else { continue }
+        for w in windows where follows(w) {
+            let home = workspace(of: w)
+            guard let d = frame(w).flatMap(displayAt) ?? display(of: home), let target = shownDesktop(on: d), target != home else { continue }
             log("#\(w) floats along to desktop \(target + 1)")
             membership[w] = target
             // Parked before the option was on: back to where it was.

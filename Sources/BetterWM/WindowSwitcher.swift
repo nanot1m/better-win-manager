@@ -78,11 +78,14 @@ final class WindowSwitcher {
         groups = manager.windowsByDesktop().map { desktop, windows in
             Group(desktop: desktop, items: items(windows.filter { $0.windowID.map { !shared.contains($0) } ?? true }, desktop: desktop))
         }
-        var floating = items(shared.sorted().compactMap { manager.system.axWindow($0) }, desktop: Self.floatingGroup)
-        for own in manager.ownWindows {
-            floating.append(Item(window: nil, id: CGWindowID(own.windowNumber), desktop: Self.floatingGroup, title: own.title, app: "BetterWM", icon: NSApp.applicationIconImage))
+        // Our own windows (Settings, Welcome) are floating windows of the current desktop, reached through AppKit.
+        if let current = manager.currentDesktop {
+            let own = manager.ownWindows.map { Item(window: nil, id: CGWindowID($0.windowNumber), desktop: current, title: $0.title, app: "BetterWM", icon: NSApp.applicationIconImage) }
+            if let i = groups.firstIndex(where: { $0.desktop == current }) { groups[i] = Group(desktop: current, items: groups[i].items + own) }
+            else if !own.isEmpty { groups.append(Group(desktop: current, items: own)) }
         }
-        if !floating.isEmpty { groups.append(Group(desktop: Self.floatingGroup, items: floating)) }
+        let pinned = items(shared.sorted().compactMap { manager.system.axWindow($0) }, desktop: Self.floatingGroup)
+        if !pinned.isEmpty { groups.append(Group(desktop: Self.floatingGroup, items: pinned)) }
         groups = groups.filter { !$0.items.isEmpty }
         flat = groups.flatMap(\.items)
         selected = 0
@@ -211,7 +214,7 @@ final class SwitcherView: NSView {
         var row = newRow()
         var rowWidth: CGFloat = 0
         for group in groups {
-            let title = NSTextField(labelWithString: group.desktop == WindowSwitcher.floatingGroup ? "Floating" : "Desktop \(group.desktop + 1)")
+            let title = NSTextField(labelWithString: group.desktop == WindowSwitcher.floatingGroup ? "Pinned" : "Desktop \(group.desktop + 1)")
             title.font = .systemFont(ofSize: 11, weight: .semibold)
             title.textColor = group.desktop == current ? .controlAccentColor : .secondaryLabelColor
             let tiles = NSStackView()

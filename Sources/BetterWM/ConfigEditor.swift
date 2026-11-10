@@ -43,7 +43,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var autoTileSwitch: NSSwitch!
     private var tileOnStartSwitch: NSSwitch!
     private var restoreSwitch: NSSwitch!
-    private var floatingFollowsSwitch: NSSwitch!
+    private var autoPinSwitch: NSSwitch!
     private var debugLogSwitch: NSSwitch!
     private var checkUpdatesSwitch: NSSwitch!
     private var autoUpdateSwitch: NSSwitch!
@@ -469,7 +469,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private func generalGroups() -> [NSView] {
         tileOnStartSwitch = toggle()
         restoreSwitch = toggle()
-        floatingFollowsSwitch = toggle()
+        autoPinSwitch = toggle()
         debugLogSwitch = toggle()
         checkUpdatesSwitch = toggle()
         autoUpdateSwitch = toggle()
@@ -495,7 +495,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 row("Remember layouts", "Save each desktop's grid and floating windows, and restore them on launch.", [restoreSwitch]),
             ]),
             group("Other desktops", [
-                row("Floating windows on every desktop", "An untiled window follows to whichever desktop you switch to instead of staying on one.", [floatingFollowsSwitch]),
+                row("Pin new floating windows", "A window that starts out floating follows to whichever desktop you switch to. Pin or unpin any window by hand with the Pin action.", [autoPinSwitch]),
             ]),
             group("Switcher", [
                 row("⌥Tab window switcher", "Windows grouped by desktop; the hotkey is on the Hotkeys page.", [switcherSwitch]),
@@ -985,7 +985,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             ("Move & Layout", [
                 "moveLeft", "moveRight", "moveUp", "moveDown",
                 "mergeLeft", "mergeRight",
-                "toggleTile", "grow", "shrink", "toggleStack", "toggleZen", "toggleTabs", "retile", "equalize",
+                "toggleTile", "togglePin", "grow", "shrink", "toggleStack", "toggleZen", "toggleTabs", "retile", "equalize",
                 "pause", "refreshRing",
             ]),
             ("Actions & Overview", [
@@ -1097,7 +1097,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         on(autoTileSwitch, config.autoTile)
         on(tileOnStartSwitch, config.tileExistingOnStart)
         on(restoreSwitch, config.restoreLayouts)
-        on(floatingFollowsSwitch, config.floatingOnAllDesktops)
+        on(autoPinSwitch, config.autoPinFloating)
         on(debugLogSwitch, config.debugLog)
         on(checkUpdatesSwitch, config.checkForUpdates)
         on(autoUpdateSwitch, config.autoUpdate)
@@ -1203,7 +1203,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.autoTile = isOn(autoTileSwitch)
         config.tileExistingOnStart = isOn(tileOnStartSwitch)
         config.restoreLayouts = isOn(restoreSwitch)
-        config.floatingOnAllDesktops = isOn(floatingFollowsSwitch)
+        config.autoPinFloating = isOn(autoPinSwitch)
         config.debugLog = isOn(debugLogSwitch)
         config.checkForUpdates = isOn(checkUpdatesSwitch)
         config.autoUpdate = isOn(autoUpdateSwitch)

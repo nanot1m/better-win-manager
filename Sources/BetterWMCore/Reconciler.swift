@@ -12,6 +12,8 @@ public struct DesiredState: Equatable {
     public var executor = Executor()
     /// Windows floating on purpose (untiled by hand or restored as floating); never arrivals, even on a first visit.
     public var floating: Set<WindowID> = []
+    /// Floating windows that go along to whichever desktop shows instead of parking with their own.
+    public var pinned: Set<WindowID> = []
 
     public init() {}
 
@@ -31,6 +33,7 @@ public struct DesiredState: Equatable {
         for k in grids.keys { grids[k]?.remove(w) }
         for k in seen.keys { seen[k]?.remove(w) }
         floating.remove(w)
+        pinned.remove(w)
         executor.forget(w)
     }
 
@@ -125,6 +128,7 @@ public struct Reconciler {
             state.grids[space] = grid
             state.seen[space] = hereIDs
             state.floating.subtract(grid.windows)
+            state.pinned.subtract(grid.windows)
             state.retileRequested.remove(space)
         }
         var wanted = plan(for: state, snapshot)

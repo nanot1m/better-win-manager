@@ -527,17 +527,18 @@ struct ReconcilerTests {
         var state = DesiredState()
         var g = Grid(); g.columns = [Column([1])]
         state.grids[space] = g
+        state.pinned = [2]
         let snap = Snapshot(screens: [], windows: [
             WindowInfo(id: 1, pid: 1, bundleID: "com.a", frame: CGRect(x: 0, y: 0, width: 800, height: 600), spaces: [space], title: "tiled"),
             WindowInfo(id: 2, pid: 2, bundleID: "com.b", frame: CGRect(x: 100, y: 100, width: 400, height: 300), spaces: [space], title: "float"),
         ], focused: nil, now: Date(timeIntervalSinceReferenceDate: 0))
         let saved = SavedLayout.capture(state, snap, floatingSpace: { _ in space })
-        expect(saved.spaces.count == 1 && saved.spaces[0].floating.map { $0.title } == ["float"], #function, #line)
+        expect(saved.spaces.count == 1 && saved.spaces[0].floating.map { $0.title } == ["float"] && saved.spaces[0].floating[0].pinned == true, #function, #line)
         let encoded = try! JSONEncoder().encode(saved)
         expect(try! JSONDecoder().decode(SavedLayout.self, from: encoded) == saved, #function, #line)
         let later = WindowInfo(id: 9, pid: 9, bundleID: "com.b", frame: CGRect(x: 1900, y: 1200, width: 400, height: 300), spaces: [space], title: "float")
         let restored = saved.restoreFloating(space: space, candidates: [later])
-        expect(restored.count == 1 && restored[0].id == 9 && restored[0].frame == CGRect(x: 100, y: 100, width: 400, height: 300), #function, #line)
+        expect(restored.count == 1 && restored[0].id == 9 && restored[0].frame == CGRect(x: 100, y: 100, width: 400, height: 300) && restored[0].pinned, #function, #line)
         let legacy = try! JSONDecoder().decode(SavedLayout.self, from: Data(#"{"version":2,"spaces":[{"id":5,"columns":[]}]}"#.utf8))
         expect(legacy.spaces[0].floating.isEmpty, #function, #line)
     }
@@ -855,6 +856,25 @@ struct ReconcilerTests {
         expect(v.desktops(on: "D") == [0, 1, 2, 3] && v.display(of: 0) == "D", #function, #line)
     }
 
+    func testPinnedWindowBelongsToTheDisplayItSitsOn() {
+        let v = desktops(2)
+        v.connect(["A", "B"])
+        let a = CGRect(x: 0, y: 0, width: 1600, height: 1000), b = CGRect(x: 1600, y: 0, width: 1600, height: 1000)
+        v.adopt(7, into: 0)
+        // Dragged to display B, the pinned window belongs to the desktop B shows and stays put when A switches.
+        _ = v.apply(windows: [7], isTiled: { _ in false }, frame: { _ in CGRect(x: 1700, y: 100, width: 400, height: 300) },
+                    parkOrigin: { _, f in f.origin }, isInCorner: { _, _ in false }, fit: { $1 },
+                    refusals: { _ in 0 }, claimAllowed: true, follows: { _ in true },
+                    displayAt: { f in a.contains(f.center) ? "A" : b.contains(f.center) ? "B" : nil })
+        expect(v.workspace(of: 7) == 2 && !v.isParked(7), #function, #line)
+        v.switchTo(1)
+        _ = v.apply(windows: [7], isTiled: { _ in false }, frame: { _ in CGRect(x: 1700, y: 100, width: 400, height: 300) },
+                    parkOrigin: { _, f in f.origin }, isInCorner: { _, _ in false }, fit: { $1 },
+                    refusals: { _ in 0 }, claimAllowed: true, follows: { _ in true },
+                    displayAt: { f in a.contains(f.center) ? "A" : b.contains(f.center) ? "B" : nil })
+        expect(v.workspace(of: 7) == 2 && !v.isParked(7), #function, #line)
+    }
+
     func testSendingLastDesktopLeavesANewOne() {
         let v = desktops(1)
         v.connect(["A", "B"])
@@ -1054,6 +1074,7 @@ let tests: [(String, () -> Void)] = [
     ("desktopsLiveOnDisplays", t.testDesktopsLiveOnDisplays),
     ("mainDisplayChangeKeepsDesktops", t.testMainDisplayChangeKeepsDesktops),
     ("sendingLastDesktopLeavesANewOne", t.testSendingLastDesktopLeavesANewOne),
+    ("pinnedWindowBelongsToTheDisplayItSitsOn", t.testPinnedWindowBelongsToTheDisplayItSitsOn),
     ("displayArrivingWhereOneLeftTakesOverItsDesktops", t.testDisplayArrivingWhereOneLeftTakesOverItsDesktops),
     ("directionalFocusInGrid", t.testDirectionalFocusInGrid),
     ("ringButtonsGetRoomWhenNoTabsAbove", t.testRingButtonsGetRoomWhenNoTabsAbove),

@@ -6,6 +6,16 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-11-10
+
+### Added
+- Pinned floating windows: `togglePin` (⌃⌥P; a ring button by default on floating windows, showing a pin or a crossed pin for the window's state; also a Window menu item) pins the focused floating window to the display it sits on: it stays put whichever desktop that display shows, and dragging it to another display pins it there. Pinned windows have the ⧉ chip (per screen) and the switcher's Pinned group that shared floating windows had. A tiled window is untiled first; tiling a pinned window unpins it, and sending it to a desktop unpins it and lets it float there. Pins are saved with the layout.
+- `autoPinFloating` (Settings › General › Other desktops), off by default: every window that starts out floating is pinned.
+
+### Changed
+- `floatingOnAllDesktops` is gone: floating windows stay on their desktop unless pinned. Existing configs start with nothing pinned.
+- `focusFloating` (⌃F) cycles the floating windows on the current desktop, pinned ones included; BetterWM's own windows (Settings, Welcome) count as floating windows of the current desktop rather than shared ones.
+
 ## [0.51.0] - 2026-11-10
 
 ### Changed
