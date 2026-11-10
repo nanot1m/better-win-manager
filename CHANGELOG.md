@@ -7,6 +7,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 ## [Unreleased]
 
 ### Changed
+- Focus next/previous from a tiled window stays among the desktop's own windows: the floating windows shared across desktops (and BetterWM's own Settings and Welcome windows) are skipped. From a floating window the cycle still covers everything; ⌃F cycles the floating windows on their own.
 - Entering and leaving zen mode glides the window to its new frame over a quarter of a second instead of jumping (off with Reduce Motion or fades disabled).
 
 ## [0.49.0] - 2026-11-09

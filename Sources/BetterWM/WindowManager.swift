@@ -1500,13 +1500,16 @@ final class WindowManager {
     }
 
     /// Cycles through every window on the current desktop, tiled or floating, in reading order
-    /// (left to right, top to bottom), starting from the focused one.
+    /// (left to right, top to bottom), starting from the focused one. From a tiled window the floating
+    /// windows shared across desktops stay out of the cycle; they have `focusFloating` for themselves.
     func focusNext(reverse: Bool = false) {
         guard let current = currentDesktop else { return }
-        let others = windowsByDesktop().first(where: { $0.desktop == current })?.windows ?? []
+        let fromTiled = !NSApp.isActive && (system.focused.flatMap(id).map { state.isTiled($0) } ?? false)
+        let others = (windowsByDesktop().first(where: { $0.desktop == current })?.windows ?? [])
+            .filter { !fromTiled || !(id($0).map(follows) ?? false) }
         // Our own titled windows (Settings, Welcome) are not in the list: Accessibility calls into our own
         // process would stall the main thread. They join the cycle through AppKit instead.
-        let own = NSApp.windows.filter { $0.isVisible && $0.styleMask.contains(.titled) }
+        let own = fromTiled && config.floatingOnAllDesktops ? [] : ownWindows
         let count = others.count + own.count
         guard count > 0 else { return }
         var i: Int
