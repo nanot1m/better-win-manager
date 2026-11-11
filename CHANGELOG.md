@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.52.3] - 2026-11-11
+
+### Changed
+- Waking from sleep no longer re-checks the display set itself; the display-change notification already handles it, so the duplicate sync and log lines on every wake are gone.
+
 ## [0.52.2] - 2026-11-10
 
 ### Fixed
