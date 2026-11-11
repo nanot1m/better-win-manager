@@ -37,7 +37,11 @@ The windows open when a desktop is first seen are tiled left to right. Turn that
 
 BetterWM takes over what Mission Control did; three settings keep the two from fighting.
 
-1. **Keep one native desktop per display.** BetterWM's desktops replace macOS Spaces: they switch instantly, keep their layouts and follow their display. Extra native desktops only add a second, slower set of places for windows to hide. In Mission Control, close every desktop but the first on each display. Leave "Displays have separate Spaces" on.
+1. **Keep one native desktop, shared by all displays.** BetterWM's desktops replace macOS Spaces: they switch instantly, keep their layouts and live on a display each. Extra native desktops only add a second, slower set of places for windows to hide. In Mission Control, close every desktop but the first, and turn off "Displays have separate Spaces" (System Settings › Desktop & Dock › Mission Control), as AeroSpace recommends too: with it on, every display carries its own set of Spaces and native fullscreen windows live in Spaces BetterWM cannot always switch to. Log out and in for the change to apply, or run:
+
+   ```sh
+   defaults write com.apple.spaces spans-displays -bool true && killall SystemUIServer
+   ```
 
    ![Desktop & Dock, Mission Control section](images/desktop-dock.png)
 

@@ -979,13 +979,13 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         let layout: [(title: String, keys: [String])] = [
             ("Focus & Navigation", [
                 "focusLeft", "focusRight", "focusUp", "focusDown",
-                "focusNext", "focusPrevious",
+                "focusNext", "focusPrevious", "focusFloating", "focusFullscreen",
                 "switcher", "switcherBack",
             ]),
             ("Move & Layout", [
                 "moveLeft", "moveRight", "moveUp", "moveDown",
                 "mergeLeft", "mergeRight",
-                "toggleTile", "togglePin", "grow", "shrink", "toggleStack", "toggleZen", "toggleTabs", "retile", "equalize",
+                "toggleTile", "togglePin", "toggleFullscreen", "grow", "shrink", "toggleStack", "toggleZen", "toggleTabs", "retile", "equalize",
                 "pause", "refreshRing",
             ]),
             ("Actions & Overview", [

@@ -2,7 +2,7 @@ import Foundation
 
 public struct Config {
     /// Bumped whenever a key is renamed or its meaning changes; `parse` migrates older files.
-    public static let schemaVersion = 6
+    public static let schemaVersion = 7
     public init() {}
     public var gap: CGFloat = 16
     public var outerGap: CGFloat = 16
@@ -22,7 +22,7 @@ public struct Config {
     public static let defaultHotkeys: [String: String] = {
         var h: [String: String] = [
             "popup": "alt+cmd+space", "switcher": "alt+tab", "switcherBack": "alt+shift+tab",
-            "focusNext": "ctrl+]", "focusPrevious": "ctrl+[", "focusFloating": "ctrl+f",
+            "focusNext": "ctrl+]", "focusPrevious": "ctrl+[", "focusFloating": "ctrl+f", "toggleFullscreen": "ctrl+alt+f",
             "moveLeft": "ctrl+alt+left", "moveRight": "ctrl+alt+right", "moveUp": "ctrl+alt+up", "moveDown": "ctrl+alt+down",
             "mergeLeft": "ctrl+alt+shift+left", "mergeRight": "ctrl+alt+shift+right",
             "toggleTile": "ctrl+alt+t", "togglePin": "ctrl+alt+p", "toggleStack": "ctrl+alt+s", "toggleZen": "ctrl+alt+z", "retile": "ctrl+alt+r", "equalize": "ctrl+alt+e",
@@ -135,7 +135,7 @@ public struct Config {
     public var focusRingActionKeys: [String] = Config.defaultRingActionKeys
     public static let defaultRingActionKeys = ["toggleTile", "togglePin", "toggleStack", "toggleTabs", "retile", "sendToDesktop"]
     /// Actions that make sense as a ring button, in the order they appear.
-    public static let ringActionChoices = ["toggleTile", "togglePin", "toggleStack", "toggleZen", "toggleTabs", "grow", "shrink", "equalize", "retile",
+    public static let ringActionChoices = ["toggleTile", "togglePin", "toggleFullscreen", "toggleStack", "toggleZen", "toggleTabs", "grow", "shrink", "equalize", "retile",
                                            "sendToDesktop", "sendToPreviousDesktop", "sendToNextDesktop", "overview", "popup"]
     /// Measure each window's real corner radius once and match it; `focusRingRadius` is the fallback.
     public var focusRingAutoRadius: Bool = true
@@ -341,11 +341,11 @@ public struct Config {
     public static let actions: [(key: String, title: String)] = [
         ("popup", "Window actions popup"), ("switcher", "Window switcher (⌥Tab)"), ("switcherBack", "Window switcher, backwards"),
         ("overview", "Desktop overview"),
-        ("focusNext", "Focus next window"), ("focusPrevious", "Focus previous window"), ("focusFloating", "Focus floating window"),
+        ("focusNext", "Focus next window"), ("focusPrevious", "Focus previous window"), ("focusFloating", "Focus floating window"), ("focusFullscreen", "Focus fullscreen window"),
         ("focusLeft", "Focus left"), ("focusRight", "Focus right"), ("focusUp", "Focus up"), ("focusDown", "Focus down"),
         ("moveLeft", "Move left"), ("moveRight", "Move right"), ("moveUp", "Move up"), ("moveDown", "Move down"),
         ("mergeLeft", "Merge into left column"), ("mergeRight", "Merge into right column"),
-        ("toggleTile", "Tile / untile focused window"), ("togglePin", "Pin / unpin focused floating window"), ("grow", "Grow focused window"), ("shrink", "Shrink focused window"),
+        ("toggleTile", "Tile / untile focused window"), ("togglePin", "Pin / unpin focused floating window"), ("toggleFullscreen", "Fullscreen the focused window within BetterWM"), ("grow", "Grow focused window"), ("shrink", "Shrink focused window"),
         ("toggleStack", "Toggle stacked layout on this screen"),
         ("toggleZen", "Toggle zen mode on this screen"),
         ("toggleTabs", "Tabs: show or hide them on tiled windows; on a stacked screen, the next stacked look"),
@@ -686,6 +686,7 @@ public struct Config {
             // v3 added the menu widget; files that already pinned an explicit widget order get it appended.
             if !cfg.barWidgets.contains(.menu) { cfg.barWidgets.append(.menu) }
         }
+        if version < 7, hadHotkeys, cfg.hotkeys["toggleFullscreen"] == nil { cfg.hotkeys["toggleFullscreen"] = defaultHotkeys["toggleFullscreen"] }
         if version < 6, hadHotkeys, cfg.hotkeys["togglePin"] == nil { cfg.hotkeys["togglePin"] = defaultHotkeys["togglePin"] }
         if version < 6, !cfg.focusRingActionKeys.contains("togglePin") {
             cfg.focusRingActionKeys.insert("togglePin", at: (cfg.focusRingActionKeys.firstIndex(of: "toggleTile") ?? -1) + 1)

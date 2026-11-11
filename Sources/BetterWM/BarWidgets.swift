@@ -577,13 +577,13 @@ final class FullscreenWidget: BarWidget {
     let id = Config.BarWidget.fullscreen
     var wantsRefresh: (() -> Void)?
     private let context: BarContext
-    private final class Row { let stack: NSStackView; var chips: [ChipView] = []; var spaces: [UInt64] = []
-        init() { stack = NSStackView(); stack.orientation = .horizontal; stack.spacing = 10; stack.alignment = .centerY } }
+    private final class Row { let screen: NSScreen; let stack: NSStackView; var chips: [ChipView] = []; var spaces: [UInt64] = []
+        init(screen: NSScreen) { self.screen = screen; stack = NSStackView(); stack.orientation = .horizontal; stack.spacing = 10; stack.alignment = .centerY } }
     private var rows: [Row] = []
 
     init(context: BarContext) { self.context = context }
     func makeView(for screen: NSScreen) -> NSView {
-        let r = Row()
+        let r = Row(screen: screen)
         rows.append(r)
         return r.stack
     }
@@ -591,6 +591,7 @@ final class FullscreenWidget: BarWidget {
     func render(_ style: BarStyle) {
         let spaces = context.fullscreenSpaces()
         for r in rows {
+            let shown = Spaces.current(for: r.screen)
             r.spaces = spaces.map(\.space)
             r.stack.isHidden = spaces.isEmpty
             while r.chips.count < spaces.count {
@@ -606,11 +607,21 @@ final class FullscreenWidget: BarWidget {
             for (i, c) in r.chips.enumerated() {
                 c.isHidden = i >= spaces.count
                 guard i < spaces.count else { continue }
+                // Styled as the desktop chips are: the accent while this screen shows the Space, otherwise like a
+                // desktop that is not shown.
+                let isCurrent = spaces[i].space == shown
                 c.number.attributedStringValue = NSAttributedString(string: "⛶", attributes: [
-                    .foregroundColor: style.textColor.dimmed(0.7), .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                    .foregroundColor: isCurrent ? style.activeColor.contrastingText : style.textColor.dimmed(0.7),
+                    .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
                 ])
-                c.layer?.backgroundColor = style.textColor.dimmed(0.1).cgColor
-                c.setApps(spaces[i].pids.map { ($0, []) }, focused: nil, color: style.activeColor)
+                if style.config.barChipStyle == "glass", Glass.makeView() != nil {
+                    c.setGlass(true, tint: isCurrent ? style.activeColor : nil, clear: style.config.glassStyle == "clear")
+                    c.layer?.backgroundColor = nil
+                } else {
+                    c.setGlass(false, tint: nil)
+                    c.layer?.backgroundColor = isCurrent ? style.activeColor.cgColor : style.textColor.dimmed(0.1).cgColor
+                }
+                c.setApps(spaces[i].pids.map { ($0, []) }, focused: nil, color: style.focusOutline ?? (isCurrent ? style.activeColor.contrastingText : style.activeColor))
             }
         }
     }

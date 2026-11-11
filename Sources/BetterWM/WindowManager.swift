@@ -132,9 +132,9 @@ final class WindowManager {
     private var lastAway: Set<WindowID> = []
     private func markAway(_ snap: inout Snapshot) {
         let missing = missingDisplays
-        snap.away = Set(snap.windows.map(\.id).filter { id in
-            isAway(id) || (desktops.display(of: desktops.workspace(of: id)).map(missing.contains) ?? false)
-        })
+        snap.away = Set(snap.windows.filter { w in
+            w.fullscreen || isAway(w.id) || (desktops.display(of: desktops.workspace(of: w.id)).map(missing.contains) ?? false)
+        }.map(\.id))
         if snap.away != lastAway {
             lastAway = snap.away
             let screens = NSScreen.screens.map { "\(Spaces.current(for: $0))\(Spaces.showsFullscreen($0) ? " fullscreen" : "")" }
@@ -152,7 +152,11 @@ final class WindowManager {
         system.spaceOf = { [unowned self] screen in
             VirtualWorkspaces.spaceID(self.desktops.shownDesktop(on: Self.displayID(screen)) ?? self.desktops.active)
         }
-        system.spacesOfWindow = { [unowned self] id in [VirtualWorkspaces.spaceID(self.desktops.workspace(of: id))] }
+        // A window macOS has taken (fullscreen) is on no desktop of ours until it comes back: the grid lets go of
+        // it, remembering its slot, and the windows left close ranks.
+        system.spacesOfWindow = { [unowned self] id in
+            self.isAway(id) || self.system.axWindow(id)?.isFullscreen == true ? [] : [VirtualWorkspaces.spaceID(self.desktops.workspace(of: id))]
+        }
     }
 
     /// Quitting must leave every window reachable: unpark all of them and write the layout one last time.
@@ -252,8 +256,10 @@ final class WindowManager {
             if let i = out[desktop]?.firstIndex(where: { $0.pid == pid }) { out[desktop]![i].windows.append(id) }
             else { out[desktop, default: []].append((pid, [id])) }
         }
+        // A window macOS has taken fullscreen is on a Space of its own, not on its desktop, until it comes back;
+        // the bar lists it under its fullscreen chip instead.
         for info in CGWindowInfo.list([.optionOnScreenOnly, .excludeDesktopElements]) where info.isOrdinaryOtherApp {
-            guard desktops.isKnown(info.id) else { continue }
+            guard desktops.isKnown(info.id), !lastAway.contains(info.id) else { continue }
             add(info.pid, info.id, to: desktops.workspace(of: info.id))
         }
         for id in desktops.knownWindows where desktops.isParked(id) && system.inLastSnapshot.contains(id) {
@@ -277,11 +283,50 @@ final class WindowManager {
     }
 
     /// Brings `w` to front, switching to its desktop first when needed.
+    /// Windows macOS has taken fullscreen that we hold a handle for (they went fullscreen while we watched),
+    /// oldest first; those of `desktop` only when given.
+    func fullscreenWindows(ofDesktop desktop: Int? = nil) -> [AXWindow] {
+        lastAway.filter { id in desktop.map { desktops.workspace(of: id) == $0 } ?? true }.sorted().compactMap { system.axWindow($0) }
+    }
+
+    /// Every fullscreen Space with the window it is for: Accessibility does not list windows on other Spaces, so
+    /// one that was fullscreen before we started is known from WindowServer alone, by id and owner.
+    func fullscreenTargets() -> [(space: SpaceID, id: WindowID, pid: pid_t)] {
+        Spaces.fullscreenSpaceIDs().compactMap { space in Spaces.mainWindow(on: space).map { (space, $0.id, $0.pid) } }
+    }
+
+    /// Goes to a fullscreen Space (a chip in the bar, the switcher); already there, back to the desktop.
+    func showFullscreenSpace(_ space: SpaceID) {
+        if NSScreen.screens.contains(where: { Spaces.current(for: $0) == space }) {
+            leaveFullscreen(toDesktop: desktops.active)
+            return
+        }
+        Log.write("desktop", "to fullscreen Space \(space)")
+        // Activating the app is the one real switch there is (there is no public call, and SkyLight's private one
+        // only moves the pointer, leaving the old Space on screen). It fails when the app also has a window on the
+        // current desktop; raising the fullscreen window itself, when we hold a handle, covers some of that.
+        if let id = lastAway.first(where: { Spaces.spaces(of: $0).contains(space) }), let w = system.axWindow(id) { w.raise() }
+        activateSpace(space)
+    }
+
+    /// Cycles through the fullscreen Spaces: the next after the one shown, or the first.
+    func focusFullscreen() {
+        let all = Spaces.fullscreenSpaceIDs()
+        guard !all.isEmpty else { return }
+        let shown = NSScreen.screens.map(Spaces.current(for:))
+        let next = all.firstIndex(where: shown.contains).map { all[($0 + 1) % all.count] } ?? all[0]
+        showFullscreenSpace(next)
+    }
+
     func activate(_ w: AXWindow, onDesktop desktop: Int) {
-        if desktop != currentDesktop {
+        if desktop >= 0, desktop != currentDesktop {
             switchDesktop(desktop)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { w.raise() }
         } else {
+            if desktop >= 0 {
+                leaveFullscreen(toDesktop: desktop, focusTop: false)
+                if stuckOnFullscreen(ofDesktop: desktop) { return }
+            }
             w.raise()
         }
     }
@@ -299,14 +344,20 @@ final class WindowManager {
     func switchDesktop(_ index: Int, thenFocus: WindowID? = nil) {
         let v = desktops
         guard index >= 0 else { return }
-        // Asking for the desktop you are already on cycles focus through its windows instead.
+        // Asking for the desktop you are already on cycles focus through its windows instead; from a fullscreen
+        // Space on its display it goes back to the desktop.
         if index == v.active {
-            Log.write("desktop", "workspace \(index + 1) already active; focusing next window")
+            if leaveFullscreen(toDesktop: index) { return }
+            if stuckOnFullscreen(ofDesktop: index) { return }
+            let shown = screen(ofDesktop: index).map { Spaces.current(for: $0) }
+            Log.write("desktop", "workspace \(index + 1) already active (its screen shows Space \(shown ?? 0), desktop: \(shown.map(Spaces.isDesktop) ?? true)); focusing next window")
             focusNext()
             return
         }
         // Workspaces are created on demand: asking for 6 with 4 configured makes 5 and 6.
         if index >= v.count { v.setCount(index + 1) }
+        // Its display may be showing a fullscreen Space; the desktop has to be on screen for the switch to show.
+        leaveFullscreen(toDesktop: index, focusTop: false)
         // Hide the ring during the switch so it doesn't linger on the parked window.
         focusRing.suspended = true
         Log.write("desktop", "switch to workspace \(index + 1) on display \(v.display(of: index)?.prefix(8) ?? "?")")
@@ -372,6 +423,33 @@ final class WindowManager {
         switchDesktop(desktops.count)
     }
 
+    /// From a fullscreen Space on the display of `ws`, back to the desktop: activate an app with a window there,
+    /// another app than the fullscreen one where possible (activating the fullscreen app changes nothing), and
+    /// raise the desktop's top window, which brings macOS over even when it is the same app.
+    @discardableResult
+    private func leaveFullscreen(toDesktop ws: Int, focusTop: Bool = true) -> Bool {
+        guard let s = screen(ofDesktop: ws), case let real = Spaces.current(for: s), Spaces.showsFullscreen(s),
+              let desktopSpace = Spaces.desktopSpace(onDisplayOf: real) else { return false }
+        let fullscreenApps = Set(Spaces.owners(on: real))
+        let here = zOrder.filter { desktops.workspace(of: $0) == ws && !desktops.isParked($0) && !lastAway.contains($0) }
+        // Only another app's window can carry us over; a window of the fullscreen app raised now would join its
+        // fullscreen Space instead, and the whole app would look fullscreen.
+        let carriers = here.filter { !fullscreenApps.contains(system.pid(of: $0) ?? 0) }
+        Log.write("desktop", "back from fullscreen Space \(real) to desktop \(ws + 1)")
+        guard activateSpace(desktopSpace, prefer: carriers, excluding: fullscreenApps) else { return false }
+        if focusTop, let top = carriers.first { focusWindow(id: top) }
+        return true
+    }
+
+    /// The display of `ws` shows a fullscreen Space we cannot leave (only the fullscreen app has windows on the
+    /// desktop, and activating it changes nothing): raising a desktop window now would put it over the fullscreen
+    /// window instead of switching, so callers stop here.
+    private func stuckOnFullscreen(ofDesktop ws: Int) -> Bool {
+        guard let s = screen(ofDesktop: ws), Spaces.showsFullscreen(s) else { return false }
+        Log.write("desktop", "still on a fullscreen Space: no other app has a window on desktop \(ws + 1) to switch through; leave fullscreen by hand")
+        return true
+    }
+
     /// Moves a desktop (the active one by default), windows and all, to the next display; it becomes active there.
     func sendDesktopToNextScreen(_ which: Int? = nil) {
         let ds = desktops.displays
@@ -421,9 +499,11 @@ final class WindowManager {
     /// Goes to another macOS Space by activating an app with a window on it, as a Dock click would; there is no
     /// public call to switch Spaces, and Accessibility does not even list windows on other Spaces. `prefer`
     /// names windows whose apps to try first.
+    /// `excluding` names apps that must not be activated: the app of a fullscreen Space being left, which would
+    /// only bring its desktop windows onto that Space.
     @discardableResult
-    func activateSpace(_ space: SpaceID, prefer: [WindowID] = []) -> Bool {
-        let all = Spaces.windows(on: space)
+    func activateSpace(_ space: SpaceID, prefer: [WindowID] = [], excluding: Set<pid_t> = []) -> Bool {
+        let all = Spaces.windows(on: space).filter { !excluding.contains($0.pid) }
         let ordered = prefer.compactMap { id in all.first { $0.id == id } } + all.filter { !prefer.contains($0.id) }
         var tried: Set<pid_t> = []
         for w in ordered where tried.insert(w.pid).inserted {
@@ -913,7 +993,7 @@ final class WindowManager {
                 // Only windows appearing after launch: the first snapshot is the whole desktop, whose floaters
                 // the saved layout pins or not as they were.
                 if self.config.autoPinFloating, hadWindows {
-                    for id in ids.subtracting(self.lastWindowIDs) where !next.isTiled(id) {
+                    for id in ids.subtracting(self.lastWindowIDs) where !next.isTiled(id) && !snap.away.contains(id) {
                         self.state.pinned.insert(id)
                         Log.write("pin", "auto-pin \(self.describe(id))")
                     }
@@ -1009,6 +1089,7 @@ final class WindowManager {
     /// Gives every not-yet-assigned window a workspace: its saved slot if one matches, otherwise the active one.
     /// Returns true if any window was placed from the saved layout, so the snapshot should be rebuilt.
     private func assignNewVirtualWindows(_ snap: Snapshot) -> Bool {
+        // A window macOS has fullscreen is on no desktop yet; it is adopted where it appears once it leaves.
         var pool = snap.windows.filter { !snap.away.contains($0.id) && !desktops.isKnown($0.id) }
         guard !pool.isEmpty else { return false }
         if Date() < virtualRestoreDeadline { Log.write("restore", "unassigned: \(pool.map { describe($0.id) })") }
@@ -1436,6 +1517,18 @@ final class WindowManager {
     }
 
     /// Zen on the screen holding the focused window (or the cursor): one centred window at a time.
+    /// The focused window takes the whole screen until another window of its grid is focused; the others keep
+    /// their slots underneath. A floating window is tiled first.
+    func toggleFullscreen() {
+        guard let w = system.focused, let id = id(w) else { return }
+        if !state.isTiled(id) { tile(w) }
+        guard let space = state.space(containing: id) else { return }
+        let on = state.grid(for: space).fullscreen != id
+        state.mutate(space) { $0.fullscreen = on ? id : nil }
+        Log.write("layout", "fullscreen \(on ? "on" : "off") for \(describe(w))")
+        apply()
+    }
+
     func toggleZen() {
         let anchor = system.focused?.frame.center ?? NSEvent.mouseLocation.toAX()
         guard let screen = screen(at: anchor) else { return }
@@ -1542,13 +1635,14 @@ final class WindowManager {
     }
 
     /// Cycles through every window on the current desktop, tiled or floating, in reading order
-    /// (left to right, top to bottom), starting from the focused one. From a tiled window the pinned floating
-    /// windows stay out of the cycle; they are on every desktop and would crowd each one's cycle.
+    /// (left to right, top to bottom), starting from the focused one, then through the desktop's windows that
+    /// macOS has fullscreen. From a tiled window the pinned floating windows stay out of the cycle; they are on
+    /// every desktop and would crowd each one's cycle.
     func focusNext(reverse: Bool = false) {
         guard let current = currentDesktop else { return }
         let fromTiled = !NSApp.isActive && (system.focused.flatMap(id).map { state.isTiled($0) } ?? false)
         let others = (windowsByDesktop().first(where: { $0.desktop == current })?.windows ?? [])
-            .filter { !fromTiled || !(id($0).map(follows) ?? false) }
+            .filter { !fromTiled || !(id($0).map(follows) ?? false) } + fullscreenWindows(ofDesktop: current)
         // Our own titled windows (Settings, Welcome) are not in the list: Accessibility calls into our own
         // process would stall the main thread. They join the cycle through AppKit instead.
         let own = ownWindows
@@ -1564,6 +1658,11 @@ final class WindowManager {
         }
         i = (i + (reverse ? -1 : 1) + count) % count
         if i < others.count {
+            // Leaving a fullscreen window for one on the desktop: the desktop's Space first, since raising a
+            // window of the fullscreen app alone would not bring it over.
+            if let f = system.focused.flatMap(id), lastAway.contains(f), let next = id(others[i]), !lastAway.contains(next) {
+                leaveFullscreen(toDesktop: current, focusTop: false)
+            }
             // The same path as directional focus: ring and tab marked ahead, then the raise.
             if let id = id(others[i]) { focusWindow(id: id) } else { others[i].raise() }
         } else {
@@ -1664,6 +1763,12 @@ final class WindowManager {
 
     private func focusWindow(id: WindowID) {
         guard let w = system.axWindow(id), w.isValid else { return }
+        // Raised while its display shows a fullscreen Space, a window of the fullscreen app would come up over the
+        // fullscreen window instead of bringing its desktop back; the desktop first.
+        if !lastAway.contains(id) {
+            leaveFullscreen(toDesktop: desktops.workspace(of: id), focusTop: false)
+            if stuckOnFullscreen(ofDesktop: desktops.workspace(of: id)) { return }
+        }
         let frame = targetFrame(of: id) ?? w.frame
         focusRing.show(windowID: id, frame: frame)
         intendFront(id)

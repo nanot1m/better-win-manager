@@ -12,14 +12,17 @@ public struct WindowInfo: Equatable {
     public var frame: CGRect
     public var spaces: [SpaceID]
     public var title: String
+    /// The window says it is in macOS fullscreen; steadier than where its Space is while a switch animates.
+    public var fullscreen: Bool
 
-    public init(id: WindowID, pid: pid_t, bundleID: String?, frame: CGRect, spaces: [SpaceID], title: String = "") {
+    public init(id: WindowID, pid: pid_t, bundleID: String?, frame: CGRect, spaces: [SpaceID], title: String = "", fullscreen: Bool = false) {
         self.id = id
         self.pid = pid
         self.bundleID = bundleID
         self.frame = frame
         self.spaces = spaces
         self.title = title
+        self.fullscreen = fullscreen
     }
 }
 
@@ -73,6 +76,17 @@ public enum Command: Equatable {
 public enum LayoutMode: String, Codable, CaseIterable {
     case columns, stacked
     public var title: String { self == .columns ? "Columns" : "Stacked (cascade)" }
+}
+
+/// A tiled window's place in a grid, kept while macOS has the window (fullscreen). `alone`: it had the column to itself.
+public struct AwaySlot: Equatable {
+    public var space: SpaceID
+    public var column: Int
+    public var index: Int
+    public var alone: Bool
+    public init(space: SpaceID, column: Int, index: Int, alone: Bool) {
+        self.space = space; self.column = column; self.index = index; self.alone = alone
+    }
 }
 
 public enum DropZone: Equatable {

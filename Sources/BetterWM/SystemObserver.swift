@@ -177,6 +177,9 @@ final class SystemObserver {
     private func closedByItsApp(_ id: WindowID, shownSpaces: Set<SpaceID>) -> Bool {
         let spaces = Spaces.spaces(of: id)
         if spaces.isEmpty { return true }
+        // On a fullscreen Space the window is macOS's, not closed; while the Space slides in it is briefly off the
+        // on-screen list, which must not count against it.
+        if spaces.contains(where: { !Spaces.isDesktop($0) }) { return false }
         return spaces.allSatisfy(shownSpaces.contains) && !CGWindowInfo.isOnScreen(id)
     }
 
@@ -207,7 +210,8 @@ final class SystemObserver {
     /// Spaces are the manager's business and main-thread state; the queue leaves them empty.
     private func info(_ id: WindowID, _ w: AXWindow, readTitle: Bool) -> WindowInfo {
         if readTitle || titles[id] == nil { titles[id] = w.title }
-        return WindowInfo(id: id, pid: w.pid, bundleID: w.bundleID, frame: WindowServerEvents.bounds(of: id) ?? w.frame, spaces: [], title: titles[id] ?? "")
+        return WindowInfo(id: id, pid: w.pid, bundleID: w.bundleID, frame: WindowServerEvents.bounds(of: id) ?? w.frame, spaces: [], title: titles[id] ?? "",
+                          fullscreen: w.isFullscreen)
     }
 
     private func publish(_ infos: [WindowInfo], handles: [WindowID: AXWindow], focused: AXWindow?, closed: Set<WindowID>) {

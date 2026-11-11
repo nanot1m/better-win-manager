@@ -14,6 +14,9 @@ public struct DesiredState: Equatable {
     public var floating: Set<WindowID> = []
     /// Floating windows that go along to whichever desktop shows instead of parking with their own.
     public var pinned: Set<WindowID> = []
+    /// Where a tiled window sat before macOS took it away (native fullscreen): it goes back there when it returns,
+    /// tiled whatever the auto-tile setting says, instead of arriving like a new window.
+    public var awaySlots: [WindowID: AwaySlot] = [:]
 
     public init() {}
 
@@ -34,6 +37,7 @@ public struct DesiredState: Equatable {
         for k in seen.keys { seen[k]?.remove(w) }
         floating.remove(w)
         pinned.remove(w)
+        awaySlots[w] = nil
         executor.forget(w)
     }
 
@@ -103,7 +107,22 @@ public struct Reconciler {
 
             for w in grid.windows where !hereIDs.contains(w) {
                 let stillHere = snapshot.window(w)?.spaces.contains(space) ?? false
-                if !stillHere { grid.remove(w) }
+                if !stillHere {
+                    if snapshot.window(w) != nil, let pos = grid.position(of: w) {
+                        state.awaySlots[w] = AwaySlot(space: space, column: pos.column, index: pos.index, alone: grid.columns[pos.column].windows.count == 1)
+                    }
+                    grid.remove(w)
+                }
+            }
+            // Fullscreen lasts while its window is the one in front: focus on another window of the grid ends it.
+            if let f = grid.fullscreen, let focused = snapshot.focused, focused != f, grid.contains(focused) { grid.fullscreen = nil }
+            for w in here where !grid.contains(w.id) {
+                guard let slot = state.awaySlots[w.id] else { continue }
+                state.awaySlots[w.id] = nil
+                guard slot.space == space else { continue }
+                let zone: DropZone = slot.alone || slot.column >= grid.columns.count
+                    ? .newColumn(index: min(slot.column, grid.columns.count)) : .stack(column: slot.column, index: slot.index)
+                grid.apply(zone, to: w.id)
             }
 
             // Arrivals: first look at a desktop keeps the on-screen order; later arrivals follow the strategy.

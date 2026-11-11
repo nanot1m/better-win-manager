@@ -35,15 +35,33 @@ enum Spaces {
         return body()
     }
 
+    /// The last answer WindowServer gave: while a Space switch animates it can give none, and treating every
+    /// Space as a desktop then would hand a fullscreen window to the layout for a moment.
+    private static var lastTypes: (desktops: Set<SpaceID>, fullscreen: Set<SpaceID>)?
     private static func spaceTypes() -> (desktops: Set<SpaceID>, fullscreen: Set<SpaceID>)? {
         if let c = typesCache { return c }
-        guard let cid = mainConnection?(), let arr = managedDisplaySpaces?(cid) as? [[String: Any]] else { return nil }
+        guard let cid = mainConnection?(), let arr = managedDisplaySpaces?(cid) as? [[String: Any]] else { return lastTypes }
         let all = arr.flatMap { $0["Spaces"] as? [[String: Any]] ?? [] }
         func ids(_ keep: (Int?) -> Bool) -> Set<SpaceID> { Set(all.filter { keep($0["type"] as? Int) }.compactMap { $0["id64"] as? SpaceID }) }
         let types = (desktops: ids { $0 == 0 }, fullscreen: ids { $0 != 0 })
+        guard !types.desktops.isEmpty else { return lastTypes }
+        lastTypes = types
         if caching { typesCache = types }
         return types
     }
+
+    /// The window a fullscreen Space is for: the largest ordinary window of a regular app on it (a browser also
+    /// keeps toolbar strips there as windows of their own).
+    static func mainWindow(on space: SpaceID) -> (id: CGWindowID, pid: pid_t)? {
+        CGWindowInfo.list(.optionAll).filter { w in
+            (0...100).contains(w.layer) && w.pid != getpid() && w.bounds.width > 200
+                && NSRunningApplication(processIdentifier: w.pid)?.activationPolicy == .regular
+                && spaces(of: w.id).contains(space)
+        }.max { $0.bounds.width * $0.bounds.height < $1.bounds.width * $1.bounds.height }.map { ($0.id, $0.pid) }
+    }
+
+    /// Every fullscreen and split-view Space, on any display.
+    static func fullscreenSpaceIDs() -> [SpaceID] { Array(spaceTypes()?.fullscreen ?? []).sorted() }
 
     /// True when the Space is not a user desktop, i.e. a fullscreen app or split view (type 4).
     static func isFullscreen(_ space: SpaceID) -> Bool { spaceTypes()?.fullscreen.contains(space) ?? false }
@@ -72,6 +90,17 @@ enum Spaces {
             return spaces.filter { ($0["type"] as? Int) != 0 }.compactMap { $0["id64"] as? SpaceID }
         }
         return []
+    }
+
+    /// The user desktop on the display that holds `space`; the way back from a fullscreen Space there.
+    static func desktopSpace(onDisplayOf space: SpaceID) -> SpaceID? {
+        guard let cid = mainConnection?(), let arr = managedDisplaySpaces?(cid) as? [[String: Any]] else { return nil }
+        for display in arr {
+            let spaces = display["Spaces"] as? [[String: Any]] ?? []
+            guard spaces.contains(where: { ($0["id64"] as? SpaceID) == space }) else { continue }
+            return spaces.first { ($0["type"] as? Int) == 0 }?["id64"] as? SpaceID
+        }
+        return nil
     }
 
     /// The Spaces either side of `space` in Mission Control order, on the display that holds it.

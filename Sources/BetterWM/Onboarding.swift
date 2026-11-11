@@ -13,6 +13,9 @@ final class OnboardingWindow {
     private let next = NSButton(title: "Continue", target: nil, action: nil)
     private let progress = NSTextField(labelWithString: "")
     private var menuBarCard: RecommendationView?
+    private var spacesCard: RecommendationView?
+    /// "Displays have separate Spaces" is off: macOS stores it inverted, as displays spanning one set of Spaces.
+    static var displaysShareSpaces: Bool { UserDefaults(suiteName: "com.apple.spaces")?.bool(forKey: "spans-displays") ?? false }
     private var menuBackgroundCard: RecommendationView?
     private var barChoice: NSButton!, menuChoice: NSButton!
     /// The configuration to read and write choices through; set by the app once it has booted.
@@ -113,6 +116,7 @@ final class OnboardingWindow {
     private func update() {
         for (row, p) in zip(rows, permissions) { row.granted = p.granted() }
         menuBarCard?.done = Self.menuBarAutoHides
+        spacesCard?.done = Self.displaysShareSpaces
     }
 
     private func open(pane: String) {
@@ -209,7 +213,7 @@ final class OnboardingWindow {
 
     private func handoverPage() -> NSView {
         let cards = [
-            RecommendationView(title: "Keep one native desktop per display", text: "Extra macOS Spaces only add a second, slower set of places for windows to hide. In Mission Control, close every desktop but the first on each display, and keep \"Displays have separate Spaces\" on.", button: "Open Desktop & Dock", image: SetupIllustration.image(.oneDesktop)) {
+            RecommendationView(title: "Keep one native desktop", text: "Extra macOS Spaces only add a second, slower set of places for windows to hide. In Mission Control, close every desktop but the first, and turn \"Displays have separate Spaces\" off: BetterWM gives each display its own desktops. Takes effect after logging out and in.", button: "Open Desktop & Dock", image: SetupIllustration.image(.oneDesktop)) {
                 Self.open(["x-apple.systempreferences:com.apple.Desktop-Settings.extension?MissionControl", "x-apple.systempreferences:com.apple.Desktop-Settings.extension"])
             },
             RecommendationView(title: "Free the Mission Control shortcuts", text: "macOS claims ⌃← ⌃→ and ⌃1 to ⌃9 for its own desktops, so they never reach BetterWM until you turn them off: Keyboard Shortcuts › Mission Control, untick both Mission Control rows and Application windows.", button: "Open Keyboard Shortcuts", image: SetupIllustration.image(.shortcuts)) {
@@ -219,6 +223,8 @@ final class OnboardingWindow {
                 Self.open(["x-apple.systempreferences:com.apple.Trackpad-Settings.extension?MoreGestures", "x-apple.systempreferences:com.apple.Trackpad-Settings.extension"])
             },
         ]
+        spacesCard = cards[0]
+        spacesCard?.done = Self.displaysShareSpaces
         return page("Hand over to BetterWM", "BetterWM takes over what Mission Control did. Three macOS settings keep the two from fighting; each button opens the right pane, and the picture shows what to change there.", cards)
     }
 
@@ -267,7 +273,7 @@ enum SetupIllustration {
                 if !keep { cross(r) }
             }
             label("Desktop 1", at: NSPoint(x: 18, y: y - 16), bold: true)
-            toggle(on: true, at: NSPoint(x: rect.maxX - 40, y: rect.minY + 12))
+            toggle(on: false, at: NSPoint(x: rect.maxX - 40, y: rect.minY + 12))
             label("Separate Spaces", at: NSPoint(x: 14, y: rect.minY + 10), bold: false)
         case .shortcuts:
             // Three shortcut rows: the Mission Control ones unticked, one left ticked for contrast.

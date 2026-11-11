@@ -64,6 +64,10 @@ final class WindowSwitcher {
 
     /// The group of the floating windows shared across desktops, after the desktops, as the status bar shows them.
     static let floatingGroup = -1
+    /// The windows macOS has fullscreen, after the pinned ones; picking one brings its Space over.
+    static let fullscreenGroup = -2
+    /// The Space of each fullscreen item, by window id; picking one shows that Space.
+    private var fullscreenSpaces: [WindowID: SpaceID] = [:]
 
     private func open() {
         func items(_ windows: [AXWindow], desktop: Int) -> [Item] {
@@ -86,6 +90,14 @@ final class WindowSwitcher {
         }
         let pinned = items(shared.sorted().compactMap { manager.system.axWindow($0) }, desktop: Self.floatingGroup)
         if !pinned.isEmpty { groups.append(Group(desktop: Self.floatingGroup, items: pinned)) }
+        fullscreenSpaces = [:]
+        let fullscreen = manager.fullscreenTargets().map { t -> Item in
+            fullscreenSpaces[t.id] = t.space
+            let app = NSRunningApplication(processIdentifier: t.pid)
+            let title = manager.system.axWindow(t.id).map { manager.tabLabel(for: t.id) ?? $0.title } ?? app?.localizedName ?? ""
+            return Item(window: nil, id: t.id, desktop: Self.fullscreenGroup, title: title, app: app?.localizedName ?? "", icon: app?.icon)
+        }
+        if !fullscreen.isEmpty { groups.append(Group(desktop: Self.fullscreenGroup, items: fullscreen)) }
         groups = groups.filter { !$0.items.isEmpty }
         flat = groups.flatMap(\.items)
         selected = 0
@@ -141,6 +153,11 @@ final class WindowSwitcher {
         close()
         guard let item else { return }
         guard let window = item.window else {
+            if let space = fullscreenSpaces[item.id] {
+                Log.write("switcher", "pick fullscreen '\(item.title)' on Space \(space)")
+                manager.showFullscreenSpace(space)
+                return
+            }
             Log.write("switcher", "pick own window '\(item.title)'")
             manager.ownWindow(item.id)?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -214,7 +231,7 @@ final class SwitcherView: NSView {
         var row = newRow()
         var rowWidth: CGFloat = 0
         for group in groups {
-            let title = NSTextField(labelWithString: group.desktop == WindowSwitcher.floatingGroup ? "Pinned" : "Desktop \(group.desktop + 1)")
+            let title = NSTextField(labelWithString: group.desktop == WindowSwitcher.floatingGroup ? "Pinned" : group.desktop == WindowSwitcher.fullscreenGroup ? "Fullscreen" : "Desktop \(group.desktop + 1)")
             title.font = .systemFont(ofSize: 11, weight: .semibold)
             title.textColor = group.desktop == current ? .controlAccentColor : .secondaryLabelColor
             let tiles = NSStackView()

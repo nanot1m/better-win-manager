@@ -291,7 +291,10 @@ final class FocusRing {
         // An app can report a window it keeps alive after closing (ChatGPT) as focused; ring only what is visible.
         // A window on no Space is mid-transition to or from fullscreen.
         buttonsAnchor = nil
+        // A fullscreen window is untiled too, but it is macOS's, on a Space of its own: no buttons over it.
         if !config.focusRingFloating, !isTiled(w), let id = w.windowID, CGWindowInfo.isOnScreen(id),
+           case let spaces = Spaces.spaces(of: id), !spaces.isEmpty, spaces.allSatisfy(Spaces.isDesktop),
+           !NSScreen.screens.contains(where: Spaces.showsFullscreen),
            case let f = WindowServerEvents.bounds(of: id) ?? w.frame, Self.onScreen(f) {
             // The tiled window behind keeps its ring, greyed: a tabbed stack still shows which window is in front.
             // With none ringed before (focus came straight here after a desktop switch), the front tiled one is it.

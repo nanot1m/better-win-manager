@@ -6,6 +6,26 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-11-11
+
+### Added
+- `toggleFullscreen` (⌃⌥F; a ring button choice and a Window menu item): the focused window takes the whole screen while it stays in front, the other tiles keeping their slots underneath, and focusing one of them ends it, as AeroSpace's fullscreen does. Lighter than zen, which parks the others and persists.
+- `focusFullscreen` (unbound): cycle through the macOS fullscreen Spaces.
+
+### Changed
+- Setup now recommends turning "Displays have separate Spaces" off (the welcome tour, Getting started and Concepts), as AeroSpace does: BetterWM gives each display its own desktops, and native fullscreen windows otherwise live in per-display Spaces that cannot always be switched to. A fullscreen window of an app that also has a window on the current desktop still cannot be reached or left by BetterWM; macOS offers no way to switch Spaces in that case, so BetterWM leaves the screen alone rather than raise a window over the fullscreen one, and never activates or raises the fullscreen app's other windows meanwhile, which made them join the fullscreen Space.
+
+### Fixed
+- Focusing a desktop window while its display shows a fullscreen Space (⌥Tab, focus next, a chip) brings the desktop back first; a window of the fullscreen app used to come up over the fullscreen window instead.
+- Fullscreen Spaces are reached by switching the display to them directly, so a fullscreen window of an app that also has windows on the desktop (two Chrome windows) is reachable, and so is one that was already fullscreen when BetterWM started; Accessibility never lists a window on another Space, and activating its app did nothing in those cases.
+- The fullscreen chips in the status bar look like the desktop chips (glass or plain, lit with the accent while that screen shows the Space) and work for an app that also has windows on the desktop: clicking raises the fullscreen window itself. Clicking the lit chip goes back to the desktop.
+- A window in macOS fullscreen no longer counts as a window of its desktop while it is away: it leaves the grid (the others close ranks), the desktop's chip, the focus cycle and the switcher's desktop group, and rejoins when it comes back. A tabbed desktop used to hide its remaining tab, thinking the fullscreen window was still its front one.
+- Focus next/previous cycles the desktop's windows and then its fullscreen ones, so a fullscreen window is reached from the desktop and left again the same way, also when the fullscreen app is the same app as the windows there; the hotkey of the desktop a fullscreen window came from goes back to that desktop. The ⌥Tab switcher lists fullscreen windows in a Fullscreen group.
+- The ring's action pill no longer appears over a fullscreen app; a fullscreen window counted as a floating one.
+
+### Changed
+- A tiled window coming back from macOS fullscreen returns to the slot it left (its column and row), tiled even with auto-tiling off; it used to arrive like a new window and land wherever the auto-tile strategy put it, or float.
+
 ## [0.52.3] - 2026-11-11
 
 ### Changed

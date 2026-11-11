@@ -84,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.system.barInsets = { [weak self] screen in self?.bar.insets(for: screen) ?? (0, 0) }
         bar.onLayoutChange = { [weak self] in self?.manager.apply() }
         bar.onSelectDesktop = { [weak self] in self?.manager.switchDesktop($0) }
-        bar.onSelectFullscreen = { [weak self] in self?.manager.activateSpace($0) }
+        bar.onSelectFullscreen = { [weak self] in self?.manager.showFullscreenSpace($0) }
         bar.fullscreenSpaces = { [weak self] in self?.manager.fullscreenSpaces() ?? [] }
         bar.onReorderDesktop = { [weak self] from, to in self?.manager.moveDesktop(from: from, to: to) }
         bar.onDesktopMenu = { [weak self] desktop, view in self?.showDesktopMenu(desktop, from: view) }
@@ -184,6 +184,7 @@ extension AppDelegate {
         add("Window Actions…", #selector(showPopup), action: "popup")
         add("Tile / Untile Focused Window", #selector(toggleFocused), action: "toggleTile")
         add("Pin / Unpin Focused Window", #selector(togglePin), action: "togglePin")
+        add("Fullscreen Focused Window", #selector(toggleFullscreen), action: "toggleFullscreen")
         let moveMenu = NSMenu(title: "Move")
         moveMenu.delegate = self
         moveMenu.autoenablesItems = false
@@ -215,6 +216,7 @@ extension AppDelegate {
         add("Focus Next Window", #selector(focusNext), action: "focusNext")
         add("Focus Previous Window", #selector(focusPrevious), action: "focusPrevious")
         add("Focus Floating Window", #selector(focusFloating), action: "focusFloating")
+        add("Focus Fullscreen Window", #selector(focusFullscreen), action: "focusFullscreen")
 
         section("Screen")
         add("Retile Current Screen", #selector(retile), action: "retile")
@@ -284,6 +286,7 @@ extension AppDelegate {
     @objc func sendToDesktop(_ sender: NSMenuItem) { manager.sendFocusedWindow(toDesktop: sender.tag) }
     @objc func toggleFocused() { resumeForTiling(); manager.toggleFocused() }
     @objc func togglePin() { manager.togglePin() }
+    @objc func toggleFullscreen() { resumeForTiling(); manager.toggleFullscreen() }
     @objc func showPopup() { popup.toggle() }
 
     func perform(action name: String) -> Bool {
@@ -305,6 +308,7 @@ extension AppDelegate {
             "focusNext": { [weak self] in self?.manager.focusNext() },
             "focusPrevious": { [weak self] in self?.manager.focusNext(reverse: true) },
             "focusFloating": { [weak self] in self?.manager.focusFloating() },
+            "focusFullscreen": { [weak self] in self?.manager.focusFullscreen() },
             "focusLeft": { [weak self] in self?.manager.focusWindow(in: .left) },
             "focusRight": { [weak self] in self?.manager.focusWindow(in: .right) },
             "focusUp": { [weak self] in self?.manager.focusWindow(in: .up) },
@@ -317,6 +321,7 @@ extension AppDelegate {
             "mergeRight": { [weak self] in self?.manager.moveFocused(.mergeRight) },
             "toggleTile": { [weak self] in self?.resumeForTiling(); self?.manager.toggleFocused() },
             "togglePin": { [weak self] in self?.manager.togglePin() },
+            "toggleFullscreen": { [weak self] in self?.resumeForTiling(); self?.manager.toggleFullscreen() },
             "retile": { [weak self] in self?.resumeForTiling(); self?.manager.retileCurrentScreen() },
             "toggleStack": { [weak self] in self?.manager.toggleStackedLayout() },
             "toggleZen": { [weak self] in self?.manager.toggleZen() },
@@ -370,6 +375,7 @@ extension AppDelegate {
     @objc func sendPrevious() { manager.sendFocusedWindow(toNext: false) }
     @objc func focusPrevious() { manager.focusNext(reverse: true) }
     @objc func focusFloating() { manager.focusFloating() }
+    @objc func focusFullscreen() { manager.focusFullscreen() }
 
     /// The status item holds the desktop chips (when on) left of the icon; a click anywhere but a chip opens the menu.
     private func layoutStatusItem() {

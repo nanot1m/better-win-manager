@@ -22,7 +22,7 @@ Panels such as file pickers and alerts are not windows to BetterWM at all: they 
 
 Workspaces are numbered across all screens, and each lives on one display: every screen shows one of its own at a time, and each screen's bar lists the ones living there. ⌃1…⌃9 always mean the same workspace; switching to one shows it on its screen. ⌃→ and ⌃← move through the workspaces of the current screen. "Send this desktop to the next screen" moves the current workspace, windows and all, to the next display.
 
-A workspace remembers its display: when that display is unplugged its workspaces show on the main display, and they go back when it returns. Which display is main follows System Settings; making another display main does not move any workspace, only where new ones and those of a missing display go. A display that arrives with no workspace of its own gets a new one. macOS should have one desktop per display.
+A workspace remembers its display: when that display is unplugged its workspaces show on the main display, and they go back when it returns. Which display is main follows System Settings; making another display main does not move any workspace, only where new ones and those of a missing display go. A display that arrives with no workspace of its own gets a new one. macOS itself should have a single desktop shared by all displays ("Displays have separate Spaces" off); BetterWM gives each display its own set.
 
 Workspaces are created on demand, on the main display, when you switch to or send a window to one that does not exist yet, and trimmed when they end up empty and not shown. The chips in the bar can be dragged to reorder them; grids, floating windows and saved state follow.
 

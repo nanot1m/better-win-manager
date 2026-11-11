@@ -67,6 +67,35 @@ struct ReconcilerTests {
                             Op(window: 2, frame: CGRect(x: 800, y: 0, width: 800, height: 1000), intent: .slot)], #function, #line)
     }
 
+    func testWindowBackFromFullscreenTakesItsOldSlot() {
+        var c = config
+        c.autoTile = false
+        let r = Reconciler(config: c)
+        var (state, _) = r.reconcile(DesiredState(), snapshot([win(1, CGRect(x: 0, y: 0, width: 500, height: 500)),
+                                                                win(2, CGRect(x: 600, y: 0, width: 500, height: 500)),
+                                                                win(3, CGRect(x: 1100, y: 0, width: 500, height: 500))]))
+        expect(state.grid(for: space).columns.map(\.windows) == [[1], [2], [3]], #function, #line)
+        // Window 1 goes native fullscreen: on a Space of its own, off the desktop. The others close ranks.
+        let gone = snapshot([win(1, area, spaces: [99]), win(2, area), win(3, area)])
+        (state, _) = r.reconcile(state, gone)
+        expect(state.grid(for: space).columns.map(\.windows) == [[2], [3]], #function, #line)
+        // Back from fullscreen it returns to the first column, tiled although auto-tiling is off.
+        (state, _) = r.reconcile(state, snapshot([win(1, area), win(2, area), win(3, area)]))
+        expect(state.grid(for: space).columns.map(\.windows) == [[1], [2], [3]] && state.awaySlots.isEmpty, #function, #line)
+    }
+
+    func testFullscreenTakesTheAreaUntilAnotherWindowIsFocused() {
+        let r = Reconciler(config: config)
+        var (state, _) = r.reconcile(DesiredState(), snapshot([win(1, CGRect(x: 0, y: 0, width: 500, height: 500)), win(2, CGRect(x: 800, y: 0, width: 500, height: 500))]))
+        state.grids[space]?.fullscreen = 1
+        var plan: Plan
+        (state, plan) = r.reconcile(state, snapshot([win(1, CGRect(x: 0, y: 0, width: 800, height: 1000)), win(2, CGRect(x: 800, y: 0, width: 800, height: 1000))], focused: 1))
+        expect(plan.ops.first { $0.window == 1 }?.frame == area && plan.ops.first { $0.window == 2 } == nil, #function, #line)
+        // Focus moves to the other window: fullscreen ends and window 1 goes back to its slot.
+        (state, plan) = r.reconcile(state, snapshot([win(1, area), win(2, CGRect(x: 800, y: 0, width: 800, height: 1000))], focused: 2))
+        expect(state.grid(for: space).fullscreen == nil && plan.ops.first { $0.window == 1 }?.frame == CGRect(x: 0, y: 0, width: 800, height: 1000), #function, #line)
+    }
+
     func testNoCommandsWhenAlreadyInPlace() {
         let r = Reconciler(config: config)
         var (state, _) = r.reconcile(DesiredState(), snapshot([win(1, .zero)]))
@@ -1075,6 +1104,8 @@ let tests: [(String, () -> Void)] = [
     ("mainDisplayChangeKeepsDesktops", t.testMainDisplayChangeKeepsDesktops),
     ("sendingLastDesktopLeavesANewOne", t.testSendingLastDesktopLeavesANewOne),
     ("pinnedWindowBelongsToTheDisplayItSitsOn", t.testPinnedWindowBelongsToTheDisplayItSitsOn),
+    ("windowBackFromFullscreenTakesItsOldSlot", t.testWindowBackFromFullscreenTakesItsOldSlot),
+    ("fullscreenTakesTheAreaUntilAnotherWindowIsFocused", t.testFullscreenTakesTheAreaUntilAnotherWindowIsFocused),
     ("displayArrivingWhereOneLeftTakesOverItsDesktops", t.testDisplayArrivingWhereOneLeftTakesOverItsDesktops),
     ("directionalFocusInGrid", t.testDirectionalFocusInGrid),
     ("ringButtonsGetRoomWhenNoTabsAbove", t.testRingButtonsGetRoomWhenNoTabsAbove),

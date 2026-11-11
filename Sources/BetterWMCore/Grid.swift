@@ -18,6 +18,9 @@ public struct Grid: Equatable {
     /// Zen: one window at a time, centred and no wider than the configured limit; the others wait off screen.
     /// The columns stay as they are underneath, so leaving zen restores the layout.
     public var zen = false
+    /// A window given the whole area while it is the front one; the others keep their slots underneath, as in
+    /// AeroSpace's fullscreen. Focusing another window of the grid ends it. Not saved: a moment's view.
+    public var fullscreen: WindowID?
     public var columns: [Column] = []
     /// The columns as they were before the screen was stacked; switching back restores them.
     public var columnsBeforeStack: [Column]?
@@ -45,6 +48,7 @@ public struct Grid: Equatable {
 
     public mutating func remove(_ w: WindowID) {
         if spiralAnchor == w { spiralAnchor = nil }
+        if fullscreen == w { fullscreen = nil }
         minSizes[w] = nil
         heightWeights[w] = nil
         for i in columns.indices { columns[i].windows.removeAll { $0 == w } }
@@ -387,10 +391,16 @@ public struct GridGeometry {
 
     private func slotFrames() -> [(WindowID, CGRect)] {
         if grid.zen { return zenFrames() }
-        if grid.mode == .stacked { return stackedFrames() }
-        guard config.tiledTabs else { return tiledSlots() }
+        if grid.mode == .stacked { return fullscreened(stackedFrames()) }
+        guard config.tiledTabs else { return fullscreened(tiledSlots()) }
         let t = config.tabHeight + config.focusRingOutset
-        return tiledSlots().map { w, f in (w, CGRect(x: f.minX, y: f.minY + min(t, f.height - 1), width: f.width, height: max(1, f.height - t))) }
+        return fullscreened(tiledSlots()).map { w, f in (w, CGRect(x: f.minX, y: f.minY + min(t, f.height - 1), width: f.width, height: max(1, f.height - t))) }
+    }
+
+    /// The grid's fullscreen window, while it is the front one, takes the whole inner area in place of its slot.
+    private func fullscreened(_ frames: [(WindowID, CGRect)]) -> [(WindowID, CGRect)] {
+        guard let f = grid.fullscreen, front == f else { return frames }
+        return frames.map { $0.0 == f ? (f, inner) : $0 }
     }
 
     /// The strips above tiled windows, one tab each; empty unless `tiledTabs` is on.
@@ -398,7 +408,7 @@ public struct GridGeometry {
         guard grid.mode == .columns, !grid.zen, config.tiledTabs else { return [] }
         // As wide as the ring around the window below, so strip and ring share their edges.
         let o = config.focusRingOutset
-        return tiledSlots().map { w, f in (w, CGRect(x: f.minX - o, y: f.minY, width: f.width + 2 * o, height: config.tabHeight + config.ringButtonsOverlap)) }
+        return fullscreened(tiledSlots()).map { w, f in (w, CGRect(x: f.minX - o, y: f.minY, width: f.width + 2 * o, height: config.tabHeight + config.ringButtonsOverlap)) }
     }
 
     /// The columns layout's slots, tab strips included.

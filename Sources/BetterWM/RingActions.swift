@@ -10,7 +10,7 @@ final class RingActions {
         let action: String
     }
     static let symbols: [String: String] = [
-        "toggleTile": "rectangle.split.2x1", "togglePin": "pin", "toggleStack": "rectangle.stack", "toggleZen": "rectangle.center.inset.filled", "toggleTabs": "rectangle.topthird.inset.filled", "grow": "plus.magnifyingglass",
+        "toggleTile": "rectangle.split.2x1", "togglePin": "pin", "toggleFullscreen": "arrow.up.left.and.arrow.down.right", "toggleStack": "rectangle.stack", "toggleZen": "rectangle.center.inset.filled", "toggleTabs": "rectangle.topthird.inset.filled", "grow": "plus.magnifyingglass",
         "shrink": "minus.magnifyingglass", "equalize": "equal.square", "retile": "arrow.triangle.2.circlepath",
         "sendToPreviousDesktop": "arrow.left.square", "sendToNextDesktop": "arrow.right.square", "sendToDesktop": "rectangle.portrait.and.arrow.right",
         "overview": "square.grid.2x2", "popup": "ellipsis.circle",

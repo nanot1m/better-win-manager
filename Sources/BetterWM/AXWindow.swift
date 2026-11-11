@@ -177,6 +177,17 @@ final class AXWindow: Hashable {
         return id
     }
 
+    /// The window's own word on native fullscreen (`AXFullScreen`); off the queue, what it said last.
+    var isFullscreen: Bool {
+        guard live else { return cached { lastFullscreen } }
+        var v: CFTypeRef?
+        let err = AXUIElementCopyAttributeValue(element, "AXFullScreen" as CFString, &v)
+        note(err)
+        if err == .success { cached { lastFullscreen = v as? Bool == true } }
+        return cached { lastFullscreen }
+    }
+    private var lastFullscreen = false
+
     /// Whether the element still names a WindowServer window, asked afresh: an unreadable window that does is
     /// invisible (a native background tab, another Space), not closed.
     var resolves: Bool {
