@@ -703,13 +703,6 @@ final class WindowManager {
                 self.asleep = false
                 self.wokeAt = Date()
                 self.suspendClaims(until: Date().addingTimeInterval(60))
-                // The displays may already differ from before sleep; check now rather than wait for a change event.
-                if NSScreen.screens.map(Self.displayID) != self.desktops.displays {
-                    Log.write("screen", "woke with a different display set: \(NSScreen.screens.map { Self.displayID($0).prefix(8) })")
-                    self.syncDisplays()
-                    self.tick()
-                    self.onDesktopChange?()
-                }
             }
         }
         let dnc = DistributedNotificationCenter.default()
