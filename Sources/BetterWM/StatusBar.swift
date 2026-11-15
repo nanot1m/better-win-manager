@@ -19,7 +19,7 @@ final class StatusBar {
     /// The menu widget was clicked; the app pops its menu at the given view.
     var onMenuRequested: ((NSView) -> Void)?
     /// Right-click on a desktop chip: the desktop and the chip to anchor a menu to.
-    var onDesktopMenu: ((Int, NSView) -> Void)?
+    var onDesktopMenu: ((Int, NSView, NSEvent) -> Void)?
     /// Desktops living on a screen, the one it shows, and the active desktop across all screens.
     var desktopsOn: (NSScreen) -> [Int] = { _ in [] }
     var shownOn: (NSScreen) -> Int? = { _ in nil }
@@ -54,7 +54,7 @@ final class StatusBar {
         context.onSelectDesktop = { [weak self] in self?.onSelectDesktop?($0) }
         context.onSelectFullscreen = { [weak self] in self?.onSelectFullscreen?($0) }
         context.onReorderDesktop = { [weak self] from, to in self?.onReorderDesktop?(from, to) }
-        context.onDesktopMenu = { [weak self] d, v in self?.onDesktopMenu?(d, v) }
+        context.onDesktopMenu = { [weak self] d, v, e in self?.onDesktopMenu?(d, v, e) }
         for w in widgets.values { w.wantsRefresh = { [weak self] in self?.refresh() } }
         (widgets[.menu] as? MenuWidget)?.onPressed = { [weak self] v in self?.onMenuRequested?(v) }
         syncMenuChips()
@@ -308,7 +308,7 @@ final class BarWindow: NSPanel {
 /// view accepts it.
 final class ChipView: NSView {
     var onClick: (() -> Void)?
-    var onContextMenu: (() -> Void)?
+    var onContextMenu: ((NSEvent) -> Void)?
 
     /// A dragged window is over this chip: a ring in the accent colour, and the chip grows a little.
     func setDropTarget(_ on: Bool, color: NSColor) {
@@ -447,7 +447,7 @@ final class ChipView: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    override func rightMouseDown(with event: NSEvent) { onContextMenu?() }
+    override func rightMouseDown(with event: NSEvent) { onContextMenu?(event) }
 
     /// A click selects the desktop; a drag past a few points slides the chip along, the others making room.
     override func mouseDown(with event: NSEvent) {

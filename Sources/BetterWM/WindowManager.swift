@@ -33,9 +33,11 @@ final class WindowManager {
     private func screen(ofDesktop ws: Int) -> NSScreen? { desktops.display(of: ws).flatMap(screen(of:)) ?? NSScreen.screens.first }
 
     /// Keeps the model's displays in step with the connected ones; System Settings decides which is main.
-    /// A display that vanishes gets a grace period before its desktops move: sleep, the lid and a loose cable
-    /// all take displays away for a few seconds, and macOS puts the windows back itself when one returns.
+    /// A display that vanishes while the Mac is waking gets a short grace before its desktops move: macOS adds
+    /// and drops displays several times while a connection settles, and moving desktops on every flap would
+    /// shuffle every window back and forth. The grace restarts on each change and ends once the set holds still.
     private var displayGrace: DispatchWorkItem?
+    private let displaySettle: TimeInterval = 2
     /// Displays drop off the list while the Mac or the screens sleep and come back one by one after waking; a
     /// loss then is given time. Awake and settled, a lost display is a real disconnect and handled at once.
     private var asleep = false
@@ -52,8 +54,8 @@ final class WindowManager {
             connectDisplays(ids)
             return
         }
-        guard displayGrace == nil else { return }
-        Log.write("screen", "display(s) \(lost.map { $0.prefix(8) }) gone while asleep or just woken; their desktops stay put for 10 s")
+        displayGrace?.cancel()
+        Log.write("screen", "display(s) \(lost.map { $0.prefix(8) }) gone while asleep or just woken; their desktops stay put until the displays hold still for \(Int(displaySettle)) s")
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.displayGrace = nil
@@ -61,7 +63,7 @@ final class WindowManager {
             if now != self.desktops.displays { self.connectDisplays(now); self.tick(); self.onDesktopChange?() }
         }
         displayGrace = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + displaySettle, execute: work)
     }
 
     private func connectDisplays(_ ids: [DisplayID]) {

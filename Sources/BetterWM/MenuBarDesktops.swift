@@ -232,6 +232,6 @@ final class MenuBarDesktopsView: NSView, MenuBarDesktops {
         if let d = chipDesktop(at: convert(event.locationInWindow, from: nil)) { context.onSelectDesktop?(d) }
     }
     override func rightMouseDown(with event: NSEvent) {
-        if let d = chipDesktop(at: convert(event.locationInWindow, from: nil)) { context.onDesktopMenu?(d, self) }
+        if let d = chipDesktop(at: convert(event.locationInWindow, from: nil)) { context.onDesktopMenu?(d, self, event) }
     }
 }

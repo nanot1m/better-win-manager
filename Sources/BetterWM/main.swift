@@ -87,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onSelectFullscreen = { [weak self] in self?.manager.showFullscreenSpace($0) }
         bar.fullscreenSpaces = { [weak self] in self?.manager.fullscreenSpaces() ?? [] }
         bar.onReorderDesktop = { [weak self] from, to in self?.manager.moveDesktop(from: from, to: to) }
-        bar.onDesktopMenu = { [weak self] desktop, view in self?.showDesktopMenu(desktop, from: view) }
+        bar.onDesktopMenu = { [weak self] desktop, view, event in self?.showDesktopMenu(desktop, from: view, with: event) }
         bar.onMenuRequested = { [weak self] view in
             guard let self else { return }
             let menu = self.buildMenu()
@@ -180,6 +180,15 @@ extension AppDelegate {
             }
         }
 
+        // A menu item in a submenu; the delegate tells submenus apart by title, so those stay as they are.
+        func item(_ m: NSMenu, _ title: String, _ sel: Selector, action: String? = nil, represents: Any? = nil) {
+            let item = m.addItem(withTitle: title, action: sel, keyEquivalent: "")
+            item.target = self
+            item.representedObject = represents
+            if let action, let spec = manager.config.hotkeys[action] { HotKey.applyKeyEquivalent(spec, to: item) }
+        }
+        func submenu(_ title: String, _ m: NSMenu) { menu.addItem(withTitle: title, action: nil, keyEquivalent: "").submenu = m }
+
         section("Window")
         add("Window Actions…", #selector(showPopup), action: "popup")
         add("Tile / Untile Focused Window", #selector(toggleFocused), action: "toggleTile")
@@ -188,93 +197,86 @@ extension AppDelegate {
         let moveMenu = NSMenu(title: "Move")
         moveMenu.delegate = self
         moveMenu.autoenablesItems = false
-        for (title, dir) in [("Move Left", Move.left), ("Move Right", .right),
-                             ("Move Up", .up), ("Move Down", .down),
-                             ("Merge Into Left Column", .mergeLeft), ("Merge Into Right Column", .mergeRight)] {
-            let item = moveMenu.addItem(withTitle: title, action: #selector(moveFocused(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = dir
+        for (title, dir, action) in [("Left", Move.left, "moveLeft"), ("Right", .right, "moveRight"), ("Up", .up, "moveUp"), ("Down", .down, "moveDown"),
+                                     ("Merge Into Left Column", .mergeLeft, "mergeLeft"), ("Merge Into Right Column", .mergeRight, "mergeRight")] {
+            item(moveMenu, title, #selector(moveFocused(_:)), action: action, represents: dir)
         }
-        menu.addItem(withTitle: "Move Focused Window", action: nil, keyEquivalent: "").submenu = moveMenu
-        let focusMenu = NSMenu(title: "Focus")
-        focusMenu.delegate = self
-        focusMenu.autoenablesItems = false
-        for (title, dir, action) in [("Focus Left", Direction.left, "focusLeft"),
-                                     ("Focus Right", .right, "focusRight"),
-                                     ("Focus Up", .up, "focusUp"),
-                                     ("Focus Down", .down, "focusDown")] {
-            let item = focusMenu.addItem(withTitle: title, action: #selector(focusDirection(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = dir
-            if let spec = manager.config.hotkeys[action] { HotKey.applyKeyEquivalent(spec, to: item) }
-        }
-        menu.addItem(withTitle: "Focus Direction", action: nil, keyEquivalent: "").submenu = focusMenu
+        moveMenu.addItem(.separator())
+        item(moveMenu, "Grow", #selector(growWindow), action: "grow")
+        item(moveMenu, "Shrink", #selector(shrinkWindow), action: "shrink")
+        moveMenu.addItem(.separator())
         let sendMenu = NSMenu(title: "SendTo")
         sendMenu.autoenablesItems = false
         sendMenu.delegate = self
-        menu.addItem(withTitle: "Send Focused Window to Desktop", action: nil, keyEquivalent: "").submenu = sendMenu
-        add("Focus Next Window", #selector(focusNext), action: "focusNext")
-        add("Focus Previous Window", #selector(focusPrevious), action: "focusPrevious")
-        add("Focus Floating Window", #selector(focusFloating), action: "focusFloating")
-        add("Focus Fullscreen Window", #selector(focusFullscreen), action: "focusFullscreen")
+        moveMenu.addItem(withTitle: "To Desktop", action: nil, keyEquivalent: "").submenu = sendMenu
+        submenu("Move Focused Window", moveMenu)
+        let focusMenu = NSMenu(title: "Focus")
+        focusMenu.delegate = self
+        focusMenu.autoenablesItems = false
+        item(focusMenu, "Next Window", #selector(focusNext), action: "focusNext")
+        item(focusMenu, "Previous Window", #selector(focusPrevious), action: "focusPrevious")
+        item(focusMenu, "Floating Window", #selector(focusFloating), action: "focusFloating")
+        item(focusMenu, "Fullscreen Window", #selector(focusFullscreen), action: "focusFullscreen")
+        focusMenu.addItem(.separator())
+        for (title, dir, action) in [("Left", Direction.left, "focusLeft"), ("Right", .right, "focusRight"), ("Up", .up, "focusUp"), ("Down", .down, "focusDown")] {
+            item(focusMenu, title, #selector(focusDirection(_:)), action: action, represents: dir)
+        }
+        submenu("Focus", focusMenu)
 
         section("Screen")
         add("Retile Current Screen", #selector(retile), action: "retile")
-        add("Grow Window", #selector(growWindow), action: "grow")
-        add("Shrink Window", #selector(shrinkWindow), action: "shrink")
         add("Equalize Sizes", #selector(equalize), action: "equalize")
         add("Toggle Stacked Layout", #selector(toggleStack), action: "toggleStack")
         add("Toggle Zen Mode", #selector(toggleZen), action: "toggleZen")
 
         section("Desktops")
-        let desktops = NSMenuItem(title: "Switch to Desktop", action: nil, keyEquivalent: "")
-        let sub = NSMenu(title: "Desktops")
-        sub.delegate = self
-        desktops.submenu = sub
-        menu.addItem(desktops)
-        add("Move This Desktop Left", #selector(moveDesktopLeft), action: "desktopMoveLeft")
-        add("Move This Desktop Right", #selector(moveDesktopRight), action: "desktopMoveRight")
-        if NSScreen.screens.count > 1 { add("Send This Desktop to Next Screen", #selector(desktopToNextScreen), action: "desktopToNextScreen") }
+        let desktopsMenu = NSMenu(title: "Desktops")
+        desktopsMenu.delegate = self
+        submenu("Switch to Desktop", desktopsMenu)
+        let arrange = NSMenu(title: "Arrange")
+        item(arrange, "Move This Desktop Left", #selector(moveDesktopLeft), action: "desktopMoveLeft")
+        item(arrange, "Move This Desktop Right", #selector(moveDesktopRight), action: "desktopMoveRight")
+        if NSScreen.screens.count > 1 { item(arrange, "Send This Desktop to Next Screen", #selector(desktopToNextScreen), action: "desktopToNextScreen") }
+        submenu("Arrange Desktops", arrange)
 
         section("Tiling")
         let pause = menu.addItem(withTitle: manager.enabled ? "Pause Tiling" : "Resume Tiling", action: #selector(togglePause), keyEquivalent: "")
         pause.target = self
         if let spec = manager.config.hotkeys["pause"] { HotKey.applyKeyEquivalent(spec, to: pause) }
         pauseItem = pause
-        let auto = menu.addItem(withTitle: "Auto-tile New Windows", action: #selector(toggleAutoTile), keyEquivalent: "")
+        let options = NSMenu(title: "Options")
+        let auto = options.addItem(withTitle: "Auto-tile New Windows", action: #selector(toggleAutoTile), keyEquivalent: "")
         auto.target = self
         autoTileItem = auto
         let strategyMenu = NSMenu(title: "Strategy")
         strategyMenu.delegate = self
-        for st in Config.AutoTileStrategy.allCases {
-            let item = strategyMenu.addItem(withTitle: st.title, action: #selector(setStrategy(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = st.rawValue
-        }
-        menu.addItem(withTitle: "Auto-tile Strategy", action: nil, keyEquivalent: "").submenu = strategyMenu
-        let switcherItem = menu.addItem(withTitle: "⌥Tab Window Switcher", action: #selector(toggleSwitcher), keyEquivalent: "")
+        for st in Config.AutoTileStrategy.allCases { item(strategyMenu, st.title, #selector(setStrategy(_:)), represents: st.rawValue) }
+        options.addItem(withTitle: "Auto-tile Strategy", action: nil, keyEquivalent: "").submenu = strategyMenu
+        let switcherItem = options.addItem(withTitle: "⌥Tab Window Switcher", action: #selector(toggleSwitcher), keyEquivalent: "")
         switcherItem.target = self
         self.switcherItem = switcherItem
-        let overlay = menu.addItem(withTitle: "Show Action Overlay", action: #selector(toggleOverlay), keyEquivalent: "")
+        let overlay = options.addItem(withTitle: "Show Action Overlay", action: #selector(toggleOverlay), keyEquivalent: "")
         overlay.target = self
         overlayItem = overlay
+        submenu("Options", options)
         syncAutoTileItems()
 
         section("BetterWM")
         add("Settings…", #selector(showSettings))
         add("Check for Updates…", #selector(checkForUpdates))
-        add("Welcome & Setup…", #selector(showPermissions))
-        add("Open Config File", #selector(openConfig))
-        add("Reload Config", #selector(reloadConfig))
+        let more = NSMenu(title: "More")
+        item(more, "Welcome & Setup…", #selector(showPermissions))
+        item(more, "Open Config File", #selector(openConfig))
+        item(more, "Reload Config", #selector(reloadConfig))
+        more.addItem(.separator())
         let diag = NSMenu(title: "Diagnostics")
         for (title, sel, action) in [("Re-measure Window Corners", #selector(refreshRing), "refreshRing"), ("Open Log File", #selector(openLog), ""),
                                      ("Copy Diagnostics Report", #selector(copyDiagnostics), ""), ("Report a Bug…", #selector(reportBug), ""),
                                      ("Reset Layout State…", #selector(resetState), "")] {
-            let item = diag.addItem(withTitle: title, action: sel, keyEquivalent: "")
-            item.target = self
-            if let spec = manager.config.hotkeys[action] { HotKey.applyKeyEquivalent(spec, to: item) }
+            item(diag, title, sel, action: action.isEmpty ? nil : action)
         }
-        menu.addItem(withTitle: "Diagnostics", action: nil, keyEquivalent: "").submenu = diag
+        more.addItem(withTitle: "Diagnostics", action: nil, keyEquivalent: "").submenu = diag
+        submenu("More", more)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit BetterWM", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
@@ -428,7 +430,7 @@ extension AppDelegate {
     @objc func shrinkWindow() { manager.resizeFocused(grow: false) }
 
     /// Right-click menu of a desktop chip; each item carries the desktop as its represented object.
-    func showDesktopMenu(_ desktop: Int, from view: NSView) {
+    func showDesktopMenu(_ desktop: Int, from view: NSView, with event: NSEvent) {
         let menu = NSMenu()
         func add(_ title: String, _ sel: Selector, enabled: Bool = true, action: String? = nil) {
             let item = menu.addItem(withTitle: title, action: sel, keyEquivalent: "")
@@ -447,11 +449,9 @@ extension AppDelegate {
         menu.addItem(.separator())
         addTabItems(to: menu, stacked: manager.isStacked(desktop: desktop))
         menu.autoenablesItems = false
-        // Right under the chip, in screen coordinates. macOS keeps a menu out of the menu bar's zone even while that
-        // bar is hidden, scrolling the menu instead; the anchor stays below the zone so every item shows.
-        let chip = view.window.map { $0.convertToScreen(view.convert(view.bounds, to: nil)) } ?? .zero
-        let zone = view.window?.screen?.visibleFrame.maxY ?? chip.minY
-        menu.popUp(positioning: nil, at: NSPoint(x: chip.minX, y: min(chip.minY - 4, zone - 1)), in: nil)
+        // As a context menu at the click, like the tabs' menu: AppKit keeps it clear of the screen edge and the
+        // hidden menu bar's zone itself. A menu popped up at a bare point under the chip got shifted or scrolled.
+        NSMenu.popUpContextMenu(menu, with: event, for: view)
     }
 
     private func desktop(of sender: NSMenuItem) -> Int? { sender.representedObject as? Int }

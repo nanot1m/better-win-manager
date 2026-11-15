@@ -70,16 +70,9 @@ enum Spaces {
     /// is still on it, so "not fullscreen" is not the same as "a desktop".
     static func isDesktop(_ space: SpaceID) -> Bool { spaceTypes()?.desktops.contains(space) ?? true }
 
-    /// A screen given over to a fullscreen app: its current Space is no desktop, or an ordinary window of another
-    /// app covers the whole screen, menu bar area included. Chrome's fullscreen reports the desktop Space for
-    /// a while after the switch, yet its window already spans the screen.
-    static func showsFullscreen(_ screen: NSScreen) -> Bool {
-        if !isDesktop(current(for: screen)) { return true }
-        let frame = screen.frame.toCocoa()
-        return CGWindowInfo.list([.optionOnScreenOnly, .excludeDesktopElements]).contains {
-            $0.isOrdinaryOtherApp && $0.bounds.approximatelyEquals(frame, tolerance: 1)
-        }
-    }
+    /// A screen given over to a fullscreen app: its current Space is no desktop. A window merely sized to the
+    /// screen (Steam Link, a game) is not that, and must not make the bar, ring and tabs step aside for good.
+    static func showsFullscreen(_ screen: NSScreen) -> Bool { !isDesktop(current(for: screen)) }
 
     /// Fullscreen and split-view Spaces on the display showing `space`, in Mission Control order.
     static func fullscreenSpaces(alongside space: SpaceID) -> [SpaceID] {

@@ -6,6 +6,16 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-11-15
+
+### Changed
+- The menu is shorter: window moves, resizing and sending live under Move Focused Window; every focus action under Focus; desktop reordering under Arrange Desktops; auto-tiling, the switcher and the overlay under Options; setup, config and diagnostics under More. Hotkeys still show beside each item.
+
+### Fixed
+- A desktop chip's context menu no longer has an item clipped or scrolled away: it opens as a context menu at the click, as the tabs' menu does, instead of at a point under the chip that macOS pushed out of the hidden menu bar's zone.
+- Connecting or disconnecting a display just after waking no longer leaves every window unmanaged for ten seconds. macOS adds and drops displays a few times while a connection settles; the wait now ends two seconds after the last change instead of a fixed ten.
+- The bar, ring, tabs and pill no longer vanish while an app keeps an ordinary window sized exactly to the screen (Steam Link, games): that used to count as a fullscreen screen. Only a real fullscreen Space does now.
+
 ## [0.53.0] - 2026-11-11
 
 ### Added

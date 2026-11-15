@@ -36,7 +36,7 @@ final class BarContext {
     var onSelectDesktop: ((Int) -> Void)?
     var onSelectFullscreen: ((UInt64) -> Void)?
     var onReorderDesktop: ((Int, Int) -> Void)?
-    var onDesktopMenu: ((Int, NSView) -> Void)?
+    var onDesktopMenu: ((Int, NSView, NSEvent) -> Void)?
 }
 
 /// One entry of the status bar. A widget owns its data source, one view per bar window, and its refresh
@@ -459,9 +459,9 @@ final class DesktopChipsView: NSStackView {
             c.onDragBegan = { [weak self, weak c] in if let c, let i = indexOf(c) { self?.beginDrag(i) } }
             c.onDragMoved = { [weak self] dx in self?.chipDrag?.update(delta: dx) }
             c.onDragEnded = { [weak self] in self?.endDrag() }
-            c.onContextMenu = { [weak self, weak c] in
+            c.onContextMenu = { [weak self, weak c] event in
                 guard let self, let c, let i = indexOf(c), i < self.chipDesktops.count else { return }
-                self.context.onDesktopMenu?(self.chipDesktops[i], c)
+                self.context.onDesktopMenu?(self.chipDesktops[i], c, event)
             }
             chips.append(c)
             addArrangedSubview(c)
