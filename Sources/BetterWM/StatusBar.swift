@@ -556,7 +556,8 @@ final class BarView: NSView {
             Glass.set(g, clear: config.glassStyle == "clear")
         }
         solid.isHidden = blur || glassOn
-        solid.layer?.backgroundColor = blur || glassOn ? nil : (NSColor(hex: config.barBackground) ?? .windowBackgroundColor).cgColor
+        // Transparent: the chips and widgets float over the wallpaper, nothing drawn behind them.
+        solid.layer?.backgroundColor = blur || glassOn ? nil : mode == "transparent" ? NSColor.clear.cgColor : (NSColor(hex: config.barBackground) ?? .windowBackgroundColor).cgColor
         layer?.cornerRadius = config.barRadius
         // Glass gets a faint light rim unless a border is configured: the system draws none of its own here.
         let rim = glassOn && config.barBorderWidth == 0

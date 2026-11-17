@@ -487,7 +487,7 @@ public struct Config {
         barWeatherFahrenheit = \(barWeatherFahrenheit)
         # "auto" asks Location Services; or a fixed "latitude,longitude" such as 52.52,13.40.
         barWeatherLocation = \(barWeatherLocation)
-        # Appearance: background is "blur", "glass" (Liquid Glass) or a hex colour (RRGGBB or RRGGBBAA); text colour "auto" or hex.
+        # Appearance: background is "blur", "glass" (Liquid Glass), "transparent" or a hex colour (RRGGBB or RRGGBBAA); text colour "auto" or hex.
         barBackground = \(barBackground)
         # Desktop chips: "flat" or "glass".
         barChipStyle = \(barChipStyle)

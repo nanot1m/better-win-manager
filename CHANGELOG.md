@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-11-17
+
+### Added
+- `barBackground = transparent` (Settings › Status Bar › Background › Transparent): the bar draws nothing behind its chips and widgets.
+
 ## [0.54.2] - 2026-11-17
 
 ### Fixed

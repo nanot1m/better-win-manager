@@ -650,7 +650,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private func barGroups() -> [NSView] {
         barSwitch = toggle()
         barHeightField = numberField("28")
-        barBackgroundMode = choice(["Blur", "Colour", "Liquid glass"], #selector(barAppearanceChanged))
+        barBackgroundMode = choice(["Blur", "Colour", "Liquid glass", "Transparent"], #selector(barAppearanceChanged))
         barChipStyleMode = choice(["Flat", "Liquid glass"], #selector(barAppearanceChanged))
         glassStyleMode = choice(["Regular", "Clear"], #selector(barAppearanceChanged))
         barBgColor = well()
@@ -680,7 +680,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 row("Desktop chips in the menu bar", "Next to the BetterWM icon in the system menu bar, with or without the bar: click to switch, drop a window to send it there.", [menuBarChipsSwitch, menuBarChipStyleMode]),
             ]),
             group("Appearance", [
-                row("Background", "A translucent blur, a solid colour, or Liquid Glass (macOS 26; a blur before).", [barBackgroundMode, barBgColor]),
+                row("Background", "A translucent blur, a solid colour, Liquid Glass (macOS 26; a blur before), or nothing at all behind the chips.", [barBackgroundMode, barBgColor]),
                 row("Text colour", "On Liquid Glass the text always follows the system, light or dark.", [barTextMode, barTextColorWell]),
                 row("Active desktop chip", nil, [barActiveMode, barActiveColorWell]),
                 row("Desktop chips", "Flat colour fills, or Liquid Glass capsules with the active one tinted (macOS 26).", [barChipStyleMode]),
@@ -1166,7 +1166,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         rebuildWidgetRows()
         barCatSheets.string = config.barCatSheets.joined(separator: "\n")
         let bg = config.barBackground.lowercased()
-        barBackgroundMode.selectItem(at: bg == "blur" ? 0 : bg == "glass" ? 2 : 1)
+        barBackgroundMode.selectItem(at: bg == "blur" ? 0 : bg == "glass" ? 2 : bg == "transparent" ? 3 : 1)
         barBgColor.color = NSColor(hex: config.barBackground) ?? .windowBackgroundColor
         barChipStyleMode.selectItem(at: config.barChipStyle == "glass" ? 1 : 0)
         glassStyleMode.selectItem(at: config.glassStyle == "clear" ? 1 : 0)
@@ -1263,7 +1263,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.barLeftWidgets = widgetLists[0].order.filter(\.1).map(\.0)
         config.barWidgets = widgetLists[1].order.filter(\.1).map(\.0)
         config.barCatSheets = barCatSheets.string.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        config.barBackground = [0: "blur", 2: "glass"][barBackgroundMode.indexOfSelectedItem] ?? barBgColor.color.hexString
+        config.barBackground = [0: "blur", 2: "glass", 3: "transparent"][barBackgroundMode.indexOfSelectedItem] ?? barBgColor.color.hexString
         config.barChipStyle = barChipStyleMode.indexOfSelectedItem == 1 ? "glass" : "flat"
         config.glassStyle = glassStyleMode.indexOfSelectedItem == 1 ? "clear" : "regular"
         config.tabStyle = tabStyleMode.indexOfSelectedItem == 1 ? "glass" : "flat"
