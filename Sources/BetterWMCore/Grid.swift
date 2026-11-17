@@ -55,6 +55,16 @@ public struct Grid: Equatable {
         columns.removeAll { $0.windows.isEmpty }
     }
 
+    /// `new` takes `old`'s place: slot, sizing hints and fullscreen. For a native tab swap, where the window in
+    /// front of a tab group changed but the tile did not.
+    public mutating func rename(_ old: WindowID, to new: WindowID) {
+        for ci in columns.indices { columns[ci].windows = columns[ci].windows.map { $0 == old ? new : $0 } }
+        if let h = heightWeights.removeValue(forKey: old) { heightWeights[new] = h }
+        if let m = minSizes.removeValue(forKey: old) { minSizes[new] = m }
+        if spiralAnchor == old { spiralAnchor = new }
+        if fullscreen == old { fullscreen = new }
+    }
+
     public mutating func clear() {
         let mode = self.mode
         self = Grid()

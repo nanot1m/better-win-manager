@@ -979,6 +979,7 @@ final class WindowManager {
             }
             Spaces.withSpaceTypesCached {
                 self.zOrder = snap.windows.map(\.id)
+                self.adoptTabSwaps(&snap)
                 // Placing windows changes what the next snapshot shows, and apps unhiding during launch add windows
                 // between snapshots; every window must pass through assignment before parking can adopt it.
                 if self.assignNewVirtualWindows(snap), assignRetries > 0 {
@@ -1087,6 +1088,40 @@ final class WindowManager {
     /// The deadline counts from the first snapshot with windows in it, not from launch: a launch while the screen
     /// is locked sees nothing for a while.
     private var sawWindows = false
+
+    /// Native tabs (Ghostty, Terminal, Finder) are windows of their own: a new tab is a new window at the frame of
+    /// the one that was in front, which drops off screen as a background tab. The newcomer takes over the old
+    /// window's slot, desktop and pin, and the old one is forgotten; it comes back the same way when its tab is
+    /// chosen again. AeroSpace's tab-swap heuristic.
+    private func adoptTabSwaps(_ snap: inout Snapshot) {
+        let newcomers = snap.windows.filter { !desktops.isKnown($0.id) && !snap.away.contains($0.id) }
+        guard !newcomers.isEmpty else { return }
+        let present = Set(snap.windows.map(\.id))
+        for w in newcomers {
+            // The background tab sits on no Space at all, which reads as "away" (mid-transition); only real
+            // fullscreen rules it out here. A tab that was closed (its window gone from the snapshot) hands over
+            // the same way to the tab that comes forward in its place.
+            let hidden = snap.windows.first { o in
+                o.id != w.id && o.pid == w.pid && desktops.isKnown(o.id) && o.frame.approximatelyEquals(w.frame, tolerance: 4)
+                    && !o.fullscreen && !CGWindowInfo.isOnScreen(o.id)
+            }?.id
+            let closed = hidden == nil ? desktops.knownWindows.first { o in
+                !present.contains(o) && system.pid(of: o) == w.pid && (system.lastFrame(of: o)?.approximatelyEquals(w.frame, tolerance: 4) ?? false)
+            } : nil
+            guard let old = hidden ?? closed else { continue }
+            Log.write("adopt", "\(describe(w.id)) is the new front tab of \(describe(old)); it takes its place")
+            state.rename(old, to: w.id)
+            desktops.rename(old, to: w.id)
+            if let f = floatingFrames.removeValue(forKey: old) { floatingFrames[w.id] = f }
+            if let l = tabLabels.removeValue(forKey: old) { tabLabels[w.id] = l }
+            lastFocusedByWorkspace = lastFocusedByWorkspace.mapValues { $0 == old ? w.id : $0 }
+            if lastFocusedID == old { lastFocusedID = w.id }
+            snap.windows.removeAll { $0.id == old }
+            snap.away.remove(old)
+            lastWindowIDs.remove(old)
+            lastWindowIDs.insert(w.id)
+        }
+    }
 
     /// Gives every not-yet-assigned window a workspace: its saved slot if one matches, otherwise the active one.
     /// Returns true if any window was placed from the saved layout, so the snapshot should be rebuilt.

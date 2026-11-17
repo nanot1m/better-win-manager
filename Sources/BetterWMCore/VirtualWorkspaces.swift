@@ -139,6 +139,12 @@ public final class VirtualWorkspaces {
         for w in windows { if let ws = membership[w.id] { homeByPid[w.pid] = ws } }
     }
     public func forget(_ w: WindowID) { membership[w] = nil; parkedFrames[w] = nil; parked.remove(w) }
+    /// `new` takes over `old`'s desktop and parking record; `old` is forgotten.
+    public func rename(_ old: WindowID, to new: WindowID) {
+        if let ws = membership.removeValue(forKey: old) { membership[new] = ws }
+        if let f = parkedFrames.removeValue(forKey: old) { parkedFrames[new] = f }
+        if parked.remove(old) != nil { parked.insert(new) }
+    }
     /// A saved layout may name a workspace beyond the configured count (created on demand last time); it comes back.
     public func move(_ w: WindowID, to ws: Int) {
         if ws >= count { setCount(ws + 1) }

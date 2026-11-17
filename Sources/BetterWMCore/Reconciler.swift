@@ -31,6 +31,16 @@ public struct DesiredState: Equatable {
         floating.insert(w)
     }
 
+    /// `new` takes over every record of `old`, which is dropped: the front window of a native tab group changed.
+    public mutating func rename(_ old: WindowID, to new: WindowID) {
+        for k in grids.keys { grids[k]?.rename(old, to: new) }
+        for k in seen.keys where seen[k]?.remove(old) != nil { seen[k]?.insert(new) }
+        if floating.remove(old) != nil { floating.insert(new) }
+        if pinned.remove(old) != nil { pinned.insert(new) }
+        if let a = awaySlots.removeValue(forKey: old) { awaySlots[new] = a }
+        executor.forget(old)
+    }
+
     /// Drops every per-window record of a window that no longer exists.
     public mutating func forget(_ w: WindowID) {
         for k in grids.keys { grids[k]?.remove(w) }

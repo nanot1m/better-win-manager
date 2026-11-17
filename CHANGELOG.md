@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.54.1] - 2026-11-17
+
+### Fixed
+- A new native tab (Ghostty, Terminal, Finder) no longer counts as a new window to tile or pin: macOS makes each tab a window of its own at the frame of the one in front, which drops off screen. The new tab takes over the old one's tile, desktop and pin, and switching tabs swaps back the same way.
+
 ## [0.54.0] - 2026-11-15
 
 ### Changed
