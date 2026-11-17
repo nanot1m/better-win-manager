@@ -6,6 +6,11 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.54.2] - 2026-11-17
+
+### Fixed
+- A trackpad disconnecting (or a dock swap taking one away) could crash BetterWM: the gesture listener stopped the vanished pad, and the system's own tear-down then stopped it a second time. Pads that disappear are now only let go of.
+
 ## [0.54.1] - 2026-11-17
 
 ### Fixed

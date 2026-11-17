@@ -88,16 +88,23 @@ final class SwipeGesture {
         return listening
     }
 
+    /// Brings `devices` in line with the pads present. A pad that went away is only let go of: the framework
+    /// tears it down on its own thread, and stopping it from here as well made that tear-down stop it a second
+    /// time and crash in CFRelease. Pads still present keep running; new ones are started.
+    @discardableResult
     private func startDevices() -> Bool {
-        guard devices.isEmpty, let list = SwipeGesture.createList?()?.takeRetainedValue(), let register = SwipeGesture.register,
+        guard let list = SwipeGesture.createList?()?.takeRetainedValue(), let register = SwipeGesture.register,
               let start = SwipeGesture.start else { return false }
         SwipeGesture.shared = self
-        for i in 0..<CFArrayGetCount(list) {
-            guard let p = CFArrayGetValueAtIndex(list, i) else { continue }
-            let dev = MTDevice(mutating: p)
-            register(dev, SwipeGesture.callback)
-            _ = start(dev, 0)
-            devices.append(dev)
+        let present = (0..<CFArrayGetCount(list)).compactMap { CFArrayGetValueAtIndex(list, $0) }.map { MTDevice(mutating: $0) }
+        for d in devices where !present.contains(d) { Unmanaged<AnyObject>.fromOpaque(d).release() }
+        devices.removeAll { !present.contains($0) }
+        for d in present where !devices.contains(d) {
+            // Our own retain: the list is let go of here, and the pointer must stay good for as long as we listen.
+            _ = Unmanaged<AnyObject>.fromOpaque(d).retain()
+            register(d, SwipeGesture.callback)
+            _ = start(d, 0)
+            devices.append(d)
         }
         Log.write("gesture", "listening on \(devices.count) multitouch device(s); touch record \(MemoryLayout<Touch>.stride) bytes")
         return !devices.isEmpty
@@ -114,10 +121,17 @@ final class SwipeGesture {
         }
     }
 
+    /// Gestures turned off: stop the pads that are still present; one that is gone is only let go of.
     private func stopDevices() {
+        let present = (SwipeGesture.createList?()?.takeRetainedValue()).map { list in
+            (0..<CFArrayGetCount(list)).compactMap { CFArrayGetValueAtIndex(list, $0) }.map { MTDevice(mutating: $0) }
+        } ?? []
         for d in devices {
-            SwipeGesture.unregister?(d, SwipeGesture.callback)
-            _ = SwipeGesture.stop?(d)
+            if present.contains(d) {
+                SwipeGesture.unregister?(d, SwipeGesture.callback)
+                _ = SwipeGesture.stop?(d)
+            }
+            Unmanaged<AnyObject>.fromOpaque(d).release()
         }
         devices.removeAll()
     }
@@ -147,9 +161,8 @@ final class SwipeGesture {
         restartWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            self.stopDevices()
-            Log.write("gesture", "multitouch devices changed; listening again")
-            _ = self.startDevices()
+            Log.write("gesture", "multitouch devices changed; bringing the listeners in line")
+            self.startDevices()
         }
         restartWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
