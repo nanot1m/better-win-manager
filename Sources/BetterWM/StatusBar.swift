@@ -198,6 +198,8 @@ final class StatusBar {
             let y = config.barAtBottom ? screen.visibleFrame.minY + config.barTopOffset : screen.frame.maxY - config.barTopOffset - h
             let frame = NSRect(x: screen.frame.minX + m, y: y, width: screen.frame.width - 2 * m, height: h)
             let w = BarWindow(frame: frame, screen: screen)
+            // Behind the windows: under the tab strips too, above only the desktop and the zen backdrop.
+            if config.barBehindWindows { w.level = NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue - 2) }
             w.view.apply(config, avoidNotch: meetsNotch(screen))
             w.view.setLeftWidgets(config.barLeftWidgets.compactMap { widgets[$0]?.makeView(for: screen) })
             w.view.setRightWidgets(config.barWidgets.compactMap { widgets[$0]?.makeView(for: screen) })
@@ -556,8 +558,10 @@ final class BarView: NSView {
             Glass.set(g, clear: config.glassStyle == "clear")
         }
         solid.isHidden = blur || glassOn
-        // Transparent: the chips and widgets float over the wallpaper, nothing drawn behind them.
-        solid.layer?.backgroundColor = blur || glassOn ? nil : mode == "transparent" ? NSColor.clear.cgColor : (NSColor(hex: config.barBackground) ?? .windowBackgroundColor).cgColor
+        // Transparent: the chips and widgets float over the wallpaper. Not fully clear, though: macOS passes clicks
+        // on wholly transparent pixels through to what lies beneath (the wallpaper, where a click shows the
+        // desktop), and the bar has to take its own clicks.
+        solid.layer?.backgroundColor = blur || glassOn ? nil : mode == "transparent" ? NSColor.black.withAlphaComponent(0.01).cgColor : (NSColor(hex: config.barBackground) ?? .windowBackgroundColor).cgColor
         layer?.cornerRadius = config.barRadius
         // Glass gets a faint light rim unless a border is configured: the system draws none of its own here.
         let rim = glassOn && config.barBorderWidth == 0

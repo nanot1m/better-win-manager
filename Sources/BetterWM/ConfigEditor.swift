@@ -117,6 +117,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private var menuBarChipsSwitch: NSSwitch!
     private var menuBarChipStyleMode: NSPopUpButton!
     private var barPositionMode: NSPopUpButton!
+    private var barBehindSwitch: NSSwitch!
 
     /// The configuration changed outside this window (a zen width step): the fields follow if it is open.
     func refresh(config: Config) {
@@ -673,6 +674,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
             menuBarChipStyleMode.lastItem?.representedObject = raw
         }
         barPositionMode = choice(["Top", "Bottom"], #selector(barAppearanceChanged))
+        barBehindSwitch = toggle()
         return [
             group(nil, [
                 row("Show the status bar", "Set \"Automatically hide and show the menu bar\" to Always in System Settings › Control Center so the system bar does not overlap it. Tiled windows start below the bar.", [barSwitch]),
@@ -690,6 +692,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
                 row("Corner radius", nil, [barRadiusField, unit("pt")]),
                 row("Padding", "Space between the bar's edges and its content.", [barPaddingField, unit("pt")]),
                 row("Position", "At the top, where the hidden menu bar lives, or at the bottom, above the Dock.", [barPositionMode]),
+                row("Behind windows", "The bar stays under app windows instead of over them. Tiled windows keep clear of it either way; a floating or dragged window may cover it.", [barBehindSwitch]),
                 row("Side margin", "Above zero the bar floats away from the screen sides.", [barMarginField, unit("pt")]),
                 row("Edge offset", "Distance from the screen edge the bar sits at; 0 sticks it to the edge.", [barTopOffsetField, unit("pt")]),
             ]),
@@ -1187,6 +1190,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         barMarginField.stringValue = String(Int(config.barMargin))
         barTopOffsetField.stringValue = String(Int(config.barTopOffset))
         barPositionMode.selectItem(at: config.barAtBottom ? 1 : 0)
+        on(barBehindSwitch, config.barBehindWindows)
         barAppearanceChanged()
         ignoreText.string = config.ignoreApps.joined(separator: "\n")
         on(floatSmallSwitch, config.floatSmallWindows)
@@ -1277,6 +1281,7 @@ final class ConfigWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         config.barMargin = number(barMarginField, or: defaults.barMargin)
         config.barTopOffset = number(barTopOffsetField, or: defaults.barTopOffset)
         config.barPosition = barPositionMode.indexOfSelectedItem == 1 ? "bottom" : "top"
+        config.barBehindWindows = isOn(barBehindSwitch)
         config.ignoreApps = ignoreText.string.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         config.floatSmallWindows = isOn(floatSmallSwitch)
         config.smallWindowWidth = number(smallW, or: defaults.smallWindowWidth)

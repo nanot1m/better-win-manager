@@ -298,6 +298,9 @@ public struct Config {
     /// "top" (where the hidden menu bar lives) or "bottom" (above the Dock).
     public var barPosition: String = "top"
     public var barAtBottom: Bool { barPosition == "bottom" }
+    /// The bar under the app windows rather than over them: tiles keep clear of it anyway, and a floating or
+    /// dragged window may cover it.
+    public var barBehindWindows: Bool = false
     public var floatSmallWindows: Bool = true
     public var smallWindowWidth: CGFloat = 500
     public var smallWindowHeight: CGFloat = 400
@@ -506,6 +509,8 @@ public struct Config {
         barMargin = \(num(barMargin))
         # Which edge the bar sits at: top (where the hidden menu bar lives) or bottom (above the Dock).
         barPosition = \(barPosition)
+        # Behind app windows instead of above them (floating windows may cover it; tiles keep clear either way).
+        barBehindWindows = \(barBehindWindows)
         # Distance from that edge. 0 sticks the bar to it.
         barTopOffset = \(num(barTopOffset))
 
@@ -654,6 +659,7 @@ public struct Config {
             case "barMargin": cfg.barMargin = Double(value).map { CGFloat($0) } ?? cfg.barMargin
             case "barTopOffset": cfg.barTopOffset = Double(value).map { CGFloat($0) } ?? cfg.barTopOffset
             case "barPosition": cfg.barPosition = value.lowercased() == "bottom" ? "bottom" : "top"
+            case "barBehindWindows": cfg.barBehindWindows = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "ignoreApps": cfg.ignoreApps = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             case "floatSmallWindows": cfg.floatSmallWindows = ["true", "yes", "1", "on"].contains(value.lowercased())
             case "smallWindowSize":

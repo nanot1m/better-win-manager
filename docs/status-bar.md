@@ -44,6 +44,7 @@ Older configs have `barWeather`, `barCpu` and similar booleans. They are still r
 | `barPadding` | Inset of the content from the bar's edges |
 | `barMargin` | Horizontal distance from the screen sides; above zero the bar floats |
 | `barPosition` | `top` (where the hidden menu bar lives) or `bottom` (above the Dock); tiled windows keep clear of the bar either way |
+| `barBehindWindows` | `true` keeps the bar under app windows instead of over them; a floating or dragged window may then cover it |
 | `barTopOffset` | Distance from the edge the bar sits at; 0 sticks it to the edge |
 
 Colours are stored without a leading `#`.

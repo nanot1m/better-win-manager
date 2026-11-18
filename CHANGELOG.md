@@ -6,6 +6,14 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-11-18
+
+### Added
+- `barBehindWindows` (Settings › Status Bar › Behind windows): the bar sits under app windows instead of over them. Tiled windows keep clear of it either way; a floating or dragged window may cover it.
+
+### Fixed
+- A click on a transparent status bar no longer falls through to the wallpaper, where macOS showed the desktop; the bar keeps its clicks.
+
 ## [0.55.0] - 2026-11-17
 
 ### Added
