@@ -2047,10 +2047,10 @@ final class WindowManager {
             let intended = intendedFront.flatMap { ids.contains($0.id) ? $0.id : nil }
             // The focused window outranks the z-order: right after a tab switch the order still names the old
             // front for a few frames, and following it made the new tab flash back to the old one.
-            let front = intended
-                ?? focused.flatMap { ids.contains($0) && system.pid(of: $0) == frontmostPid ? $0 : nil }
-                ?? (top.flatMap { $0 == appFront ? $0 : nil })
-                ?? focused.flatMap { ids.contains($0) ? $0 : nil } ?? top
+            let focusedHere: WindowID? = focused.flatMap { ids.contains($0) ? $0 : nil }
+            let focusedInFront: WindowID? = focusedHere.flatMap { system.pid(of: $0) == frontmostPid ? $0 : nil }
+            let topInFront: WindowID? = top.flatMap { $0 == appFront ? $0 : nil }
+            let front: WindowID? = intended ?? focusedInFront ?? topInFront ?? focusedHere ?? top
             let frontFocused = front == intended || front == focused || front == appFront
             // No ring on the front window (focus is on a floating window ringed instead): the strip, which would
             // hang loose over the ring's gap, moves over it to touch its window.

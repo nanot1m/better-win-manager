@@ -6,7 +6,7 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
-## [0.56.1] - 2026-11-24
+## [0.56.2] - 2026-11-24
 
 ### Fixed
 - With the status bar at the bottom (or off) and the system menu bar set to hide, tiled windows now keep clear of the menu bar's zone and the notch at the top instead of running under them.
