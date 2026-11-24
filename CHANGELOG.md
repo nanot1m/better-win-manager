@@ -6,6 +6,12 @@ Config (`config.conf`) and layout state (`state.json`) are versioned and migrate
 
 ## [Unreleased]
 
+## [0.56.1] - 2026-11-24
+
+### Fixed
+- With the status bar at the bottom (or off) and the system menu bar set to hide, tiled windows now keep clear of the menu bar's zone and the notch at the top instead of running under them.
+- Switching tabs in a stack no longer flashes the old tab back for a few frames: the focused window now outranks the window order, which still named the old front while the switch settled. A tab also waits a quarter of a second before going grey, so the moment of lost focus during a desktop switch passes unseen.
+
 ## [0.56.0] - 2026-11-18
 
 ### Added

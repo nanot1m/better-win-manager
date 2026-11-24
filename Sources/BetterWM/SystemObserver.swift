@@ -74,6 +74,13 @@ final class SystemObserver {
             if insets.top > 0, area.minY < barBottom {
                 area.size.height -= barBottom - area.minY
                 area.origin.y = barBottom
+            } else if insets.top == 0, area.minY <= s.frame.toCocoa().minY {
+                // No bar at the top and the visible frame reaches the screen's edge: the system menu bar is set
+                // to hide, yet it slides back over whatever is up there, and a notch sits there anyway. Tiles
+                // keep clear of that zone, as they would with the menu bar shown.
+                let zone = max(NSApp.mainMenu?.menuBarHeight ?? NSStatusBar.system.thickness, s.safeAreaInsets.top)
+                area.origin.y += zone
+                area.size.height -= zone
             }
             // A bottom bar stands on the visible frame (above a shown Dock), so it is the area's bottom edge.
             if insets.bottom > 0 { area.size.height -= insets.bottom }

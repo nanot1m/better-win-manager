@@ -1961,6 +1961,21 @@ final class WindowManager {
     }
 
     private var tabStrips: [TabStripWindow] = []
+    /// When each strip's front tab first wanted to go grey. During a switch focus is lost and regained within a
+    /// few frames, and a tab that followed every flip blinked between its two colours; grey waits this long.
+    private var greyWantedSince: [WindowID: Date] = [:]
+    private let greyDelay: TimeInterval = 0.25
+
+    private func settledInactive(_ front: WindowID?, _ wanted: Bool) -> Bool {
+        guard let front else { return wanted }
+        guard wanted else { greyWantedSince[front] = nil; return false }
+        let since = greyWantedSince[front] ?? Date()
+        greyWantedSince[front] = since
+        let waited = Date().timeIntervalSince(since)
+        if waited >= greyDelay { return true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + greyDelay - waited + 0.01) { [weak self] in self?.refreshTabStrips() }
+        return false
+    }
     /// Adds the app-level tab look items to a tab's menu; set by the app, which owns the configuration.
     var tabMenuItems: ((NSMenu, Bool) -> Void)?
     /// Names given to tabs in place of their windows' titles; saved with the layout.
@@ -2030,7 +2045,10 @@ final class WindowManager {
             let top = zOrder.first(where: ids.contains)
             if let p = intendedFront, p.until < Date() || focused == p.id { intendedFront = nil }
             let intended = intendedFront.flatMap { ids.contains($0.id) ? $0.id : nil }
+            // The focused window outranks the z-order: right after a tab switch the order still names the old
+            // front for a few frames, and following it made the new tab flash back to the old one.
             let front = intended
+                ?? focused.flatMap { ids.contains($0) && system.pid(of: $0) == frontmostPid ? $0 : nil }
                 ?? (top.flatMap { $0 == appFront ? $0 : nil })
                 ?? focused.flatMap { ids.contains($0) ? $0 : nil } ?? top
             let frontFocused = front == intended || front == focused || front == appFront
@@ -2044,7 +2062,7 @@ final class WindowManager {
                 case .right: frame.origin.x -= d
                 }
             }
-            s.show(frame: frame, items: items, focused: front, inactive: focusRing.isInactive || !frontFocused,
+            s.show(frame: frame, items: items, focused: front, inactive: settledInactive(front, focusRing.isInactive || !frontFocused),
                    clearance: focusRing.tabClearance(for: items.map(\.id)), side: side, stacked: stacked, config: config)
         }
     }
